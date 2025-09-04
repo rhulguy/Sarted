@@ -1,0 +1,8 @@
+{
+  "name": "synergize-app",
+  "version": "1.0.0",
+  "description": "Synergize application serverless functions",
+  "dependencies": {
+    "@google/genai": "^1.16.0"
+  }
+}
