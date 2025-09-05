@@ -13,6 +13,13 @@ interface InteractionState {
     originalWidth: number;
 }
 
+interface CreatingState {
+    taskId: string;
+    projectId: string;
+    startX: number;
+    taskTop: number;
+}
+
 interface GlobalGanttTask extends Task {
   level: number;
   projectId: string;
@@ -48,13 +55,16 @@ const getMondayOfWeek = (d: Date): Date => {
 };
 
 const GlobalGanttView: React.FC = () => {
-  const { visibleProjects, projectGroups, addTask, updateMultipleTasks, reparentTask } = useProject();
+  const { visibleProjects, projectGroups, addTask, updateTask, updateMultipleTasks, reparentTask } = useProject();
   const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
   
   const [dayWidth, setDayWidth] = useState(30);
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
+  const [creatingState, setCreatingState] = useState<CreatingState | null>(null);
+  const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number; top: number } | null>(null);
   const [addingTaskToProject, setAddingTaskToProject] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState('');
+  const [isNewTaskFormFocused, setIsNewTaskFormFocused] = useState(false);
   
   const ganttContainerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -114,16 +124,22 @@ const GlobalGanttView: React.FC = () => {
     return { allTasks: flattenedTasks, minDate: effectiveMin, maxDate: effectiveMax, taskMap: localTaskMap, parentMap: localParentMap, projectHeaders: localProjectHeaders };
   }, [sortedProjects, projectGroups]);
   
-  const handleNewTaskSubmit = async (e: React.FormEvent) => {
+  const handleNewTaskSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (newTaskName.trim() && addingTaskToProject) {
-        const todayStr = formatDate(new Date());
-        const newTask: Task = { id: `task-${Date.now()}`, name: newTaskName, description: '', completed: false, subtasks: [], startDate: todayStr, endDate: todayStr };
-        await addTask(addingTaskToProject, newTask);
+      const newTask: Task = {
+        id: `task-${Date.now()}`,
+        name: newTaskName.trim(),
+        description: '',
+        completed: false,
+        subtasks: [],
+      };
+      await addTask(addingTaskToProject, newTask);
+      setNewTaskName('');
+      // Keep the form open for the next task
+      // setAddingTaskToProject(null) is now handled by onBlur
     }
-    setNewTaskName('');
-    setAddingTaskToProject(null);
-  };
+  }, [newTaskName, addingTaskToProject, addTask]);
 
   const { chartStartDate, totalDays, months, totalWidth } = useMemo(() => {
     if (!minDate || !maxDate) return { chartStartDate: new Date(), totalDays: 0, months: [], totalWidth: 0 };
@@ -250,6 +266,56 @@ const GlobalGanttView: React.FC = () => {
     const startOffset = dayDiff(chartStartDate, taskStart); const duration = dayDiff(taskStart, taskEnd) + 1;
     setInteraction({ type, taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: startOffset * dayWidth, originalWidth: duration * dayWidth });
   };
+  
+  const handleCreateMouseDown = (e: React.MouseEvent, task: GlobalGanttTask, taskTop: number) => {
+    e.preventDefault();
+    if (!scrollContainerRef.current) return;
+    const containerRect = scrollContainerRef.current.getBoundingClientRect();
+    const startX = e.clientX - containerRect.left + scrollContainerRef.current.scrollLeft;
+    
+    setCreatingState({ taskId: task.id, projectId: task.projectId, startX, taskTop });
+  };
+
+  useEffect(() => {
+    if (!creatingState) return;
+    const handleMouseMove = (e: MouseEvent) => {
+        if (!scrollContainerRef.current) return;
+        const containerRect = scrollContainerRef.current.getBoundingClientRect();
+        const currentX = e.clientX - containerRect.left + scrollContainerRef.current.scrollLeft;
+        const width = Math.max(dayWidth / 2, Math.abs(currentX - creatingState.startX));
+        const left = Math.min(currentX, creatingState.startX);
+        setTempCreatingBar({ left, width, top: creatingState.taskTop });
+    };
+
+    const handleMouseUp = async (e: MouseEvent) => {
+        if (!scrollContainerRef.current) return;
+        const containerRect = scrollContainerRef.current.getBoundingClientRect();
+        const endX = e.clientX - containerRect.left + scrollContainerRef.current.scrollLeft;
+        
+        const startDayIndex = Math.floor(Math.min(creatingState.startX, endX) / dayWidth);
+        const endDayIndex = Math.floor(Math.max(creatingState.startX, endX) / dayWidth);
+
+        const newStartDate = new Date(chartStartDate);
+        newStartDate.setUTCDate(newStartDate.getUTCDate() + startDayIndex);
+        const newEndDate = new Date(chartStartDate);
+        newEndDate.setUTCDate(newEndDate.getUTCDate() + endDayIndex);
+
+        const taskToUpdate = taskMap.get(creatingState.taskId);
+        if (taskToUpdate) {
+            await updateTask(creatingState.projectId, { ...taskToUpdate, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) });
+        }
+        
+        setCreatingState(null);
+        setTempCreatingBar(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp, { once: true });
+    return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [creatingState, dayWidth, chartStartDate, taskMap, updateTask]);
 
   const handleZoom = (direction: 'in' | 'out') => setDayWidth(prev => Math.max(10, Math.min(100, direction === 'in' ? prev * 1.5 : prev / 1.5)));
 
@@ -270,10 +336,9 @@ const GlobalGanttView: React.FC = () => {
   };
   
   if (visibleProjects.length === 0) return <div className="text-center text-text-secondary p-8">No projects to display.</div>;
-  if (!minDate || !maxDate) return <div className="text-center text-text-secondary p-8">No tasks with valid dates.</div>;
   
   return (
-    <div ref={downloadRef} className="flex flex-col h-full bg-secondary rounded-lg">
+    <div ref={downloadRef} className="flex flex-col bg-secondary rounded-lg">
         <div className="p-2 border-b border-border-color flex items-center justify-between">
             <div className="flex items-center space-x-1">
                 <button onClick={() => handleZoom('out')} className="p-1 rounded text-text-secondary hover:bg-highlight"><MinusIcon className="w-5 h-5" /></button>
@@ -281,19 +346,33 @@ const GlobalGanttView: React.FC = () => {
             </div>
              <button onClick={() => downloadImage(`global-gantt-chart.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
         </div>
-        <div className="flex-grow flex overflow-hidden">
-            <div className="w-72 shrink-0 border-r border-border-color bg-primary z-10 overflow-y-hidden flex flex-col">
-                <div className="h-16 flex items-center p-2 border-b border-border-color shrink-0"><h3 className="font-semibold">Task Name</h3></div>
-                <div className="overflow-y-auto">
+        <div className="flex-grow flex">
+            <div className="w-72 shrink-0 border-r border-border-color bg-primary z-10 flex flex-col">
+                <div className="h-16 flex items-center p-2 border-b border-border-color shrink-0 sticky top-0 bg-primary z-10"><h3 className="font-semibold">Task Name</h3></div>
+                <div>
                     {projectHeaders && projectHeaders.map(header => (
                         <div key={header.id}>
                             <div className="h-10 flex items-center justify-between p-2 bg-highlight font-bold border-b border-t border-border-color text-text-primary group">
                                 {header.name}
-                                <button onClick={() => setAddingTaskToProject(header.id)} className="opacity-0 group-hover:opacity-100 text-accent hover:text-blue-400"><PlusIcon className="w-5 h-5"/></button>
+                                <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(header.id); }} className="opacity-0 group-hover:opacity-100 text-accent hover:text-blue-400"><PlusIcon className="w-5 h-5"/></button>
                             </div>
                             {addingTaskToProject === header.id && (
-                                <form onSubmit={handleNewTaskSubmit} className="p-2">
-                                    <input autoFocus type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)} onBlur={e => e.currentTarget.form?.requestSubmit()} placeholder="New task..." className="w-full bg-secondary border border-accent rounded p-1 text-sm"/>
+                                <form onSubmit={handleNewTaskSubmit} onBlur={() => { if(!isNewTaskFormFocused) { setAddingTaskToProject(null); }}}>
+                                    <input 
+                                        autoFocus 
+                                        type="text" 
+                                        value={newTaskName} 
+                                        onChange={e => setNewTaskName(e.target.value)} 
+                                        onFocus={() => setIsNewTaskFormFocused(true)}
+                                        onBlur={() => {
+                                            setIsNewTaskFormFocused(false);
+                                            // A tiny delay to allow the submit to process before the input disappears
+                                            setTimeout(() => setAddingTaskToProject(null), 100);
+                                        }}
+                                        onKeyDown={e => {if (e.key === 'Escape') setAddingTaskToProject(null)}} 
+                                        placeholder="New task name..." 
+                                        className="w-full bg-secondary border border-accent rounded p-1 text-sm m-2 max-w-[calc(100%-1rem)]"
+                                    />
                                 </form>
                             )}
                             {allTasks.filter(t => t.projectId === header.id).map((task) => {
@@ -314,40 +393,53 @@ const GlobalGanttView: React.FC = () => {
                     ))}
                 </div>
             </div>
-            <div ref={scrollContainerRef} className="flex-grow overflow-auto">
+            <div ref={scrollContainerRef} className="flex-grow overflow-x-auto">
                 <div style={{ width: totalWidth, position: 'relative' }}>
                     <div className="sticky top-0 z-10 bg-secondary"><div className="h-16 relative"><div className="flex absolute top-0 left-0 w-full h-8 border-b border-border-color">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div><div className="flex absolute bottom-0 left-0 w-full h-8 border-b border-border-color">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div></div></div>
                     <div ref={ganttContainerRef} className="relative" style={{ height: (allTasks.length * 40) + (projectHeaders.length * 40) }}>
                         {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
                         {projectHeaders.map(h => <div key={`header-row-${h.id}`} className="absolute w-full h-10 border-b border-border-color bg-highlight/30" style={{ top: h.yPos }}></div>)}
-                        {allTasks.map((task, index) => {
+                        {(() => { const todayOffset = dayDiff(chartStartDate, new Date()) * dayWidth; if (todayOffset >= 0 && todayOffset <= totalWidth) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10" title="Today" style={{ left: todayOffset }}></div>; } return null; })()}
+                        
+                        {allTasks.map((task) => {
                             const projectHeader = projectHeaders.find(h => h.id === task.projectId);
                             const projectTaskIndex = allTasks.filter(t => t.projectId === task.projectId).findIndex(t => t.id === task.id);
                             if(!projectHeader) return null;
                             const taskTop = projectHeader.yPos + 40 + (projectTaskIndex * 40);
-                            return <div key={`row-${task.id}`} className="absolute w-full h-10 border-b border-border-color" style={{ top: taskTop }}></div>
-                        })}
-                        {(() => { const todayOffset = dayDiff(chartStartDate, new Date()) * dayWidth; if (todayOffset >= 0 && todayOffset <= totalWidth) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10" title="Today" style={{ left: todayOffset }}></div>; } return null; })()}
-                        {allTasks.map((task, index) => {
-                            const taskStart = parseDate(task.startDate); if (isNaN(taskStart.getTime())) return null;
-                            const projectHeader = projectHeaders.find(h => h.id === task.projectId);
-                            const projectTaskIndex = allTasks.filter(t => t.projectId === task.projectId).findIndex(t => t.id === task.id);
-                            if(!projectHeader) return null;
-                            const startOffset = dayDiff(chartStartDate, taskStart); const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
-                            const left = startOffset * dayWidth; const width = duration * dayWidth;
-                            const top = projectHeader.yPos + 40 + (projectTaskIndex * 40) + 6;
+                            const taskStart = parseDate(task.startDate);
+
+                            if (isNaN(taskStart.getTime())) {
+                                return (
+                                    <div key={`creator-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: taskTop, left: 0 }} onMouseDown={(e) => handleCreateMouseDown(e, task, taskTop)}>
+                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent/10 transition-colors flex items-center justify-center cursor-cell">
+                                            <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            const startOffset = dayDiff(chartStartDate, taskStart);
+                            const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
+                            const left = startOffset * dayWidth;
+                            const width = duration * dayWidth;
                             const isInteracting = interaction?.taskId === task.id;
-                            const barStyles: React.CSSProperties = { top: `${top}px`, left: `${left}px`, width: `${width}px`, zIndex: isInteracting ? 10 : 1, transition: isInteracting ? 'none' : 'all 0.2s ease' };
+                            const containerStyles: React.CSSProperties = { top: `${taskTop}px`, left: `${left}px`, width: `${width}px`, zIndex: isInteracting ? 10 : 1, transition: isInteracting ? 'none' : 'all 0.2s ease' };
+                            
                             return (
-                                <div key={task.id} data-task-id={task.id} className="absolute group" style={barStyles}>
-                                    <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${task.projectColor} ${task.completed ? 'opacity-50' : ''}`} onMouseDown={(e) => handleMouseDown(e, 'drag', task)}>
+                                <div key={task.id} data-task-id={task.id} className="absolute h-10 flex items-center group" style={containerStyles}>
+                                    <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${task.projectColor} ${task.completed ? 'opacity-50' : ''}`} onMouseDown={(e) => handleMouseDown(e, 'drag', task)}>
                                         <span className="truncate pointer-events-none">{task.name}</span>
                                     </div>
-                                    <div onMouseDown={(e) => handleMouseDown(e, 'resize-start', task)} className="absolute -left-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                    <div onMouseDown={(e) => handleMouseDown(e, 'resize-end', task)} className="absolute -right-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                    <div onMouseDown={(e) => handleMouseDown(e, 'resize-start', task)} className="absolute -left-2 top-0 w-4 h-10 cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                    <div onMouseDown={(e) => handleMouseDown(e, 'resize-end', task)} className="absolute -right-2 top-0 w-4 h-10 cursor-ew-resize opacity-0 group-hover:opacity-100" />
                                 </div>
                             );
                         })}
+                        {tempCreatingBar && (
+                            <div className="absolute h-10 flex items-center pointer-events-none" style={{...tempCreatingBar}}>
+                                <div className="h-7 w-full rounded-md bg-accent/50"/>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

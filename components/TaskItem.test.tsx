@@ -323,7 +323,7 @@ describe('TaskItem component', () => {
     
         // The main container div for the task item
         const taskItemContainer = screen.getByText(mockTask.name).closest('div.flex.items-center');
-        expect(taskItemContainer).toHaveStyle('padding-left: 6.5rem'); // 3 * 2rem + 0.5rem
+        expect(taskItemContainer).toHaveStyle('padding-left: 5rem'); // 3 * 1.5rem + 0.5rem
     });
   });
 });

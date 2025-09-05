@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlusIcon, MenuIcon } from './IconComponents';
+import { PlusIcon, MenuIcon, GitHubIcon } from './IconComponents';
 import Auth from './Auth';
 
 interface HeaderProps {
@@ -9,6 +9,8 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ onNewProject, onToggleSidebar, isMobile }) => {
+  const GITHUB_REPO_URL = "https://github.com/rhulguy/Sarted"; // Replace with your actual repo URL
+
   return (
     <header className="flex items-center justify-between p-4 bg-secondary border-b border-border-color shadow-md shrink-0">
       <div className="flex items-center space-x-3">
@@ -25,6 +27,9 @@ const Header: React.FC<HeaderProps> = ({ onNewProject, onToggleSidebar, isMobile
         <h1 className="text-xl font-bold text-text-primary">Synergize</h1>
       </div>
       <div className="flex items-center space-x-4">
+        <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" title="View on GitHub" className="text-text-secondary hover:text-text-primary">
+          <GitHubIcon className="w-6 h-6" />
+        </a>
         <button 
           onClick={onNewProject}
           className="flex items-center space-x-2 px-3 md:px-4 py-2 bg-accent text-white rounded-lg hover:bg-blue-500 transition-colors duration-200"
