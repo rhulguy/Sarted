@@ -1,22 +1,22 @@
 import { ProjectGroup, Project, Habit, Resource } from './types';
 
 export const COLOR_PALETTE = [
-  'bg-red-500', 'bg-orange-500', 'bg-yellow-500',
-  'bg-green-500', 'bg-teal-500', 'bg-blue-500',
-  'bg-indigo-500', 'bg-purple-500', 'bg-pink-500',
+  'bg-brand-teal', 'bg-brand-orange', 'bg-brand-purple',
+  'bg-brand-pink', 'bg-accent-blue', 'bg-accent-green',
+  'bg-yellow-500', 'bg-red-500', 'bg-indigo-500',
 ];
 
 export const INITIAL_PROJECT_GROUPS: ProjectGroup[] = [
-  { id: 'group-1', name: 'Work', color: 'bg-blue-500' },
-  { id: 'group-2', name: 'Personal', color: 'bg-purple-500' },
-  { id: 'group-3', name: 'Learning', color: 'bg-green-500' },
-  { id: 'group-4', name: 'Health & Fitness', color: 'bg-orange-500' },
+  { id: 'group-1', name: 'Work', color: 'bg-accent-blue' },
+  { id: 'group-2', name: 'Personal', color: 'bg-brand-purple' },
+  { id: 'group-3', name: 'Learning', color: 'bg-accent-green' },
+  { id: 'group-4', name: 'Health & Fitness', color: 'bg-brand-orange' },
   { id: 'group-5', name: 'Home & Errands', color: 'bg-yellow-500' },
 ];
 
 export const INITIAL_PROJECTS: Project[] = [
   // Work
-  { id: 'proj-1', name: 'Q4 Marketing Plan', groupId: 'group-1', tasks: [], isHidden: false, icon: '📈' },
+  { id: 'proj-1', name: 'Q4 Marketing Plan', groupId: 'group-1', tasks: [], isArchived: false, icon: '📈' },
   { 
     id: 'proj-2', 
     name: 'Website Redesign', 
@@ -32,7 +32,7 @@ export const INITIAL_PROJECTS: Project[] = [
         ]},
         { id: 'task-2-3', name: 'Phase 3: Development', completed: false, description: 'Build and deploy the new website.', startDate: '2024-08-22', endDate: '2024-09-12', subtasks: []},
     ], 
-    isHidden: false, 
+    isArchived: false, 
     icon: '🎨' 
   },
   // Personal
@@ -45,16 +45,16 @@ export const INITIAL_PROJECTS: Project[] = [
         { id: 'task-3-2', name: 'Book Hotel', completed: false, description: 'Reserve beachfront hotel.', startDate: '2024-09-06', endDate: '2024-09-10', subtasks: [] },
         { id: 'task-3-3', name: 'Plan Itinerary', completed: false, description: 'List out daily activities and tours.', startDate: '2024-09-11', endDate: '2024-09-15', subtasks: [] },
     ], 
-    isHidden: false, 
+    isArchived: false, 
     icon: '✈️' 
   },
-  { id: 'proj-4', name: 'Side Project: "Synergize"', groupId: 'group-2', tasks: [], isHidden: false, icon: '🚀' },
+  { id: 'proj-4', name: 'Side Project: "sarted"', groupId: 'group-2', tasks: [], isArchived: false, icon: '🚀' },
   // Learning
-  { id: 'proj-5', name: 'Learn TypeScript', groupId: 'group-3', tasks: [], isHidden: false, icon: '📚' },
+  { id: 'proj-5', name: 'Learn TypeScript', groupId: 'group-3', tasks: [], isArchived: false, icon: '📚' },
   // Health & Fitness
-  { id: 'proj-6', name: 'Marathon Training', groupId: 'group-4', tasks: [], isHidden: false, icon: '🏃' },
+  { id: 'proj-6', name: 'Marathon Training', groupId: 'group-4', tasks: [], isArchived: false, icon: '🏃' },
   // Home & Errands
-  { id: 'proj-7', name: 'Garden Overhaul', groupId: 'group-5', tasks: [], isHidden: false, icon: '🌿' },
+  { id: 'proj-7', name: 'Garden Overhaul', groupId: 'group-5', tasks: [], isArchived: false, icon: '🌿' },
 ];
 
 
@@ -63,7 +63,7 @@ export const INITIAL_HABITS: Habit[] = [
     id: 'habit-1',
     name: 'Read for 15 minutes',
     frequency: 'daily',
-    color: 'bg-teal-500',
+    color: 'brand-teal',
     completions: { '2024-07-25': true, '2024-07-26': true, '2024-07-27': false },
     createdAt: '2024-07-01',
   },
@@ -72,7 +72,7 @@ export const INITIAL_HABITS: Habit[] = [
     name: 'Go for a run',
     frequency: 'weekly',
     daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
-    color: 'bg-orange-500',
+    color: 'brand-orange',
     completions: { '2024-07-26': true },
     createdAt: '2024-07-01',
   }

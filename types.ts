@@ -16,7 +16,7 @@ export interface Project {
   name: string;
   groupId: string;
   tasks: Task[];
-  isHidden: boolean;
+  isArchived: boolean;
   icon?: string;
 }
 
@@ -41,6 +41,7 @@ export interface InboxTask {
   id: string;
   name: string;
   createdAt: number; // timestamp
+  isPending?: boolean;
 }
 
 export interface Resource {

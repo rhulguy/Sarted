@@ -29,17 +29,17 @@ const IconPicker: React.FC<{ selectedIcon: string; onSelect: (icon: string) => v
 
     return (
         <div className="relative" ref={pickerRef}>
-            <button type="button" onClick={() => setIsOpen(!isOpen)} className="h-10 w-10 text-2xl bg-highlight rounded-md flex items-center justify-center shrink-0">
+            <button type="button" onClick={() => setIsOpen(!isOpen)} className="h-10 w-10 text-2xl bg-app-background border border-border-color rounded-lg flex items-center justify-center shrink-0">
                 {selectedIcon}
             </button>
             {isOpen && (
-                <div className="absolute bottom-full mb-2 w-64 bg-secondary border border-border-color rounded-lg p-2 grid grid-cols-6 gap-2 z-10">
+                <div className="absolute bottom-full mb-2 w-64 bg-card-background border border-border-color rounded-lg p-2 grid grid-cols-6 gap-2 z-10 shadow-soft">
                     {EMOJI_OPTIONS.map(emoji => (
                         <button
                             key={emoji}
                             type="button"
                             onClick={() => { onSelect(emoji); setIsOpen(false); }}
-                            className={`text-2xl rounded-md p-1 hover:bg-highlight ${selectedIcon === emoji ? 'bg-accent' : ''}`}
+                            className={`text-2xl rounded-md p-1 hover:bg-app-background ${selectedIcon === emoji ? 'bg-accent-blue' : ''}`}
                         >
                             {emoji}
                         </button>
@@ -72,7 +72,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
   const [aiGoal, setAiGoal] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const handleCreateProject = (projectData: Omit<Project, 'id' | 'isHidden'>) => {
+  const handleCreateProject = (projectData: Omit<Project, 'id' | 'isArchived'>) => {
     addProject(projectData);
     onClose();
   };
@@ -111,8 +111,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-primary md:bg-black md:bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-secondary md:rounded-lg shadow-xl p-6 md:p-8 w-full h-full md:h-auto md:max-w-2xl transform transition-all flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card-background rounded-2xl shadow-soft p-6 md:p-8 w-full h-auto md:max-w-2xl transform transition-all flex flex-col">
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-2xl font-bold text-text-primary">Create a New Project</h2>
           <button onClick={onClose} className="text-text-secondary text-3xl hover:text-text-primary">&times;</button>
@@ -129,7 +129,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   placeholder="e.g., Q3 Marketing Campaign"
-                  className="block w-full h-10 bg-highlight border border-border-color rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-accent focus:border-accent"
+                  className="block w-full h-10 bg-app-background border border-border-color rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent-blue"
                 />
             </div>
           </div>
@@ -139,7 +139,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
               id="projectGroup"
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
-              className="mt-1 block w-full bg-highlight border border-border-color rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-accent focus:border-accent"
+              className="mt-1 block w-full bg-app-background border border-border-color rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent-blue"
             >
               {projectGroups.map(group => (
                 <option key={group.id} value={group.id}>{group.name}</option>
@@ -147,8 +147,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
             </select>
           </div>
 
-          <div className="text-center my-4">
-            <span className="text-text-secondary text-sm">OR</span>
+          <div className="text-center my-4 flex items-center">
+            <div className="flex-grow border-t border-border-color"></div>
+            <span className="flex-shrink mx-4 text-text-secondary text-sm">OR</span>
+            <div className="flex-grow border-t border-border-color"></div>
           </div>
 
           <div>
@@ -158,18 +160,18 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
               value={aiGoal}
               onChange={(e) => setAiGoal(e.target.value)}
               placeholder="e.g., Launch a new podcast by the end of the quarter"
-              className="mt-1 block w-full bg-highlight border border-border-color rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-accent focus:border-accent"
+              className="mt-1 block w-full bg-app-background border border-border-color rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent-blue"
               rows={3}
             />
           </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-accent-red text-sm">{error}</p>}
         </div>
         
         <div className="mt-6 flex flex-col-reverse md:flex-row justify-end md:space-x-4 gap-2">
           <button 
             onClick={handleGenerateWithAI} 
             disabled={!aiGoal.trim() || isLoading}
-            className="flex items-center justify-center space-x-2 px-4 py-3 md:py-2 rounded-md text-white bg-accent hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
+            className="flex items-center justify-center space-x-2 px-4 py-3 md:py-2 rounded-lg text-white bg-accent-blue hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
           >
             {isLoading ? <Spinner /> : <SparklesIcon className="w-5 h-5" />}
             <span>{isLoading ? 'Generating...' : 'Generate with AI'}</span>
@@ -177,11 +179,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
           <button 
             onClick={handleCreateManually} 
             disabled={!projectName.trim() || isLoading}
-            className="px-4 py-3 md:py-2 rounded-md text-white bg-gray-600 hover:bg-gray-500 disabled:opacity-50 w-full md:w-auto"
+            className="px-4 py-3 md:py-2 rounded-lg text-text-primary bg-border-color hover:opacity-90 disabled:opacity-50 w-full md:w-auto"
           >
             Create Manually
           </button>
-           <button onClick={onClose} className="px-4 py-3 md:py-2 rounded-md text-text-primary bg-highlight hover:bg-gray-700 w-full md:w-auto">Cancel</button>
         </div>
       </div>
     </div>

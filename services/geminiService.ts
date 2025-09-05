@@ -1,6 +1,6 @@
 import { Task, Habit, Project } from '../types';
 
-// This file now acts as a client-side interface to our secure backend proxy.
+// This file now acts as a a client-side interface to our secure backend proxy.
 // It no longer imports or uses @google/genai directly.
 
 // --- Type Definitions for AI Response (matching frontend needs) ---
@@ -44,12 +44,32 @@ async function callApiProxy(action: string, payload: any) {
             body: JSON.stringify({ action, payload }),
         });
 
+        // Read the response as text first to avoid JSON parsing errors on server failures
+        const responseText = await response.text();
+
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || `API call for action '${action}' failed with status ${response.status}`);
+            let errorMessage = `API call for action '${action}' failed with status ${response.status}`;
+            try {
+                // Try to parse the text as JSON, it might be a structured error from our function
+                const errorJson = JSON.parse(responseText);
+                errorMessage = errorJson.message || errorMessage;
+            } catch (e) {
+                // If parsing fails, the raw text is the error message (e.g., from Vercel)
+                if (responseText) {
+                    errorMessage = responseText;
+                }
+            }
+            throw new Error(errorMessage);
+        }
+        
+        try {
+            // Now, safely parse the successful response text
+            return JSON.parse(responseText);
+        } catch (e) {
+            console.error(`API response for '${action}' was not valid JSON:`, responseText);
+            throw new Error(`The server returned an invalid response for action '${action}'.`);
         }
 
-        return await response.json();
     } catch (error) {
         console.error(`Error calling API proxy for action '${action}':`, error);
         throw error; // Re-throw the error to be caught by the calling function

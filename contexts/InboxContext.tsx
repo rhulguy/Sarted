@@ -3,6 +3,9 @@ import { InboxTask } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
 
+// Inform TypeScript that `firebase` exists on the global scope.
+declare const firebase: any;
+
 interface InboxState {
   tasks: InboxTask[];
 }
@@ -22,7 +25,16 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (user) {
       const inboxQuery = db.collection(`users/${user.id}/inbox`).orderBy('createdAt', 'desc');
       const unsubscribe = inboxQuery.onSnapshot((snapshot) => {
-        const userTasks = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as InboxTask));
+        const userTasks = snapshot.docs.map(d => {
+            const data = d.data();
+            // Handle Firestore Timestamp object
+            const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now();
+            return { 
+                id: d.id,
+                name: data.name,
+                createdAt
+            } as InboxTask
+        });
         setTasks(userTasks);
       }, (error) => console.error("Error fetching inbox:", error));
       return () => unsubscribe();
@@ -36,56 +48,28 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
     };
     
-    // Note: The final ID will be the one assigned by Firestore on the backend listener,
-    // but we need a temporary, unique one for the optimistic UI update.
-    const tempId = `inbox-${Date.now()}`;
-    const newTask: InboxTask = {
-        id: tempId,
-        name: taskName.trim(),
-        createdAt: Date.now(),
-    };
-    
-    // Optimistic update for instant UI feedback
-    setTasks(prev => [newTask, ...prev]);
-
+    // No more optimistic updates. We write directly to the database.
+    // The onSnapshot listener will be the single source of truth for UI updates.
     try {
-        // Let Firestore generate the ID, but save the data.
-        // The listener will pick up the "real" task from the server.
-        // We use the tempId to ensure we can revert if needed.
         await db.collection(`users/${user.id}/inbox`).add({
-            name: newTask.name,
-            createdAt: newTask.createdAt
+            name: taskName.trim(),
+            // Use a secure server-side timestamp for reliability
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
     } catch(error) {
-        console.error("Error adding task to inbox, reverting:", error);
-        // Revert by removing the temporary task that failed to add
-        setTasks(prev => prev.filter(t => t.id !== tempId)); 
+        console.error("Error adding task to inbox:", error);
+        alert("Could not add task. Please check your connection and try again.");
     }
   }, [user]);
 
   const deleteTask = useCallback(async (taskId: string) => {
     if (!user) return;
     
-    let originalTask: InboxTask | null = null;
-
-    // Remove the task optimistically and capture it for a potential revert.
-    setTasks(prev => {
-      originalTask = prev.find(t => t.id === taskId) || null;
-      return prev.filter(t => t.id !== taskId);
-    });
-    
-    // If the task wasn't in the state, don't try to delete from DB.
-    if (!originalTask) return;
-
+    // No more optimistic updates. The UI will update via the listener.
     try {
         await db.doc(`users/${user.id}/inbox/${taskId}`).delete();
     } catch (error) {
-        console.error("Error deleting task from inbox, reverting:", error);
-        // Re-add the task that failed to be deleted.
-        // This is a safe revert, though order might change until next DB sync.
-        if (originalTask) {
-            setTasks(prev => [...prev, originalTask]); 
-        }
+        console.error("Error deleting task from inbox:", error);
         alert("Failed to delete task. Please try again.");
     }
   }, [user]);

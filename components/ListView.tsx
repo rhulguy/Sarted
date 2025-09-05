@@ -17,7 +17,6 @@ const ListView: React.FC<ListViewProps> = ({ onAddTask, onUpdateTask, onDeleteTa
   const [newTaskName, setNewTaskName] = useState('');
   const [newStartDate, setNewStartDate] = useState('');
   const [newEndDate, setNewEndDate] = useState('');
-  const { ref, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
   const { selectedProject } = useProject();
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -31,48 +30,37 @@ const ListView: React.FC<ListViewProps> = ({ onAddTask, onUpdateTask, onDeleteTa
 
   return (
     <div className="h-full flex flex-col">
-       <div className="flex justify-end p-2 shrink-0">
-         <button 
-            onClick={() => downloadImage(`${selectedProject?.name}-list-view.png`)} 
-            disabled={isDownloading} 
-            className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
-          >
-            <DownloadIcon className="w-4 h-4" />
-            <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
-          </button>
-      </div>
-      <div ref={ref} className="max-w-4xl mx-auto w-full flex-grow overflow-y-auto bg-primary p-1">
-        <form onSubmit={handleFormSubmit} className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 mb-6 items-center p-1">
+      <div className="max-w-4xl mx-auto w-full flex-grow overflow-y-auto p-1">
+        <div className="space-y-2">
+          <TaskItemRenderer tasks={selectedProject!.tasks} level={0} onUpdate={onUpdateTask} onDelete={onDeleteTask} onAddSubtask={onAddSubtask} />
+        </div>
+        <form onSubmit={handleFormSubmit} className="mt-4 p-3 bg-card-background rounded-xl shadow-card flex flex-col sm:flex-row gap-2 items-center">
+          <div className="w-6 h-6 rounded-lg border-2 border-border-color shrink-0 hidden sm:block"></div>
           <input
             type="text"
             value={newTaskName}
             onChange={(e) => setNewTaskName(e.target.value)}
             placeholder="Add a new top-level task..."
-            className="w-full bg-secondary border border-border-color rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+            className="w-full bg-app-background border border-border-color rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent-blue"
           />
           <input
               aria-label="Start Date"
               type="date"
               value={newStartDate}
               onChange={(e) => setNewStartDate(e.target.value)}
-              className="w-full bg-secondary border border-border-color rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent text-text-secondary"
+              className="w-full sm:w-auto bg-app-background border border-border-color rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent-blue text-text-secondary"
           />
           <input
               aria-label="End Date"
               type="date"
               value={newEndDate}
               onChange={(e) => setNewEndDate(e.target.value)}
-              className="w-full bg-secondary border border-border-color rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent text-text-secondary"
+              className="w-full sm:w-auto bg-app-background border border-border-color rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent-blue text-text-secondary"
           />
-          <button type="submit" className="flex items-center justify-center p-2 bg-accent text-white rounded-lg hover:bg-blue-500 transition-colors h-full">
+          <button type="submit" className="flex items-center justify-center p-2 bg-accent-blue text-white rounded-lg hover:opacity-90 transition-opacity h-full">
             <PlusIcon className="w-5 h-5" />
           </button>
         </form>
-
-        <div className="space-y-1">
-          {/* We can safely assume project is not null because TaskList handles it */}
-          <TaskItemRenderer tasks={selectedProject!.tasks} level={0} onUpdate={onUpdateTask} onDelete={onDeleteTask} onAddSubtask={onAddSubtask} />
-        </div>
       </div>
     </div>
   );
@@ -86,6 +74,7 @@ const TaskItemRenderer: React.FC<{
   onDelete: (taskId: string) => Promise<void>;
   onAddSubtask: (parentId: string, subtaskName: string, startDate?: string, endDate?: string) => Promise<void>;
 }> = ({ tasks, level, onUpdate, onDelete, onAddSubtask }) => {
+    const { projects, selectedProjectId } = useProject();
     return (
         <>
             {tasks.map(task => (
@@ -96,6 +85,8 @@ const TaskItemRenderer: React.FC<{
                     onUpdate={onUpdate}
                     onDelete={onDelete}
                     onAddSubtask={onAddSubtask}
+                    projects={projects}
+                    currentProjectId={selectedProjectId!}
                 />
             ))}
         </>

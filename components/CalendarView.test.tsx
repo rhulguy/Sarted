@@ -7,7 +7,7 @@ import { ProjectContext } from '../contexts/ProjectContext';
 import { Project, ProjectGroup } from '../types';
 
 // Mock project data for testing
-// FIX: Add missing 'isHidden' property.
+// FIX: Replaced non-existent 'isHidden' property with 'isArchived' to match the Project type.
 const mockProject: Project = {
   id: 'proj-1',
   name: 'Calendar Test Project',
@@ -32,7 +32,7 @@ const mockProject: Project = {
       endDate: '2024-07-18',
     },
   ],
-  isHidden: false,
+  isArchived: false,
 };
 
 const mockProjectGroups: ProjectGroup[] = [{ id: 'work', name: 'Work', color: 'bg-blue-500' }];
@@ -50,18 +50,17 @@ describe('CalendarView component', () => {
         value={{
           projects: project ? [project] : [],
           visibleProjects: project ? [project] : [],
+          archivedProjects: [],
           projectGroups: mockProjectGroups,
           selectedProjectId: project?.id || null,
           selectedProject: project,
           loading: false,
-          showHiddenProjects: false,
-          setShowHiddenProjects: vi.fn(),
           selectProject: vi.fn(),
           addProject: vi.fn(),
-          // FIX: Added missing 'updateProject' property to the mock context provider value to satisfy the ProjectContextType interface.
           updateProject: vi.fn(),
           deleteProject: vi.fn(),
-          toggleProjectVisibility: vi.fn(),
+          archiveProject: vi.fn(),
+          unarchiveProject: vi.fn(),
           addProjectGroup: vi.fn(),
           updateProjectGroup: vi.fn(),
           deleteProjectGroup: vi.fn(),

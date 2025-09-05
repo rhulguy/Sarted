@@ -9,18 +9,18 @@ import { updateTaskInTree, deleteTaskFromTree, addSubtaskToTree, updateTasksInTr
 
 interface ProjectContextType {
   projects: Project[];
-  visibleProjects: Project[]; // Filtered based on `showHidden`
+  visibleProjects: Project[]; // Active (non-archived) projects
+  archivedProjects: Project[]; // Archived projects
   projectGroups: ProjectGroup[];
   selectedProjectId: string | null;
   selectedProject: Project | null;
   loading: boolean;
-  showHiddenProjects: boolean;
-  setShowHiddenProjects: (show: boolean) => void;
   selectProject: (id: string | null) => void;
-  addProject: (project: Omit<Project, 'id' | 'isHidden'>) => Promise<void>;
+  addProject: (project: Omit<Project, 'id' | 'isArchived'>) => Promise<void>;
   updateProject: (projectId: string, updates: Partial<Omit<Project, 'id'>>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
-  toggleProjectVisibility: (id: string, isHidden: boolean) => Promise<void>;
+  archiveProject: (id: string) => Promise<void>;
+  unarchiveProject: (id: string) => Promise<void>;
   addProjectGroup: (group: Omit<ProjectGroup, 'id'>) => Promise<void>;
   updateProjectGroup: (group: ProjectGroup) => Promise<void>;
   deleteProjectGroup: (groupId: string) => Promise<void>;
@@ -41,7 +41,6 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showHiddenProjects, setShowHiddenProjects] = useState(false);
   
   // Listen for data changes from Firestore
   useEffect(() => {
@@ -83,7 +82,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
         const userProjects = snapshot.docs.map(d => {
             const data = d.data();
             if (!data) {
-                return { id: d.id, name: 'Invalid Project Data', groupId: '', tasks: [], isHidden: true } as Project;
+                return { id: d.id, name: 'Invalid Project Data', groupId: '', tasks: [], isArchived: true } as Project;
             }
             const traverseAndFixTasks = (tasks: any[]): Task[] => {
                 if (!Array.isArray(tasks)) return [];
@@ -101,8 +100,8 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
                 name: data.name || 'Untitled Project',
                 groupId: data.groupId || '',
                 tasks: traverseAndFixTasks(data.tasks),
-                isHidden: data.isHidden ?? false,
-                icon: data.icon, // Ensure icon is loaded
+                isArchived: data.isArchived ?? false,
+                icon: data.icon,
             } as Project;
         });
         setProjects(userProjects);
@@ -116,15 +115,8 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
           console.error("Error fetching groups:", error);
           setLoading(false);
       });
-
-      const settingsRef = db.doc(`users/${user.id}/settings/main`);
-      const unsubSettings = settingsRef.onSnapshot((docSnap) => {
-        if (docSnap.exists) {
-            setShowHiddenProjects(docSnap.data()?.showHiddenProjects || false);
-        }
-      }, (error) => console.error("Error fetching settings:", error));
       
-      return () => { unsubProjects(); unsubGroups(); unsubSettings(); };
+      return () => { unsubProjects(); unsubGroups(); };
     } else {
       // Not logged in, show initial data
       setProjects(INITIAL_PROJECTS);
@@ -134,27 +126,20 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [user, authLoading]);
 
-  const selectProject = useCallback(async (id: string | null) => {
+  const selectProject = useCallback((id: string | null) => {
+    const project = projects.find(p => p.id === id);
+    if (project && project.isArchived) {
+        // Do not allow selecting an archived project.
+        return;
+    }
     setSelectedProjectId(id);
-  }, []);
+  }, [projects]);
   
-  const handleSetShowHiddenProjects = useCallback(async (show: boolean) => {
-      setShowHiddenProjects(show);
-       if (user) {
-          try {
-            const settingsRef = db.doc(`users/${user.id}/settings/main`);
-            await settingsRef.set({ showHiddenProjects: show }, { merge: true });
-          } catch (error) {
-            console.error("Failed to save showHiddenProjects setting:", error);
-          }
-       }
-  }, [user]);
-
-  const addProject = useCallback(async (projectData: Omit<Project, 'id' | 'isHidden'>) => {
-    const newProject: Project = { ...projectData, id: `project-${Date.now()}`, isHidden: false};
+  const addProject = useCallback(async (projectData: Omit<Project, 'id' | 'isArchived'>) => {
+    const newProject: Project = { ...projectData, id: `project-${Date.now()}`, isArchived: false};
     const originalProjects = projects;
     setProjects(prev => [...prev, newProject]); // Optimistic update
-    await selectProject(newProject.id);
+    selectProject(newProject.id);
 
     if (user) {
         try {
@@ -188,12 +173,12 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     let nextSelectedId = selectedProjectId;
 
     if (selectedProjectId === id) {
-        nextSelectedId = remainingProjects.length > 0 ? remainingProjects[0].id : null;
+        nextSelectedId = null; // Go to dashboard view
     }
 
     setProjects(remainingProjects);
     if (selectedProjectId === id) {
-        await selectProject(nextSelectedId);
+        selectProject(nextSelectedId);
     }
 
     if (user) {
@@ -202,276 +187,279 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
         } catch (error) {
             console.error("Failed to delete project, reverting:", error);
             setProjects(originalProjects);
-            if(selectedProjectId === id) await selectProject(originalSelectedId);
+            if(selectedProjectId === id) selectProject(originalSelectedId);
         }
     }
   }, [projects, user, selectedProjectId, selectProject]);
   
-  const toggleProjectVisibility = useCallback(async (id: string, isHidden: boolean) => {
-    const originalProjects = projects;
-
-    // Deselect project *before* hiding to prevent race conditions/crashes
-    if (isHidden && selectedProjectId === id) {
-      await selectProject(null);
-    }
-
-    // Now, perform the optimistic update to hide the project
-    setProjects(prev => prev.map(p => (p.id === id ? { ...p, isHidden } : p)));
-
-    if (user) {
-      try {
-        await db.doc(`users/${user.id}/projects/${id}`).update({ isHidden });
-      } catch (error) {
-        console.error("Failed to update project visibility, reverting:", error);
-        setProjects(originalProjects); // Revert all changes on error
-        // If we deselected, we might need to re-select on error, but this is complex.
-        // For now, the optimistic deselection is safer.
+  const archiveProject = useCallback(async (projectId: string) => {
+      // Step 1: Safely deselect the project if it's currently selected.
+      if (selectedProjectId === projectId) {
+          selectProject(null);
       }
-    }
-  }, [projects, user, selectedProjectId, selectProject]);
+      
+      // Step 2: Update the project's state and persist to DB.
+      await updateProject(projectId, { isArchived: true });
+  }, [selectedProjectId, selectProject, updateProject]);
+
+  const unarchiveProject = useCallback(async (projectId: string) => {
+      await updateProject(projectId, { isArchived: false });
+  }, [updateProject]);
 
   const addProjectGroup = useCallback(async (groupData: Omit<ProjectGroup, 'id'>) => {
     if (!user) return;
     try {
-      await db.collection(`users/${user.id}/projectGroups`).add(groupData);
+      const newGroup = { ...groupData, id: `group-${Date.now()}` };
+      await db.doc(`users/${user.id}/projectGroups/${newGroup.id}`).set(newGroup);
     } catch (error) {
-      console.error("Failed to add project group:", error);
+        console.error("Failed to add project group:", error);
     }
   }, [user]);
-  
+
   const updateProjectGroup = useCallback(async (group: ProjectGroup) => {
     if (!user) return;
     try {
-      await db.doc(`users/${user.id}/projectGroups/${group.id}`).set(group);
+      await db.doc(`users/${user.id}/projectGroups/${group.id}`).update(group);
     } catch (error) {
-      console.error("Failed to update project group:", error);
+        console.error("Failed to update project group:", error);
     }
   }, [user]);
 
   const deleteProjectGroup = useCallback(async (groupId: string) => {
-    if (!user) return;
-    try {
-      await db.doc(`users/${user.id}/projectGroups/${groupId}`).delete();
-    } catch (error) {
-      console.error("Failed to delete project group:", error);
-    }
+      if (!user) return;
+      try {
+        await db.doc(`users/${user.id}/projectGroups/${groupId}`).delete();
+      } catch (error) {
+          console.error("Failed to delete project group:", error);
+      }
   }, [user]);
 
-
-  const updateProjectTasks = useCallback(async (projectId: string, getNewTasks: (tasks: Task[]) => Task[]) => {
-    const originalProjects = projects;
-    const project = originalProjects.find(p => p.id === projectId);
+  const addTask = useCallback(async (projectId: string, task: Task) => {
+    const project = projects.find(p => p.id === projectId);
     if (!project) return;
-    
-    const newTasks = getNewTasks(project.tasks);
-    const newProjects = originalProjects.map(p => p.id === projectId ? { ...p, tasks: newTasks } : p);
-    setProjects(newProjects);
+    const newTasks = [...project.tasks, task];
+    await updateProject(projectId, { tasks: newTasks });
+  }, [projects, updateProject]);
 
-    if (user) {
-      try {
-        const projectRef = db.doc(`users/${user.id}/projects/${projectId}`);
-        await projectRef.update({ tasks: newTasks });
-      } catch (error) {
-        console.error("Failed to update tasks, reverting:", error);
-        setProjects(originalProjects);
-      }
-    }
-  }, [projects, user]);
-
-  const addTask = useCallback((projectId: string, task: Task) => 
-    updateProjectTasks(projectId, (tasks) => [...tasks, task]),
-  [updateProjectTasks]);
+  const addSubtask = useCallback(async (projectId: string, parentId: string, subtask: Task) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    const newTasks = addSubtaskToTree(project.tasks, parentId, subtask);
+    await updateProject(projectId, { tasks: newTasks });
+  }, [projects, updateProject]);
   
-  const addSubtask = useCallback((projectId: string, parentId: string, subtask: Task) => 
-    updateProjectTasks(projectId, (tasks) => addSubtaskToTree(tasks, parentId, subtask)),
-  [updateProjectTasks]);
+  const updateTask = useCallback(async (projectId: string, task: Task) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    const newTasks = updateTaskInTree(project.tasks, task);
+    await updateProject(projectId, { tasks: newTasks });
+  }, [projects, updateProject]);
 
-  const updateTask = useCallback((projectId: string, task: Task) => 
-    updateProjectTasks(projectId, (tasks) => updateTaskInTree(tasks, task)),
-  [updateProjectTasks]);
-  
-  const updateMultipleTasks = useCallback((projectId: string, tasksToUpdate: Task[]) => 
-    updateProjectTasks(projectId, (tasks) => updateTasksInTree(tasks, tasksToUpdate)),
-  [updateProjectTasks]);
+  const updateMultipleTasks = useCallback(async (projectId: string, tasksToUpdate: Task[]) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    const newTasks = updateTasksInTree(project.tasks, tasksToUpdate);
+    await updateProject(projectId, { tasks: newTasks });
+  }, [projects, updateProject]);
 
-  const deleteTask = useCallback((projectId: string, taskId: string) => 
-    updateProjectTasks(projectId, (tasks) => deleteTaskFromTree(tasks, taskId)),
-  [updateProjectTasks]);
+  const deleteTask = useCallback(async (projectId: string, taskId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    const newTasks = deleteTaskFromTree(project.tasks, taskId);
+    await updateProject(projectId, { tasks: newTasks });
+  }, [projects, updateProject]);
   
   const moveTask = useCallback(async (sourceProjectId: string, targetProjectId: string, task: Task) => {
-    if (!user || sourceProjectId === targetProjectId) return;
-    
-    const originalProjects = projects;
-    const sourceProject = originalProjects.find(p => p.id === sourceProjectId);
-    const targetProject = originalProjects.find(p => p.id === targetProjectId);
-    if (!sourceProject || !targetProject) return;
+      if (sourceProjectId === targetProjectId) return;
+      
+      const sourceProject = projects.find(p => p.id === sourceProjectId);
+      const targetProject = projects.find(p => p.id === targetProjectId);
+      if (!sourceProject || !targetProject) return;
 
-    const newSourceTasks = deleteTaskFromTree(sourceProject.tasks, task.id);
-    const newTargetTasks = [...targetProject.tasks, task];
-    const newProjects = originalProjects.map(p => {
-        if (p.id === sourceProjectId) return { ...p, tasks: newSourceTasks };
-        if (p.id === targetProjectId) return { ...p, tasks: newTargetTasks };
-        return p;
-    });
-    setProjects(newProjects);
-
-    try {
-        const batch = db.batch();
-        const sourceRef = db.doc(`users/${user.id}/projects/${sourceProjectId}`);
-        batch.update(sourceRef, { tasks: newSourceTasks });
-        const targetRef = db.doc(`users/${user.id}/projects/${targetProjectId}`);
-        batch.update(targetRef, { tasks: newTargetTasks });
-        await batch.commit();
-    } catch (error) {
-        console.error("Failed to move task, reverting:", error);
-        setProjects(originalProjects);
-    }
-  }, [projects, user]);
+      const { foundTask, newTasks: newSourceTasks } = findAndRemoveTask(sourceProject.tasks, task.id);
+      
+      if (foundTask) {
+          const newTargetTasks = [...targetProject.tasks, foundTask];
+          // Perform updates in parallel
+          await Promise.all([
+              updateProject(sourceProjectId, { tasks: newSourceTasks }),
+              updateProject(targetProjectId, { tasks: newTargetTasks })
+          ]);
+      }
+  }, [projects, updateProject]);
 
   const reparentTask = useCallback(async (projectId: string, taskId: string, newParentId: string | null) => {
-      await updateProjectTasks(projectId, (currentTasks) => {
-          const { foundTask, newTasks: treeWithoutTask } = findAndRemoveTask(currentTasks, taskId);
-          if (!foundTask) return currentTasks;
-          
-          if (newParentId === null) {
-              return [...treeWithoutTask, foundTask];
-          } else {
-              return addSubtaskToTree(treeWithoutTask, newParentId, foundTask);
-          }
-      });
-  }, [updateProjectTasks]);
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
 
-  const selectedProject = useMemo(() => projects.find(p => p.id === selectedProjectId) || null, [projects, selectedProjectId]);
+      const { foundTask, newTasks } = findAndRemoveTask(project.tasks, taskId);
+      if (!foundTask) return;
+
+      let finalTasks: Task[];
+      if (newParentId === null) {
+          finalTasks = [...newTasks, foundTask];
+      } else {
+          finalTasks = addSubtaskToTree(newTasks, newParentId, foundTask);
+      }
+      
+      await updateProject(projectId, { tasks: finalTasks });
+  }, [projects, updateProject]);
   
-  const visibleProjects = useMemo(() => {
-    return projects.filter(p => !p.isHidden || showHiddenProjects);
-  }, [projects, showHiddenProjects]);
+  const visibleProjects = useMemo(() => projects.filter(p => !p.isArchived), [projects]);
+  const archivedProjects = useMemo(() => projects.filter(p => p.isArchived), [projects]);
+  const selectedProject = useMemo(() => projects.find(p => p.id === selectedProjectId) ?? null, [projects, selectedProjectId]);
 
   const contextValue = useMemo(() => ({
-    projects, visibleProjects, projectGroups, selectedProjectId, selectedProject, loading, showHiddenProjects, setShowHiddenProjects: handleSetShowHiddenProjects,
-    selectProject, addProject, updateProject, deleteProject, toggleProjectVisibility, addProjectGroup, updateProjectGroup, deleteProjectGroup,
-    addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask,
-    reparentTask
-  }), [projects, visibleProjects, projectGroups, selectedProjectId, selectedProject, loading, showHiddenProjects, handleSetShowHiddenProjects, selectProject, addProject, updateProject, deleteProject, toggleProjectVisibility, addProjectGroup, updateProjectGroup, deleteProjectGroup, addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask]);
+    projects,
+    visibleProjects,
+    archivedProjects,
+    projectGroups,
+    selectedProjectId,
+    selectedProject,
+    loading,
+    selectProject,
+    addProject,
+    updateProject,
+    deleteProject,
+    archiveProject,
+    unarchiveProject,
+    addProjectGroup,
+    updateProjectGroup,
+    deleteProjectGroup,
+    addTask,
+    addSubtask,
+    updateTask,
+    updateMultipleTasks,
+    deleteTask,
+    moveTask,
+    reparentTask,
+  }), [
+    projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading,
+    selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject,
+    addProjectGroup, updateProjectGroup, deleteProjectGroup, addTask, addSubtask, updateTask,
+    updateMultipleTasks, deleteTask, moveTask, reparentTask
+  ]);
 
-  return <ProjectContext.Provider value={contextValue}>{children}</ProjectContext.Provider>;
+  return (
+    <ProjectContext.Provider value={contextValue}>
+      {children}
+    </ProjectContext.Provider>
+  );
 };
 
 export const useProject = (): ProjectContextType => {
   const context = useContext(ProjectContext);
-  if (context === undefined) throw new Error('useProject must be used within a ProjectProvider');
+  if (context === undefined) {
+    throw new Error('useProject must be used within a ProjectProvider');
+  }
   return context;
 };
 
 // --- RESOURCE CONTEXT ---
+
 interface ResourceContextType {
-    resources: Resource[];
-    loading: boolean;
-    addResource: (resource: Omit<Resource, 'id'>) => Promise<void>;
-    updateResource: (resource: Resource) => Promise<void>;
-    deleteResource: (id: string) => Promise<void>;
+  resources: Resource[];
+  loading: boolean;
+  addResource: (resource: Omit<Resource, 'id'>) => Promise<void>;
+  updateResource: (resource: Resource) => Promise<void>;
+  deleteResource: (resourceId: string) => Promise<void>;
 }
 
 export const ResourceContext = createContext<ResourceContextType | undefined>(undefined);
 
 export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { user, loading: authLoading } = useAuth();
-    const [resources, setResources] = useState<Resource[]>([]);
-    const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        if (authLoading) {
-            setLoading(true);
-            setResources([]);
-            return;
+  useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      setResources([]);
+      return;
+    }
+    if (user) {
+      setLoading(true);
+      const resourcesRef = db.collection(`users/${user.id}/resources`);
+      resourcesRef.limit(1).get().then(snapshot => {
+        if (snapshot.empty) {
+          console.log("New user resource collection is empty. Seeding initial data.");
+          const batch = db.batch();
+          INITIAL_RESOURCES.forEach(resource => {
+            const resourceRef = db.doc(`users/${user.id}/resources/${resource.id}`);
+            batch.set(resourceRef, resource);
+          });
+          batch.commit().catch(err => console.error("Failed to seed resources:", err));
         }
+      });
+      const resourcesQuery = db.collection(`users/${user.id}/resources`).orderBy('createdAt', 'desc');
+      const unsubscribe = resourcesQuery.onSnapshot((snapshot) => {
+        const userResources = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Resource));
+        setResources(userResources);
+        setLoading(false);
+      }, (error) => {
+        console.error("Error fetching resources:", error);
+        setLoading(false);
+      });
+      return () => unsubscribe();
+    } else {
+      setResources(INITIAL_RESOURCES);
+      setLoading(false);
+    }
+  }, [user, authLoading]);
 
-        if (user) {
-            setLoading(true);
+  const addResource = useCallback(async (resourceData: Omit<Resource, 'id'>) => {
+    const newResource: Resource = { ...resourceData, id: `res-${Date.now()}`};
+    const originalResources = resources;
+    setResources(prev => [newResource, ...prev]);
 
-            // --- Robust Seeding Logic for Resources ---
-            const resourcesRef = db.collection(`users/${user.id}/resources`);
-            resourcesRef.limit(1).get().then(snapshot => {
-                if (snapshot.empty) {
-                    console.log("New user resource collection is empty. Seeding initial data.");
-                    const batch = db.batch();
-                    INITIAL_RESOURCES.forEach(resource => {
-                        const resourceRef = db.doc(`users/${user.id}/resources/${resource.id}`);
-                        batch.set(resourceRef, resource);
-                    });
-                    batch.commit().catch(err => console.error("Failed to seed resources:", err));
-                }
-            });
-            // --- End Seeding Logic ---
+    if (user) {
+      try {
+        await db.doc(`users/${user.id}/resources/${newResource.id}`).set(newResource);
+      } catch (error) {
+        console.error("Failed to add resource, reverting:", error);
+        setResources(originalResources);
+      }
+    }
+  }, [resources, user]);
+  
+  const updateResource = useCallback(async (resource: Resource) => {
+    const originalResources = resources;
+    setResources(prev => prev.map(r => r.id === resource.id ? resource : r));
+    if (user) {
+      try {
+        await db.doc(`users/${user.id}/resources/${resource.id}`).update(resource);
+      } catch (error) {
+        console.error("Failed to update resource, reverting:", error);
+        setResources(originalResources);
+      }
+    }
+  }, [resources, user]);
 
-            const resourcesQuery = db.collection(`users/${user.id}/resources`).orderBy('createdAt', 'desc');
-            const unsubscribe = resourcesQuery.onSnapshot(snapshot => {
-                const userResources = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Resource));
-                setResources(userResources);
-                setLoading(false);
-            }, (error) => {
-                console.error("Error fetching resources:", error);
-                setLoading(false);
-            });
-            return () => unsubscribe();
-        } else {
-            setResources(INITIAL_RESOURCES);
-            setLoading(false);
-        }
-    }, [user, authLoading]);
+  const deleteResource = useCallback(async (resourceId: string) => {
+    const originalResources = resources;
+    setResources(prev => prev.filter(r => r.id !== resourceId));
+    if (user) {
+      try {
+        await db.doc(`users/${user.id}/resources/${resourceId}`).delete();
+      } catch (error) {
+        console.error("Failed to delete resource, reverting:", error);
+        setResources(originalResources);
+      }
+    }
+  }, [resources, user]);
 
-    const addResource = useCallback(async (resourceData: Omit<Resource, 'id'>) => {
-        const newResource: Resource = { ...resourceData, id: `res-${Date.now()}` };
-        setResources(prev => [newResource, ...prev]); // Optimistic update
+  const contextValue = useMemo(() => ({
+    resources, loading, addResource, updateResource, deleteResource
+  }), [resources, loading, addResource, updateResource, deleteResource]);
 
-        if (user) {
-            try {
-                await db.doc(`users/${user.id}/resources/${newResource.id}`).set(newResource);
-            } catch (error) {
-                console.error("Failed to add resource, reverting:", error);
-                setResources(prev => prev.filter(r => r.id !== newResource.id));
-            }
-        }
-    }, [user]);
-
-    const updateResource = useCallback(async (resource: Resource) => {
-        setResources(prev => prev.map(r => r.id === resource.id ? resource : r)); // Optimistic
-
-        if (user) {
-            try {
-                await db.doc(`users/${user.id}/resources/${resource.id}`).set(resource, { merge: true });
-            } catch (error) {
-                console.error("Failed to update resource:", error);
-                // Simple revert for now. A more robust solution would re-fetch.
-                const original = resources.find(r => r.id === resource.id);
-                if (original) setResources(prev => prev.map(r => r.id === resource.id ? original : r));
-            }
-        }
-    }, [user, resources]);
-
-    const deleteResource = useCallback(async (id: string) => {
-        const originalResources = resources;
-        setResources(prev => prev.filter(r => r.id !== id)); // Optimistic
-
-        if (user) {
-            try {
-                await db.doc(`users/${user.id}/resources/${id}`).delete();
-            } catch (error) {
-                console.error("Failed to delete resource, reverting:", error);
-                setResources(originalResources);
-            }
-        }
-    }, [user, resources]);
-    
-    const contextValue = useMemo(() => ({
-        resources, loading, addResource, updateResource, deleteResource
-    }), [resources, loading, addResource, updateResource, deleteResource]);
-
-    return <ResourceContext.Provider value={contextValue}>{children}</ResourceContext.Provider>;
+  return <ResourceContext.Provider value={contextValue}>{children}</ResourceContext.Provider>;
 };
 
 export const useResource = (): ResourceContextType => {
-    const context = useContext(ResourceContext);
-    if (context === undefined) throw new Error('useResource must be used within a ResourceProvider');
-    return context;
+  const context = useContext(ResourceContext);
+  if (context === undefined) {
+    throw new Error('useResource must be used within a ResourceProvider');
+  }
+  return context;
 };

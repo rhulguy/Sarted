@@ -1,5 +1,5 @@
 {
-  "name": "Synergize: All-in-One Project Visualizer",
+  "name": "sarted",
   "description": "A dynamic task and project management tool designed to integrate strategic planning, daily execution, and resource management into a single, cohesive workflow, powered by AI.",
   "requestFramePermissions": [
     "microphone"

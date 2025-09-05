@@ -206,7 +206,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
     }, [viewBox]);
 
     return (
-        <div ref={downloadRef} className="w-full h-full relative bg-secondary rounded-lg">
+        <div ref={downloadRef} className="w-full h-full relative bg-app-background rounded-xl border border-border-color">
             <svg
                 ref={svgRef}
                 className="w-full h-full cursor-grab"
@@ -225,7 +225,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                 ? `M ${link.source.x + NODE_WIDTH / 2} ${link.source.y} C ${link.source.x + NODE_WIDTH / 2 + 30} ${link.source.y}, ${link.target.x - NODE_WIDTH / 2 - 30} ${link.target.y}, ${link.target.x - NODE_WIDTH / 2} ${link.target.y}`
                                 : `M ${link.source.x} ${link.source.y} L ${link.target.x} ${link.target.y}`
                             }
-                            stroke="#30363D"
+                            stroke="#E5E7EB"
                             strokeWidth="2"
                             fill="none"
                         />
@@ -246,8 +246,8 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                 width={NODE_WIDTH}
                                 height={NODE_HEIGHT}
                                 rx={20}
-                                fill={node.isProject ? "#58A6FF" : "#21262D"}
-                                stroke={node.isProject ? "#C9D1D9" : "#8B949E"}
+                                fill={node.isProject ? "#3B82F6" : "#FFFFFF"}
+                                stroke={node.isProject ? "#3B82F6" : "#E5E7EB"}
                                 strokeWidth="2"
                             />
                             {node.imageUrl && (
@@ -265,7 +265,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                 y={node.task?.startDate ? -8 : 0}
                                 textAnchor="middle"
                                 dominantBaseline="middle"
-                                fill="#C9D1D9"
+                                fill={node.isProject ? "#FFFFFF" : "#1F2937"}
                                 fontSize="14"
                                 style={{ 
                                     textDecoration: node.isCompleted ? 'line-through' : 'none', 
@@ -284,7 +284,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                     y={15}
                                     textAnchor="middle"
                                     dominantBaseline="middle"
-                                    fill="#8B949E"
+                                    fill={node.isProject ? "#FFFFFF" : "#6B7280"}
                                     fontSize="11"
                                 >
                                     {node.task.startDate} → {node.task.endDate}
@@ -292,13 +292,13 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                             )}
                             <g className="opacity-0 group-hover:opacity-100 transition-opacity" transform={`translate(95, -12)`}>
                                 <g onClick={(e) => handleCreateSubNode(e, node)} className="cursor-pointer">
-                                    <rect x="0" y="0" width="24" height="24" rx="4" fill="#30363D" />
+                                    <rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" />
                                     <PlusIcon x="4" y="4" className="w-4 h-4 text-text-secondary" />
                                 </g>
                                 {!node.isProject && (
                                     <>
                                     <g onClick={(e) => { e.stopPropagation(); setEditingNode(node); }} transform={`translate(28, 0)`} className="cursor-pointer">
-                                        <rect x="0" y="0" width="24" height="24" rx="4" fill="#30363D" />
+                                        <rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" />
                                         <EditIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/>
                                     </g>
                                     <g onClick={(e) => { e.stopPropagation(); handleGenerateImage(node); }} transform={`translate(56, 0)`} className="cursor-pointer">
@@ -306,7 +306,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                             <foreignObject x="0" y="0" width="24" height="24"><Spinner /></foreignObject>
                                         ) : (
                                             <>
-                                                <rect x="0" y="0" width="24" height="24" rx="4" fill="#30363D" />
+                                                <rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" />
                                                 <ImageIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/>
                                             </>
                                         )}
@@ -326,7 +326,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                 value={newNodeName}
                                 onChange={e => setNewNodeName(e.target.value)}
                                 placeholder="New sub-task..."
-                                className="w-full bg-highlight border border-accent rounded-md p-2 text-sm text-text-primary focus:outline-none"
+                                className="w-full bg-card-background border border-accent-blue rounded-md p-2 text-sm text-text-primary focus:outline-none"
                                 onClick={e => e.stopPropagation()}
                                 onBlur={handleNewNodeCommit}
                                 onKeyDown={(e) => { if (e.key === 'Escape') setAddingToNode(null); }}
@@ -338,7 +338,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                     value={newNodeStartDate}
                                     onChange={(e) => setNewNodeStartDate(e.target.value)}
                                     max={newNodeEndDate || undefined}
-                                    className="w-full bg-highlight border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent"
+                                    className="w-full bg-card-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
                                 />
                                 <input
                                     type="date"
@@ -346,7 +346,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                     value={newNodeEndDate}
                                     onChange={(e) => setNewNodeEndDate(e.target.value)}
                                     min={newNodeStartDate || undefined}
-                                    className="w-full bg-highlight border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent"
+                                    className="w-full bg-card-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
                                 />
                             </div>
                         </form>
@@ -355,7 +355,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                  {editingNode && editingNode.task && (
                     <foreignObject x={editingNode.x - NODE_WIDTH/2} y={editingNode.y - NODE_HEIGHT/2} width={NODE_WIDTH} height={NODE_HEIGHT}>
                         <div 
-                            className="w-full h-full bg-highlight/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-2 gap-1"
+                            className="w-full h-full bg-card-background/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-2 gap-1"
                             onClick={(e) => e.stopPropagation()}
                         >
                             <input
@@ -364,7 +364,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                 defaultValue={editingNode.task.startDate}
                                 onBlur={(e) => handleDateUpdate(editingNode, { startDate: e.target.value })}
                                 onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}}
-                                className="w-full bg-secondary border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent"
+                                className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
                             />
                             <input
                                 type="date"
@@ -373,7 +373,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                                 onBlur={(e) => handleDateUpdate(editingNode, { endDate: e.target.value })}
                                 onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}}
                                 min={editingNode.task.startDate}
-                                className="w-full bg-secondary border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent"
+                                className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
                             />
                         </div>
                     </foreignObject>
@@ -385,7 +385,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                         const rootNode = nodes.find(n => n.isProject);
                         if (rootNode) handleCreateSubNode({ stopPropagation: () => {} } as React.MouseEvent, rootNode);
                     }}
-                    className="flex items-center space-x-2 px-4 py-2 bg-accent text-white rounded-lg hover:bg-blue-500 transition-colors duration-200"
+                    className="flex items-center space-x-2 px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90 transition-opacity"
                 >
                     <PlusIcon className="w-5 h-5" />
                     <span>Add Task</span>
@@ -393,17 +393,17 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                  <button 
                     onClick={() => downloadImage(`${project?.name}-mind-map.png`)} 
                     disabled={isDownloading} 
-                    className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+                    className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-card-background text-text-secondary rounded-lg border border-border-color hover:bg-app-background transition-colors disabled:opacity-50"
                   >
                     <DownloadIcon className="w-4 h-4" />
                     <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
                 </button>
-                <div className="bg-highlight p-1 rounded-lg flex space-x-1">
-                    <button onClick={() => setLayout('tree')} className={`p-1.5 rounded-md ${layout === 'tree' ? 'bg-accent' : 'hover:bg-secondary'}`} title="Tree Layout">
-                        <MindMapIcon className="w-5 h-5 text-text-primary" />
+                <div className="bg-card-background p-1 rounded-lg flex space-x-1 border border-border-color">
+                    <button onClick={() => setLayout('tree')} className={`p-1.5 rounded-md ${layout === 'tree' ? 'bg-accent-blue text-white' : 'hover:bg-app-background'}`} title="Tree Layout">
+                        <MindMapIcon className={`w-5 h-5 ${layout === 'tree' ? '' : 'text-text-primary'}`} />
                     </button>
-                    <button onClick={() => setLayout('radial')} className={`p-1.5 rounded-md ${layout === 'radial' ? 'bg-accent' : 'hover:bg-secondary'}`} title="Radial Layout">
-                        <RadialMindMapIcon className="w-5 h-5 text-text-primary" />
+                    <button onClick={() => setLayout('radial')} className={`p-1.5 rounded-md ${layout === 'radial' ? 'bg-accent-blue text-white' : 'hover:bg-app-background'}`} title="Radial Layout">
+                        <RadialMindMapIcon className={`w-5 h-5 ${layout === 'radial' ? '' : 'text-text-primary'}`} />
                     </button>
                 </div>
             </div>

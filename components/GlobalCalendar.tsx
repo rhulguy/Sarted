@@ -59,7 +59,7 @@ interface GlobalCalendarTask extends Task {
 const GlobalCalendar: React.FC = () => {
     const { visibleProjects, projects, projectGroups, addTask, updateTask, deleteTask, addSubtask, moveTask } = useProject();
     const { habits } = useHabit();
-    const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>('day');
+    const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>('month');
     const [currentDate, setCurrentDate] = useState(() => normalizeDate(new Date()));
     const [focusedTask, setFocusedTask] = useState<GlobalCalendarTask | null>(null);
 
@@ -290,9 +290,19 @@ interface MonthViewProps {
     onSetDisplayMode: (mode: CalendarDisplayMode) => void;
 }
 const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrentDate, setFocusedTask, onSetDisplayMode }) => {
-    const { projects, projectGroups } = useProject();
+    const { projects, projectGroups, updateTask, addTask } = useProject();
     const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
     const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+    const [addingTaskTo, setAddingTaskTo] = useState<Date | null>(null);
+    const [newTaskName, setNewTaskName] = useState("");
+    const [newTaskProjectId, setNewTaskProjectId] = useState(projects[0]?.id || "");
+    const newTaskInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if(addingTaskTo && newTaskInputRef.current) {
+            newTaskInputRef.current.focus();
+        }
+    }, [addingTaskTo]);
 
     const calendarGrid = useMemo(() => {
         const year = currentDate.getUTCFullYear();
@@ -314,11 +324,32 @@ const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrent
     }, [currentDate]);
 
     const changeMonth = (amount: number) => {
+        setAddingTaskTo(null);
         const newDate = new Date(currentDate);
         newDate.setUTCMonth(newDate.getUTCMonth() + amount);
         setCurrentDate(newDate);
     };
     
+    const handleStartAddTask = (date: Date) => {
+        setAddingTaskTo(date);
+        setNewTaskName("");
+        if(projects.length > 0) setNewTaskProjectId(projects[0].id);
+    };
+
+    const handleFormSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const taskName = newTaskName.trim();
+        const taskDate = addingTaskTo;
+        
+        if (taskDate && taskName && newTaskProjectId) {
+            const dateStr = formatDate(taskDate);
+            const newTask: Task = { id: `task-${Date.now()}`, name: taskName, completed: false, description: '', subtasks: [], startDate: dateStr, endDate: dateStr };
+            await addTask(newTaskProjectId, newTask);
+        }
+        setAddingTaskTo(null);
+        setNewTaskName("");
+    };
+
     const handleDragStart = (e: React.DragEvent, taskId: string) => {
         e.dataTransfer.setData('text/plain', taskId);
         setDraggedTaskId(taskId);
@@ -335,7 +366,7 @@ const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrent
             newEndDate.setUTCDate(newEndDate.getUTCDate() + duration);
             
             const { projectId, startDateObj, endDateObj, ...originalTask } = task;
-            await useProject().updateTask(projectId, { ...originalTask, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) });
+            await updateTask(projectId, { ...originalTask, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) });
         }
         setDraggedTaskId(null);
     };
@@ -367,19 +398,43 @@ const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrent
                     {calendarGrid.map((day, index) => {
                         const tasksForDay = allTasks.filter(task => !isNaN(task.startDateObj.getTime()) && day.date >= task.startDateObj && day.date <= task.endDateObj);
                         return (
-                            <div key={index} className={`relative border-b border-r border-border-color p-1 flex flex-col group ${!day.isCurrentMonth ? 'bg-primary/50' : ''}`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, day.date)}>
-                                <div className="text-right"><span className={`text-sm ${day.isToday ? 'bg-accent text-white rounded-full flex items-center justify-center w-6 h-6 ml-auto' : 'text-text-primary'}`}>{day.date.getUTCDate()}</span></div>
+                            <div key={index} className={`relative border-b border-r border-border-color p-1 flex flex-col group ${!day.isCurrentMonth ? 'bg-primary/50' : 'hover:bg-highlight/30'}`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, day.date)}>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className={`text-sm ${day.isToday ? 'bg-accent text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>{day.date.getUTCDate()}</span>
+                                    {addingTaskTo === null && (
+                                        <button onClick={() => handleStartAddTask(day.date)} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent hover:text-blue-400" aria-label={`Add task for ${day.date.toISOString().slice(0,10)}`}>
+                                            <PlusIcon className="w-4 h-4"/>
+                                        </button>
+                                    )}
+                                </div>
                                 <div className="flex-grow space-y-1 overflow-y-auto mt-1">
                                     {tasksForDay.map(task => {
                                         const project = projects.find(p => p.id === task.projectId);
                                         const group = project ? projectGroups.find(g => g.id === project.groupId) : undefined;
-                                        const projectColor = group ? group.color : 'bg-gray-500';
+                                        const taskColor = group?.color?.replace('bg-', '')?.split('-')[0] || 'gray';
+                                        
                                         return (
-                                            <div key={task.id} title={task.name} draggable onDragStart={(e) => handleDragStart(e, task.id)} onClick={() => setFocusedTask(task)} className={`text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center ${task.completed ? 'opacity-50 bg-gray-600' : 'opacity-90'} ${draggedTaskId === task.id ? 'opacity-30' : ''}`} style={{ backgroundColor: task.completed ? undefined : projectColor.replace('bg-', '#') }}>
+                                            <div key={task.id} title={`${task.name}\nProject: ${project?.name || 'N/A'}\nGroup: ${group?.name || 'N/A'}`} draggable onDragStart={(e) => handleDragStart(e, task.id)} onClick={() => setFocusedTask(task)} 
+                                                 className={`text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center ${task.completed ? 'opacity-50 bg-gray-600' : ''} ${draggedTaskId === task.id ? 'opacity-30' : ''}`} 
+                                                 style={{ backgroundColor: task.completed ? undefined : `var(--tw-color-${taskColor}-500)` }}
+                                            >
                                                <div className="flex items-center min-w-0"><span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.name}</span></div>
                                             </div>
                                         );
                                     })}
+                                    {addingTaskTo && areDatesEqual(addingTaskTo, day.date) && (
+                                        <form onSubmit={handleFormSubmit} className="bg-highlight p-2 rounded-lg space-y-2 relative z-10">
+                                            <input ref={newTaskInputRef} type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} placeholder="New task..."
+                                                className="w-full bg-secondary border border-accent rounded p-1 text-xs focus:outline-none" />
+                                            <select value={newTaskProjectId} onChange={e => setNewTaskProjectId(e.target.value)} className="w-full bg-secondary border border-border-color rounded p-1 text-xs">
+                                                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                            </select>
+                                            <div className="flex justify-end gap-1">
+                                                <button type="button" onClick={() => setAddingTaskTo(null)} className="px-2 py-0.5 text-xs bg-gray-600 rounded">Cancel</button>
+                                                <button type="submit" className="px-2 py-0.5 text-xs bg-accent text-white rounded">Add</button>
+                                            </div>
+                                        </form>
+                                    )}
                                 </div>
                             </div>
                         );

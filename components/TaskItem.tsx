@@ -3,6 +3,7 @@ import { Task, Project } from '../types';
 import { TrashIcon, ChevronRightIcon, CornerDownRightIcon, EditIcon, ImageIcon, UploadIcon } from './IconComponents';
 import { generateImageForTask } from '../services/geminiService';
 import Spinner from './Spinner';
+import { useProject } from '../contexts/ProjectContext';
 
 interface TaskItemProps {
   task: Task;
@@ -16,7 +17,30 @@ interface TaskItemProps {
   onMoveProject?: (targetProjectId: string) => void;
 }
 
+const CustomCheckbox: React.FC<{ checked: boolean; onChange: () => void; colorClass: string }> = ({ checked, onChange, colorClass }) => {
+  return (
+    <button
+      onClick={onChange}
+      className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-colors ${
+        checked ? `${colorClass} border-transparent` : 'bg-card-background border-border-color'
+      }`}
+    >
+      {checked && (
+        <svg className="w-4 h-4 text-white" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z" />
+        </svg>
+      )}
+    </button>
+  );
+};
+
+
 const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, onAddSubtask, projects, currentProjectId, onMoveProject }) => {
+    const { projectGroups } = useProject();
+    const project = projects?.find(p => p.id === currentProjectId);
+    const group = project ? projectGroups.find(g => g.id === project.groupId) : null;
+    const colorClass = group ? group.color.replace('bg-', 'bg-brand-') : 'bg-accent-blue';
+
     const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
     const [description, setDescription] = useState(task.description);
     const [startDate, setStartDate] = useState(task.startDate || '');
@@ -26,10 +50,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
     const [newSubtaskName, setNewSubtaskName] = useState('');
     const [newSubtaskStartDate, setNewSubtaskStartDate] = useState('');
     const [newSubtaskEndDate, setNewSubtaskEndDate] = useState('');
-    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
+    
     useEffect(() => {
         setDescription(task.description);
         setStartDate(task.startDate || '');
@@ -58,15 +79,13 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
         }
     };
 
-    const handleStartDateBlur = () => {
-        if (startDate !== (task.startDate || '')) {
-            onUpdate({ ...task, startDate: startDate || undefined });
-        }
-    };
-    
-    const handleEndDateBlur = () => {
-        if (endDate !== (task.endDate || '')) {
-            onUpdate({ ...task, endDate: endDate || undefined });
+    const handleDateChange = (type: 'start' | 'end', value: string) => {
+        if (type === 'start') {
+            setStartDate(value);
+            onUpdate({ ...task, startDate: value || undefined });
+        } else {
+            setEndDate(value);
+            onUpdate({ ...task, endDate: value || undefined });
         }
     };
 
@@ -81,172 +100,77 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
             setIsExpanded(true);
         }
     };
-
-    const handleGenerateImage = async () => {
-        setIsGeneratingImage(true);
-        try {
-            const imageUrl = await generateImageForTask(task.name);
-            onUpdate({ ...task, imageUrl });
-        } catch (error) {
-            console.error("Failed to generate image for task:", error);
-            alert("Could not generate image. Please check the console for details.");
-        } finally {
-            setIsGeneratingImage(false);
-        }
-    };
-
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setIsUploading(true);
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 256;
-                const MAX_HEIGHT = 256;
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height;
-                        height = MAX_HEIGHT;
-                    }
-                }
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx?.drawImage(img, 0, 0, width, height);
-
-                // Use WebP for better compression
-                const dataUrl = canvas.toDataURL('image/webp', 0.8);
-                onUpdate({ ...task, imageUrl: dataUrl });
-                setIsUploading(false);
-            };
-            img.onerror = () => {
-                alert("Failed to process image file.");
-                setIsUploading(false);
-            }
-            img.src = event.target?.result as string;
-        };
-        reader.onerror = () => {
-            alert("Failed to read image file.");
-            setIsUploading(false);
-        }
-        reader.readAsDataURL(file);
-
-        // Reset file input value to allow re-uploading the same file
-        e.target.value = '';
-    };
-
+    
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
 
     return (
-        <div>
+        <div style={{ paddingLeft: `${level * 1.5}rem` }}>
             <div 
-                className={`flex items-center p-2 rounded-lg transition-colors ${task.completed ? 'bg-secondary' : 'bg-highlight'} md:group`}
-                // Reduced indentation for better mobile view
-                style={{ paddingLeft: `${level * 1.5 + 0.5}rem` }}
+                className={`flex items-center p-3 rounded-xl transition-colors ${task.completed ? 'bg-app-background' : 'bg-card-background shadow-card'}`}
             >
-                <div className="flex items-center space-x-2 flex-grow min-w-0">
-                    <button onClick={() => setIsExpanded(!isExpanded)} className={`p-1 text-text-secondary hover:text-text-primary ${!hasSubtasks && 'invisible'}`}>
+                <div className="flex items-center space-x-3 flex-grow min-w-0">
+                     <button onClick={() => setIsExpanded(!isExpanded)} className={`p-1 text-text-secondary hover:text-text-primary ${!hasSubtasks && 'invisible'}`}>
                         <ChevronRightIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                     </button>
-                    <input
-                        type="checkbox"
-                        checked={task.completed}
-                        onChange={handleToggleComplete}
-                        className="w-5 h-5 rounded bg-secondary border-border-color text-accent focus:ring-accent shrink-0"
-                    />
-                     {isGeneratingImage || isUploading ? (
-                        <div className="w-8 h-8 flex items-center justify-center shrink-0"><Spinner /></div>
-                    ) : task.imageUrl && (
-                        <img src={task.imageUrl} alt={task.name} className="w-8 h-8 rounded object-cover shrink-0" />
-                    )}
+                    <CustomCheckbox checked={task.completed} onChange={handleToggleComplete} colorClass={colorClass} />
                     <span 
                         onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
                         className={`text-base cursor-pointer truncate ${task.completed ? 'line-through text-text-secondary' : 'text-text-primary'}`}>
                         {task.name}
                     </span>
                 </div>
-                {/* Action buttons are now always visible on mobile and appear on hover on desktop */}
-                <div className="flex items-center space-x-2 md:space-x-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" style={{ display: 'none' }} />
-                    <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="p-2 text-text-secondary hover:text-accent disabled:opacity-50" title="Upload custom image">
-                        <UploadIcon className="w-5 h-5" />
-                    </button>
-                    <button onClick={handleGenerateImage} disabled={isGeneratingImage} className="p-2 text-text-secondary hover:text-accent disabled:opacity-50" title="Generate image with AI">
-                        <ImageIcon className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => setIsAddingSubtask(true)} className="p-2 text-text-secondary hover:text-accent" title="Add sub-task">
+                <div className="flex items-center space-x-2 md:space-x-1">
+                    <button onClick={() => setIsAddingSubtask(true)} className="p-2 text-text-secondary hover:text-accent-blue" title="Add sub-task">
                         <CornerDownRightIcon className="w-5 h-5" />
                     </button>
-                    {/* Edit button is hidden on mobile. Tap the task name to edit. */}
-                    <button onClick={() => setIsDetailsExpanded(!isDetailsExpanded)} className="hidden md:block p-2 text-text-secondary hover:text-accent" title="Edit details">
-                        <EditIcon className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => onDelete(task.id)} className="p-2 text-text-secondary hover:text-red-500" title="Delete task">
+                    <button onClick={() => onDelete(task.id)} className="p-2 text-text-secondary hover:text-accent-red" title="Delete task">
                         <TrashIcon className="w-5 h-5" />
                     </button>
                 </div>
             </div>
 
             {isDetailsExpanded && (
-                <div className="py-2 space-y-3" style={{ paddingLeft: `${level * 1.5 + 2.5}rem` }}>
+                <div className="py-2 px-4 space-y-3 bg-card-background rounded-b-xl mb-2" style={{ marginLeft: `3.5rem` }}>
                     <div>
-                        <label htmlFor={`description-${task.id}`} className="block text-xs font-medium text-text-secondary mb-1">Description</label>
+                        <label className="block text-xs font-medium text-text-secondary mb-1">Description</label>
                         <textarea
-                            id={`description-${task.id}`}
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             onBlur={handleDescriptionBlur}
                             placeholder="Add a description..."
-                            className="w-full bg-secondary border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+                            className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             rows={3}
                         />
                     </div>
                     <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
                         <div className="flex-1">
-                            <label htmlFor={`start-date-${task.id}`} className="block text-xs font-medium text-text-secondary mb-1">Start Date</label>
+                            <label className="block text-xs font-medium text-text-secondary mb-1">Start Date</label>
                             <input
-                                id={`start-date-${task.id}`}
                                 type="date"
                                 value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                onBlur={handleStartDateBlur}
+                                onChange={(e) => handleDateChange('start', e.target.value)}
                                 max={endDate || undefined}
-                                className="w-full bg-secondary border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+                                className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             />
                         </div>
                         <div className="flex-1">
-                            <label htmlFor={`end-date-${task.id}`} className="block text-xs font-medium text-text-secondary mb-1">End Date</label>
+                            <label className="block text-xs font-medium text-text-secondary mb-1">End Date</label>
                             <input
-                                id={`end-date-${task.id}`}
                                 type="date"
                                 value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                onBlur={handleEndDateBlur}
+                                onChange={(e) => handleDateChange('end', e.target.value)}
                                 min={startDate || undefined}
-                                className="w-full bg-secondary border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+                                className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             />
                         </div>
                     </div>
                      {onMoveProject && projects && currentProjectId && (
                         <div>
-                            <label htmlFor={`project-select-${task.id}`} className="block text-xs font-medium text-text-secondary mb-1">Project</label>
+                            <label className="block text-xs font-medium text-text-secondary mb-1">Move to Project</label>
                             <select
-                                id={`project-select-${task.id}`}
                                 value={currentProjectId}
                                 onChange={(e) => onMoveProject(e.target.value)}
-                                className="w-full bg-secondary border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+                                className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             >
                                 {projects.map(p => (
                                     <option key={p.id} value={p.id}>{p.name}</option>
@@ -258,41 +182,29 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
             )}
 
              {isAddingSubtask && (
-                <form onSubmit={handleSubtaskFormSubmit} className="my-2 space-y-2" style={{ paddingLeft: `${(level + 1) * 1.5 + 0.5}rem` }}>
-                    <input
-                        type="text"
-                        value={newSubtaskName}
-                        onChange={(e) => setNewSubtaskName(e.target.value)}
-                        placeholder="New sub-task name..."
-                        className="w-full bg-secondary border border-border-color rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                        autoFocus
-                    />
-                    <div className="flex flex-col md:flex-row gap-2">
-                        <input
-                            type="date"
-                            aria-label="Start Date"
-                            value={newSubtaskStartDate}
-                            onChange={(e) => setNewSubtaskStartDate(e.target.value)}
-                            max={newSubtaskEndDate || undefined}
-                            className="w-full bg-secondary border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
-                        />
-                        <input
-                            type="date"
-                            aria-label="End Date"
-                            value={newSubtaskEndDate}
-                            onChange={(e) => setNewSubtaskEndDate(e.target.value)}
-                            min={newSubtaskStartDate || undefined}
-                            className="w-full bg-secondary border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
-                        />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                        <button type="button" onClick={() => setIsAddingSubtask(false)} className="px-3 py-1 text-sm rounded-md bg-highlight hover:bg-gray-700">Cancel</button>
-                        <button type="submit" className="px-3 py-1 text-sm rounded-md text-white bg-accent hover:bg-blue-500">Add Sub-task</button>
-                    </div>
-                </form>
+                <div className="my-2" style={{ paddingLeft: `3rem` }}>
+                  <form onSubmit={handleSubtaskFormSubmit} className="space-y-2 p-3 bg-card-background rounded-xl">
+                      <input
+                          type="text"
+                          value={newSubtaskName}
+                          onChange={(e) => setNewSubtaskName(e.target.value)}
+                          placeholder="New sub-task name..."
+                          className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                          autoFocus
+                      />
+                      <div className="flex flex-col md:flex-row gap-2">
+                          <input type="date" aria-label="Start Date" value={newSubtaskStartDate} onChange={(e) => setNewSubtaskStartDate(e.target.value)} max={newSubtaskEndDate || undefined} className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                          <input type="date" aria-label="End Date" value={newSubtaskEndDate} onChange={(e) => setNewSubtaskEndDate(e.target.value)} min={newSubtaskStartDate || undefined} className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                          <button type="button" onClick={() => setIsAddingSubtask(false)} className="px-3 py-1 text-sm rounded-md bg-app-background hover:bg-border-color">Cancel</button>
+                          <button type="submit" className="px-3 py-1 text-sm rounded-md text-white bg-accent-blue hover:opacity-90">Add</button>
+                      </div>
+                  </form>
+                </div>
             )}
             {isExpanded && hasSubtasks && (
-                <div className="space-y-1">
+                <div className="space-y-2 mt-2">
                     {task.subtasks.map(subtask => (
                         <TaskItem 
                             key={subtask.id}

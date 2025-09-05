@@ -15,7 +15,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMobile, isOpen, onClose, children }) => {
   const navItems = [
     { id: 'inbox', name: 'Inbox', icon: InboxIcon },
-    { id: 'calendar', name: 'Calendar', icon: CalendarIcon },
+    { id: 'calendar', name: 'Global Calendar', icon: CalendarIcon },
     { id: 'global-mindmap', name: 'Global Map', icon: MindMapIcon },
     { id: 'global-gantt', name: 'Global Gantt', icon: GanttIcon },
     { id: 'resources', name: 'Resources', icon: BookmarkSquareIcon },

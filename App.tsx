@@ -21,10 +21,9 @@ import { useAuth } from './contexts/AuthContext';
 import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 import { Resource, Project, ProjectGroup } from './types';
-import { PlusIcon, RefreshIcon, TrashIcon, ViewGridIcon, ViewListIcon, LinkIcon, ChevronDownIcon, TagIcon, DocumentTextIcon, DownloadIcon } from './components/IconComponents';
+import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
-import { useLoading } from './contexts/LoadingContext';
-import { useDownloadImage } from './hooks/useDownloadImage';
+import { calculateProgress } from './utils/taskUtils';
 
 
 // --- NEW RESOURCE COMPONENTS (Inlined due to file system constraints) ---
@@ -80,21 +79,21 @@ const ProjectMultiSelect: React.FC<{
                 {children}
             </button>
             {isOpen && (
-                <div className="absolute top-full mt-1 w-64 bg-secondary border border-border-color rounded-lg shadow-xl z-20 max-h-60 overflow-y-auto">
+                <div className="absolute top-full right-0 mt-2 w-64 bg-card-background border border-border-color rounded-xl shadow-soft z-20 max-h-60 overflow-y-auto p-2">
                     {groupedProjects.length > 0 ? (
                         groupedProjects.map(group => (
-                            <div key={group.id} className="p-2">
-                                <h4 className="text-xs font-bold text-text-secondary uppercase px-2 mb-1 flex items-center gap-2">
+                            <div key={group.id} className="p-1">
+                                <h4 className="text-xs font-semibold text-text-secondary uppercase px-2 mb-1 flex items-center gap-2">
                                     <div className={`w-2 h-2 rounded-full ${group.color} shrink-0`}></div>
                                     {group.name}
                                 </h4>
                                 {group.projects.map(project => (
-                                     <label key={project.id} className="flex items-center space-x-3 p-2 hover:bg-highlight cursor-pointer rounded-md">
+                                     <label key={project.id} className="flex items-center space-x-3 p-2 hover:bg-app-background cursor-pointer rounded-lg">
                                         <input
                                             type="checkbox"
                                             checked={selectedProjectIds.includes(project.id)}
                                             onChange={() => handleToggleProject(project.id)}
-                                            className="w-4 h-4 rounded bg-highlight border-border-color text-accent focus:ring-accent"
+                                            className="w-4 h-4 rounded text-accent-blue focus:ring-accent-blue"
                                         />
                                         <span className="text-sm text-text-primary">{project.name}</span>
                                     </label>
@@ -161,23 +160,23 @@ const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-primary md:bg-black md:bg-opacity-70 flex items-center justify-center z-50">
-            <div className="bg-secondary md:rounded-lg shadow-xl p-6 md:p-8 w-full h-full md:h-auto md:max-w-xl flex flex-col">
-                <div className="flex justify-between items-start mb-4"><h2 className="text-2xl font-bold">Add New Resource</h2><button onClick={handleClose} className="text-3xl">&times;</button></div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-card-background rounded-2xl shadow-soft p-6 md:p-8 w-full max-w-xl flex flex-col">
+                <div className="flex justify-between items-start mb-4"><h2 className="text-2xl font-bold">Add New Resource</h2><button onClick={handleClose} className="text-3xl text-text-secondary hover:text-text-primary">&times;</button></div>
                 <div className="flex-grow space-y-4">
-                    <div><label htmlFor="resourceUrl" className="block text-sm font-medium text-text-secondary">URL</label><div className="relative mt-1"><input id="resourceUrl" type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://example.com" className="block w-full bg-highlight border-border-color rounded-md p-2 pr-10" />{isLoading && (<div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none"><Spinner /></div>)}</div></div>
-                    {error && <p className="text-red-400 text-sm">{error}</p>}
+                    <div><label htmlFor="resourceUrl" className="block text-sm font-medium text-text-secondary">URL</label><div className="relative mt-1"><input id="resourceUrl" type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://example.com" className="block w-full bg-app-background border-border-color rounded-lg p-2 pr-10" />{isLoading && (<div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none"><Spinner /></div>)}</div></div>
+                    {error && <p className="text-red-500 text-sm">{error}</p>}
                     {metadata && (
-                        <div className="border border-border-color rounded-lg p-4 space-y-3 animate-fade-in">
-                            <div className="flex items-start gap-4">
-                                <img src={metadata.thumbnailUrl} alt="Favicon" className="w-12 h-12 rounded-md border border-border-color object-contain" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iI2M5ZDFkOSI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-secondary'); }} />
+                        <div className="space-y-3 animate-fade-in">
+                            <div className="flex items-center gap-4">
+                                <img src={metadata.thumbnailUrl} alt="Favicon" className="w-12 h-12 rounded-full border-2 border-border-color p-1 object-contain" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
                                 <div className="flex-grow"><h3 className="text-lg font-semibold">{metadata.title}</h3><p className="text-sm text-text-secondary truncate">{url}</p></div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-border-color">
-                                <div><label className="text-xs font-medium text-text-secondary">Project Group</label><select value={projectGroupId} onChange={e => setProjectGroupId(e.target.value)} className="w-full mt-1 bg-highlight border border-border-color rounded-md p-2 text-sm"><option value="" disabled>Select a group</option>{projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-border-color">
+                                <div><label className="text-xs font-medium text-text-secondary">Project Group</label><select value={projectGroupId} onChange={e => setProjectGroupId(e.target.value)} className="w-full mt-1 bg-app-background border border-border-color rounded-lg p-2 text-sm"><option value="" disabled>Select a group</option>{projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></div>
                                 <div><label className="text-xs font-medium text-text-secondary">Link to Projects</label>
                                     <ProjectMultiSelect selectedProjectIds={projectIds} onSelectionChange={setProjectIds} projects={projects} projectGroups={projectGroups}>
-                                        <div className="w-full mt-1 bg-highlight border border-border-color rounded-md p-2 text-sm text-left flex justify-between items-center">
+                                        <div className="w-full mt-1 bg-app-background border border-border-color rounded-lg p-2 text-sm text-left flex justify-between items-center">
                                             <span>{projectIds.length > 0 ? `${projectIds.length} project(s) selected` : 'None selected'}</span>
                                             <ChevronDownIcon className="w-4 h-4" />
                                         </div>
@@ -187,141 +186,18 @@ const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ 
                         </div>
                     )}
                 </div>
-                <div className="mt-6 flex justify-end gap-2"><button onClick={handleClose} className="px-4 py-2 bg-highlight rounded-md">Cancel</button><button onClick={handleAddResource} disabled={!metadata || isLoading || !projectGroupId} className="px-4 py-2 bg-accent text-white rounded-md disabled:opacity-50">Add Resource</button></div>
+                <div className="mt-6 flex justify-end gap-2"><button onClick={handleClose} className="px-4 py-2 bg-app-background rounded-lg hover:bg-border-color">Cancel</button><button onClick={handleAddResource} disabled={!metadata || isLoading || !projectGroupId} className="px-4 py-2 bg-accent-blue text-white rounded-lg disabled:opacity-50">Add Resource</button></div>
             </div>
         </div>
     );
 };
-
-const ResourceAssignments: React.FC<{ resource: Resource }> = ({ resource }) => {
-    const { updateResource } = useResource();
-    const { projects, projectGroups } = useProject();
-    const group = projectGroups.find(g => g.id === resource.projectGroupId);
-
-    const [isGroupChangerOpen, setGroupChangerOpen] = useState(false);
-    const groupChangerRef = useRef<HTMLDivElement>(null);
-    useClickOutside(groupChangerRef, () => setGroupChangerOpen(false));
-
-    const linkedProjects = useMemo(() => {
-        return resource.projectIds
-            .map(id => projects.find(p => p.id === id))
-            .filter((p): p is Project => p !== undefined);
-    }, [resource.projectIds, projects]);
-
-    return (
-        <div className="mt-auto pt-2 text-xs border-t border-border-color flex flex-wrap items-center gap-x-4 gap-y-1">
-            {/* Group Display and Changer */}
-            <div ref={groupChangerRef} className="relative flex items-center">
-                 <button 
-                    type="button" 
-                    onClick={() => setGroupChangerOpen(o => !o)} 
-                    className="flex items-center gap-2 text-text-secondary hover:text-accent cursor-pointer text-xs focus:outline-none truncate"
-                    title="Change project group"
-                >
-                    <div className={`w-2 h-2 rounded-full ${group?.color || 'bg-gray-500'} shrink-0`}></div>
-                    <span className="truncate font-medium">{group?.name || 'Unassigned'}</span>
-                    <ChevronDownIcon className="w-3 h-3 shrink-0" />
-                </button>
-                {isGroupChangerOpen && (
-                    <div className="absolute bottom-full mb-1 w-40 bg-secondary border border-border-color rounded-lg shadow-xl z-20 max-h-40 overflow-y-auto">
-                        {projectGroups.map(g => (
-                            <button 
-                                key={g.id} 
-                                onClick={() => {
-                                    updateResource({ ...resource, projectGroupId: g.id });
-                                    setGroupChangerOpen(false);
-                                }}
-                                className="w-full text-left flex items-center gap-2 p-2 hover:bg-highlight cursor-pointer"
-                            >
-                                <div className={`w-2 h-2 rounded-full ${g.color} shrink-0`}></div>
-                                <span className="text-sm text-text-primary">{g.name}</span>
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Project Tags and Changer */}
-            <div className="flex items-center gap-2 min-w-0">
-                <ProjectMultiSelect
-                    selectedProjectIds={resource.projectIds}
-                    onSelectionChange={(ids) => updateResource({ ...resource, projectIds: ids })}
-                    projects={projects}
-                    projectGroups={projectGroups}
-                >
-                    <div className="text-text-secondary hover:text-accent cursor-pointer shrink-0" title="Link to projects">
-                        <TagIcon className="w-3.5 h-3.5" />
-                    </div>
-                </ProjectMultiSelect>
-                <div className="flex items-center gap-1 flex-wrap min-w-0">
-                     {linkedProjects.length > 0 ? (
-                        linkedProjects.map(p => (
-                            <span key={p.id} className="bg-secondary px-1.5 py-0.5 rounded text-text-secondary truncate max-w-full">{p.name}</span>
-                        ))
-                    ) : (
-                        <span className="text-text-secondary/70 italic">No projects linked</span>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-
-// ResourceCard Component
-const ResourceCard: React.FC<{ resource: Resource; size: 'sm' | 'md' | 'lg' }> = ({ resource, size }) => {
-    const { updateResource, deleteResource } = useResource();
-    const [notes, setNotes] = useState(resource.notes);
-    const handleNotesBlur = () => { if (notes !== resource.notes) updateResource({ ...resource, notes }); };
-    const cardSizeClasses = { sm: 'w-64', md: 'w-80', lg: 'w-96' };
-    const thumbHeightClasses = { sm: 'h-32', md: 'h-40', lg: 'h-48' };
-
-    return (
-        <div className={`flex flex-col bg-highlight rounded-lg border border-border-color ${cardSizeClasses[size]}`}>
-            <a href={resource.url} target="_blank" rel="noopener noreferrer" className={`bg-secondary ${thumbHeightClasses[size]} flex items-center justify-center p-2 rounded-t-lg`}>
-                <img src={resource.thumbnailUrl} alt={resource.title} className="max-w-full max-h-full object-contain" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iI2M5ZDFkOSI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-6', 'bg-highlight'); }} />
-            </a>
-            <div className="p-3 flex-grow flex flex-col">
-                <a href={resource.url} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent truncate flex items-center gap-1.5"><LinkIcon className="w-4 h-4 shrink-0"/>{resource.title}</a>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} onBlur={handleNotesBlur} placeholder="Add notes..." className="text-sm text-text-secondary bg-transparent w-full resize-none my-2 flex-grow focus:outline-none focus:ring-1 focus:ring-accent rounded -mx-1 px-1" />
-                <div className="flex items-center justify-end text-xs gap-2"><button onClick={() => deleteResource(resource.id)} title="Delete" className="p-1 text-text-secondary hover:text-red-500"><TrashIcon className="w-4 h-4"/></button></div>
-                <ResourceAssignments resource={resource} />
-            </div>
-        </div>
-    );
-};
-
-// ResourceListItem Component
-const ResourceListItem: React.FC<{ resource: Resource }> = ({ resource }) => {
-    const { updateResource, deleteResource } = useResource();
-    const [notes, setNotes] = useState(resource.notes);
-    const handleNotesBlur = () => { if (notes !== resource.notes) updateResource({ ...resource, notes }); };
-
-    return (
-        <div className="flex items-center gap-4 bg-highlight p-2 rounded-lg border border-transparent hover:border-border-color">
-            <img src={resource.thumbnailUrl} alt={resource.title} className="w-10 h-10 object-contain rounded border border-border-color shrink-0" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iI2M5ZDFkOSI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-1.5', 'bg-secondary'); }} />
-            <div className="flex-grow min-w-0"><a href={resource.url} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent truncate block">{resource.title}</a></div>
-            <div className="w-1/3"><textarea value={notes} onChange={e => setNotes(e.target.value)} onBlur={handleNotesBlur} placeholder="Notes..." className="text-sm w-full bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-accent rounded px-1"/></div>
-            <div className="w-48 shrink-0"><ResourceAssignments resource={resource} /></div>
-            <button onClick={() => deleteResource(resource.id)} title="Delete" className="p-1 text-text-secondary hover:text-red-500"><TrashIcon className="w-4 h-4"/></button>
-        </div>
-    );
-};
-
 
 // ResourceView Component
 const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }) => {
-    const { resources, loading } = useResource();
+    const { resources, loading, updateResource, deleteResource } = useResource();
     const { projects, projectGroups } = useProject();
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-    const [thumbSize, setThumbSize] = useState<'sm' | 'md' | 'lg'>('sm');
     const [filterGroupId, setFilterGroupId] = useState('all');
     const [filterProjectId, setFilterProjectId] = useState('all');
-    const [isExportOpen, setIsExportOpen] = useState(false);
-    const exportRef = useRef<HTMLDivElement>(null);
-    const gridRef = useRef<HTMLDivElement>(null);
-    useClickOutside(exportRef, () => setIsExportOpen(false));
-    const { downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
 
     const filteredResources = useMemo(() => {
         return resources.filter(res => {
@@ -331,42 +207,179 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
         });
     }, [resources, filterGroupId, filterProjectId]);
 
-    const handleExportCSV = () => {
-        const headers = ['Title', 'URL', 'Notes', 'Project Group', 'Projects'];
-        const projectGroupMap = new Map(projectGroups.map(g => [g.id, g.name]));
-        const projectMap = new Map(projects.map(p => [p.id, p.name]));
-        const rows = filteredResources.map(res => [
-            `"${res.title.replace(/"/g, '""')}"`, `"${res.url}"`, `"${res.notes.replace(/"/g, '""')}"`,
-            `"${projectGroupMap.get(res.projectGroupId) || 'N/A'}"`, `"${res.projectIds.map(id => projectMap.get(id) || '').join(', ')}"`
-        ]);
-        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-        const link = document.createElement("a");
-        link.setAttribute("href", encodeURI(csvContent));
-        link.setAttribute("download", "resources.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setIsExportOpen(false);
+    return (
+        <div className="h-full flex flex-col p-4 md:p-6">
+            <header className="flex-wrap items-center justify-between pb-6 gap-4 flex">
+                <div><h1 className="text-3xl font-bold">Resources</h1></div>
+                <div className="flex items-center gap-2 flex-wrap">
+                     <select value={filterGroupId} onChange={e => setFilterGroupId(e.target.value)} className="bg-card-background border border-border-color rounded-full px-4 py-2 text-sm"><option value="all">All Groups</option>{projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
+                     <select value={filterProjectId} onChange={e => setFilterProjectId(e.target.value)} className="bg-card-background border border-border-color rounded-full px-4 py-2 text-sm"><option value="all">All Projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                </div>
+            </header>
+            <div className="flex-grow overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                     {loading ? (
+                        Array.from({length: 4}).map((_, i) => <div key={i} className="h-64 bg-card-background rounded-2xl shadow-card animate-pulse"></div>)
+                    ) : filteredResources.length === 0 ? (
+                        <div className="col-span-full bg-card-background rounded-2xl shadow-card p-8 flex flex-col items-center justify-center text-center">
+                            <div className="text-4xl mb-4">✨</div>
+                            <h3 className="text-xl font-semibold mb-2">Add your first resource</h3>
+                            <p className="text-text-secondary mb-4">Save links, articles, and inspiration.</p>
+                            <button onClick={onAddResource} className="px-6 py-2 bg-accent-yellow text-text-primary font-semibold rounded-full hover:opacity-90">Add</button>
+                        </div>
+                    ) : (
+                        filteredResources.map(res => (
+                            <ResourceCard key={res.id} resource={res} onUpdate={updateResource} onDelete={deleteResource} projects={projects} projectGroups={projectGroups} />
+                        ))
+                    )}
+                    <button onClick={onAddResource} className="border-2 border-dashed border-border-color rounded-2xl flex flex-col items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors">
+                        <PlusIcon className="w-8 h-8 mb-2" />
+                        <span className="font-semibold">Add Resource</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ResourceCard: React.FC<{ resource: Resource, onUpdate: (r: Resource) => void, onDelete: (id: string) => void, projects: Project[], projectGroups: ProjectGroup[] }> = ({ resource, onUpdate, onDelete, projects, projectGroups }) => {
+    const group = projectGroups.find(g => g.id === resource.projectGroupId);
+    const linkedProjects = useMemo(() => resource.projectIds.map(id => projects.find(p => p.id === id)).filter(Boolean), [resource.projectIds, projects]);
+    
+    return (
+        <div className="bg-card-background rounded-2xl shadow-card p-5 flex flex-col gap-4">
+            <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                    <img src={resource.thumbnailUrl} alt={resource.title} className="w-12 h-12 rounded-full border-2 border-border-color p-1 object-contain" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
+                    <div className="min-w-0">
+                        <h3 className="font-semibold truncate">{resource.title}</h3>
+                        <p className="text-sm text-text-secondary truncate">{resource.notes || "No notes yet."}</p>
+                    </div>
+                </div>
+                 <div className="flex items-center gap-2">
+                    <a href={resource.url} target="_blank" rel="noopener noreferrer" title={resource.url} className="p-2 rounded-full hover:bg-app-background text-text-secondary"><LinkIcon className="w-5 h-5"/></a>
+                    <button onClick={() => { if(window.confirm('Delete this resource?')) onDelete(resource.id); }} title="Delete" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><TrashIcon className="w-5 h-5"/></button>
+                </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+                {group && <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${group.color}`}>{group.name}</span>}
+                {linkedProjects.map(p => p && <span key={p.id} className="px-3 py-1 rounded-full text-xs font-medium bg-app-background text-text-secondary">{p.name}</span>)}
+            </div>
+        </div>
+    );
+};
+
+
+// --- Projects Dashboard (Replaces WelcomePlaceholder) ---
+
+const ProjectsDashboardView = () => {
+    const { visibleProjects, projectGroups, selectProject, archiveProject, deleteProject, updateProject } = useProject();
+    const isMobile = useIsMobile();
+
+    const groupedProjects = useMemo(() => {
+        return projectGroups
+            .map(group => ({
+                ...group,
+                projects: visibleProjects.filter(p => p.groupId === group.id).sort((a,b) => a.name.localeCompare(b.name)),
+            }))
+            .filter(group => group.projects.length > 0)
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [projectGroups, visibleProjects]);
+
+    if (visibleProjects.length === 0) {
+        // This should get a "Create Your First Project" modal trigger
+        return <WelcomePlaceholder onNewProject={() => {}} />;
+    }
+
+    return (
+        <div className="h-full flex flex-col p-4 md:p-6">
+             <header className="mb-6">
+                <h1 className="text-3xl font-bold">Projects Dashboard</h1>
+                <p className="text-text-secondary">An overview of your active projects.</p>
+            </header>
+            <div className="flex-grow overflow-y-auto space-y-8">
+                {groupedProjects.map(group => (
+                    <div key={group.id}>
+                         <h2 className="flex items-center text-xl font-semibold text-text-primary mb-3">
+                            <span className={`w-4 h-4 rounded-full ${group.color} mr-3`}></span>
+                            {group.name}
+                        </h2>
+                        <div className={`grid gap-4 md:gap-6 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+                            {group.projects.map(project => 
+                                <ProjectCard 
+                                    key={project.id} 
+                                    project={project} 
+                                    onClick={() => selectProject(project.id)}
+                                    onArchive={() => archiveProject(project.id)}
+                                    onDelete={() => deleteProject(project.id)}
+                                    onUpdate={updateProject}
+                                />
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const ProjectCard: React.FC<{ project: Project, onClick: () => void, onArchive: () => void, onDelete: () => void, onUpdate: (id: string, updates: Partial<Project>) => void }> = ({ project, onClick, onArchive, onDelete, onUpdate }) => {
+    const { completed, total } = useMemo(() => calculateProgress(project.tasks), [project.tasks]);
+    const progress = total > 0 ? (completed / total) * 100 : 0;
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [newName, setNewName] = useState(project.name);
+    const menuRef = useRef<HTMLDivElement>(null);
+    useClickOutside(menuRef, () => setIsMenuOpen(false));
+
+    const handleRename = () => {
+        if (newName.trim() && newName !== project.name) {
+            onUpdate(project.id, { name: newName.trim() });
+        }
+        setIsRenaming(false);
+        setIsMenuOpen(false);
     };
     
     return (
-        <div className="h-full flex flex-col">
-            <header className="flex-wrap items-center justify-between p-2 mb-4 gap-2 flex">
-                <div><h1 className="text-3xl font-bold">Resources</h1><p className="text-text-secondary">Your collection of saved links and notes.</p></div>
-                <div className="flex items-center gap-2 flex-wrap">
-                     <select value={filterGroupId} onChange={e => setFilterGroupId(e.target.value)} className="bg-highlight border border-border-color rounded-md p-2 text-sm"><option value="all">All Groups</option>{projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
-                     <select value={filterProjectId} onChange={e => setFilterProjectId(e.target.value)} className="bg-highlight border border-border-color rounded-md p-2 text-sm"><option value="all">All Projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-                     <div className="bg-highlight p-1 rounded-lg flex"><button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-accent' : 'hover:bg-secondary'}`} title="Grid View"><ViewGridIcon className="w-5 h-5" /></button><button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-accent' : 'hover:bg-secondary'}`} title="List View"><ViewListIcon className="w-5 h-5" /></button></div>
-                     {viewMode === 'grid' && <select value={thumbSize} onChange={e => setThumbSize(e.target.value as any)} className="bg-highlight border border-border-color rounded-md p-2 text-sm"><option value="sm">Small</option><option value="md">Medium</option><option value="lg">Large</option></select>}
-                     <div className="relative" ref={exportRef}><button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-1.5 px-3 py-2 bg-highlight text-text-secondary rounded-lg hover:bg-gray-700">Export <ChevronDownIcon className="w-4 h-4" /></button>
-                        {isExportOpen && <div className="absolute top-full right-0 mt-1 w-40 bg-secondary border border-border-color rounded-md shadow-lg z-10"><button onClick={handleExportCSV} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-highlight"><DocumentTextIcon className="w-4 h-4"/>Export CSV</button><button onClick={() => downloadImage('resources.png')} disabled={isDownloading} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-highlight"><DownloadIcon className="w-4 h-4"/>{isDownloading ? 'Exporting...' : 'Export PNG'}</button></div>}
+        <div className="bg-card-background rounded-xl border border-border-color flex flex-col group transition-shadow hover:shadow-soft">
+            <div className="p-4 flex-grow cursor-pointer" onClick={onClick}>
+                <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                        <span className="text-2xl">{project.icon || '📁'}</span>
+                        {isRenaming ? (
+                            <input
+                                type="text"
+                                value={newName}
+                                onChange={(e) => setNewName(e.target.value)}
+                                onBlur={handleRename}
+                                onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setIsRenaming(false); }}
+                                className="text-lg font-semibold bg-app-background border border-accent-blue rounded px-2 -ml-2"
+                                autoFocus
+                                onClick={e => e.stopPropagation()}
+                            />
+                        ) : (
+                             <h3 className="text-lg font-semibold text-text-primary group-hover:text-accent-blue">{project.name}</h3>
+                        )}
                     </div>
-                    <button onClick={onAddResource} className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg hover:bg-blue-500"><PlusIcon className="w-5 h-5" /><span>Add Resource</span></button>
+                    <div className="relative" ref={menuRef}>
+                        <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(o => !o); }} className="p-1 text-text-secondary hover:text-text-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
+                        </button>
+                        {isMenuOpen && (
+                            <div className="absolute top-full right-0 mt-1 w-40 bg-card-background border border-border-color rounded-lg shadow-soft z-10">
+                                <button onClick={(e) => { e.stopPropagation(); setIsRenaming(true); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-app-background"><PencilIcon className="w-4 h-4"/>Rename</button>
+                                <button onClick={(e) => { e.stopPropagation(); onArchive(); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-app-background"><ArchiveBoxIcon className="w-4 h-4"/>Archive</button>
+                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Delete this project forever?')) onDelete(); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-accent-red hover:bg-app-background"><TrashIcon className="w-4 h-4"/>Delete</button>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </header>
-            {loading ? <div className="flex-grow flex items-center justify-center"><Spinner/></div>
-            : filteredResources.length === 0 ? <div className="flex-grow flex items-center justify-center text-text-secondary">No resources found. Try adjusting your filters.</div>
-            : (<div ref={gridRef} className="flex-grow overflow-y-auto p-1">{viewMode === 'grid' ? (<div className="flex flex-wrap gap-4 p-2">{filteredResources.map(res => <ResourceCard key={res.id} resource={res} size={thumbSize} />)}</div>) : (<div className="space-y-2 p-2">{filteredResources.map(res => <ResourceListItem key={res.id} resource={res} />)}</div>)}</div>)}
+            </div>
+            {total > 0 && (
+                <div className="px-4 pb-4">
+                     <div className="w-full bg-app-background rounded-full h-1.5"><div className="bg-accent-blue h-1.5 rounded-full" style={{ width: `${progress}%` }}></div></div>
+                </div>
+            )}
         </div>
     );
 };
@@ -387,7 +400,7 @@ export default function App() {
   const [isGroupEditorOpen, setIsGroupEditorOpen] = useState<boolean>(false);
   const [isAddResourceModalOpen, setIsAddResourceModalOpen] = useState<boolean>(false);
 
-  const [mainView, setMainView] = useState<MainView>('calendar');
+  const [mainView, setMainView] = useState<MainView>('projects');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
 
@@ -455,7 +468,7 @@ export default function App() {
         if (selectedProject) {
           return <TaskList key={selectedProject.id} />;
         }
-        return <WelcomePlaceholder onNewProject={() => setIsProjectModalOpen(true)} />;
+        return <ProjectsDashboardView />;
     }
   };
 
@@ -464,7 +477,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen font-sans bg-primary">
+    <div className="flex flex-col h-screen font-sans bg-app-background">
       <GlobalLoader />
       <Header 
         onNewProject={() => setIsProjectModalOpen(true)}
@@ -484,7 +497,7 @@ export default function App() {
             onEditGroups={() => setIsGroupEditorOpen(true)}
           />
         </Sidebar>
-        <main className="flex-1 p-2 md:p-6 overflow-y-auto">
+        <main className="flex-1 bg-card-background md:p-0">
           <ErrorBoundary>
             {renderMainContent()}
           </ErrorBoundary>

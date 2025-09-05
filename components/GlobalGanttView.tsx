@@ -453,56 +453,24 @@ const GlobalGanttView: React.FC = () => {
                     {(() => { const todayOffset = dayDiff(chartStartDate, new Date()); if (todayOffset >= 0 && todayOffset < totalDays) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10" title="Today" style={{ left: todayOffset * dayWidth }}></div>; } return null; })()}
                     
                     {itemsToRender.map((item, index) => {
-                        const isGroup = item.type === 'group';
-                        const isProject = item.type === 'project';
-                        const isTask = item.type === 'task';
-                        const data = item.data;
                         const rowHeight = 40;
                         const top = index * rowHeight;
-
-                        let canIndent = false;
-                        let canOutdent = false;
-                        if (isTask) {
+                        
+                        // FIX: Use a type guard for `item.type` to allow TypeScript to narrow the type of `item` and `item.data`
+                        if (item.type === 'task') {
+                            let canIndent = false;
                             if (index > 0) {
                                 const potentialParentItem = itemsToRender[index - 1];
-                                // FIX: Add type assertion to 'data' to ensure 'projectId' is accessible for comparison.
-                                if (potentialParentItem.type === 'task' && potentialParentItem.data.projectId === (data as GlobalGanttTask).projectId && potentialParentItem.level === item.level) {
+                                if (potentialParentItem.type === 'task' && potentialParentItem.data.projectId === item.data.projectId && potentialParentItem.level === item.level) {
                                     canIndent = true;
                                 }
                             }
-                            canOutdent = parentMap.get(data.id) !== null;
-                        }
-                        
-                        return (
-                            <div key={item.type + '-' + data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
-                                {/* Task Name Column (Sticky) */}
-                                <div className={`w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color 
-                                    ${isGroup ? 'bg-secondary font-bold text-text-secondary' : ''}
-                                    ${isProject ? 'bg-highlight font-bold' : 'bg-primary'}
-                                    ${isTask ? 'bg-primary' : ''}
-                                `}>
-                                    {isGroup && (
-                                        <div className="flex items-center w-full">
-                                            <button onClick={() => toggleGroupCollapse(data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
-                                                <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedGroups.has(data.id) ? 'rotate-90' : ''}`} />
-                                            </button>
-                                            <FolderIcon className="w-5 h-5 mr-2" />
-                                            <span className="truncate">{data.name}</span>
-                                        </div>
-                                    )}
-                                    {isProject && (
-                                        <div className="flex items-center justify-between w-full group" style={{ paddingLeft: '1rem' }}>
-                                            <div className="flex items-center truncate">
-                                                <button onClick={() => toggleProjectCollapse(data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
-                                                    <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedProjects.has(data.id) ? 'rotate-90' : ''}`} />
-                                                </button>
-                                                <span className="truncate">{data.name}</span>
-                                            </div>
-                                            <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(data.id); }} className="opacity-0 group-hover:opacity-100 text-accent hover:text-blue-400 p-1"><PlusIcon className="w-5 h-5"/></button>
-                                        </div>
-                                    )}
-                                    {isTask && (
-                                        data.id.startsWith('new-task-form') ? (
+                            const canOutdent = parentMap.get(item.data.id) !== null;
+
+                            return (
+                                <div key={item.type + '-' + item.data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                    <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-primary">
+                                        {item.data.id.startsWith('new-task-form') ? (
                                             <form onSubmit={handleNewTaskSubmit} className="w-full" style={{ paddingLeft: '1.5rem' }}>
                                                 <input
                                                     type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
@@ -515,60 +483,92 @@ const GlobalGanttView: React.FC = () => {
                                         ) : (
                                             <div className="flex items-center group w-full" style={{ paddingLeft: '1.5rem' }}>
                                                 <div className="flex-grow truncate text-sm" style={{ paddingLeft: `${item.level * 20}px` }}>
-                                                  {data.name}
+                                                  {item.data.name}
                                                 </div>
                                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {/* FIX: Add type assertions to 'data' in handlers to satisfy TypeScript's strict checks on the union type. */}
-                                                    <button onClick={() => handleIndent(data as GlobalGanttTask, index)} disabled={!canIndent} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongRightIcon className="w-5 h-5" /></button>
-                                                    <button onClick={() => handleOutdent(data as GlobalGanttTask)} disabled={!canOutdent} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongLeftIcon className="w-5 h-5" /></button>
-                                                    <button onClick={() => handleDelete((data as GlobalGanttTask).projectId, data.id)} title="Delete Task" className="p-1 text-red-500 hover:text-red-400"><TrashIcon className="w-5 h-5" /></button>
+                                                    <button onClick={() => handleIndent(item.data, index)} disabled={!canIndent} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongRightIcon className="w-5 h-5" /></button>
+                                                    <button onClick={() => handleOutdent(item.data)} disabled={!canOutdent} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongLeftIcon className="w-5 h-5" /></button>
+                                                    <button onClick={() => handleDelete(item.data.projectId, item.data.id)} title="Delete Task" className="p-1 text-red-500 hover:text-red-400"><TrashIcon className="w-5 h-5" /></button>
                                                 </div>
                                             </div>
-                                        )
-                                    )}
-                                </div>
-                                {/* Timeline Column (Scrollable) */}
-                                <div className="flex-grow h-full relative border-b border-border-color">
-                                    {(isProject || isGroup) && (
-                                        <div className="w-full h-px bg-border-color absolute top-1/2"></div>
-                                    )}
-                                    {isTask && !data.id.startsWith('new-task-form') && (() => {
-                                        const task = data as GlobalGanttTask;
-                                        const taskStart = parseDate(task.startDate);
-                                        if (isNaN(taskStart.getTime())) {
-                                            return (
-                                                <div className="absolute inset-0 group/creator cursor-cell" onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: item as { type: 'task', data: GlobalGanttTask, level: number }, startX: e.clientX - timelineRect.left }); }}>
-                                                    <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent/10 transition-colors flex items-center justify-center">
-                                                        <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
+                                        )}
+                                    </div>
+                                    <div className="flex-grow h-full relative border-b border-border-color">
+                                        {!item.data.id.startsWith('new-task-form') && (() => {
+                                            const task = item.data;
+                                            const taskStart = parseDate(task.startDate);
+                                            if (isNaN(taskStart.getTime())) {
+                                                return (
+                                                    <div className="absolute inset-0 group/creator cursor-cell" onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: item, startX: e.clientX - timelineRect.left }); }}>
+                                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent/10 transition-colors flex items-center justify-center">
+                                                            <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
+                                                        </div>
                                                     </div>
+                                                );
+                                            }
+
+                                            const startOffset = dayDiff(chartStartDate, taskStart);
+                                            const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
+                                            const left = startOffset * dayWidth;
+                                            const width = duration * dayWidth;
+
+                                            return (
+                                                <div 
+                                                    ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }}
+                                                    data-task-id={task.id} 
+                                                    className="absolute h-7 top-1/2 -translate-y-1/2 group" 
+                                                    style={{ left: `${left}px`, width: `${width}px`, zIndex: interaction?.taskId === task.id ? 20 : 1 }}
+                                                    onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }}>
+                                                    <div title={`${task.name}\n${task.startDate} to ${task.endDate}`} className={`h-full w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${task.completed ? 'bg-gray-600' : task.projectColor} ${task.completed ? 'opacity-50' : ''}`}>
+                                                        {task.imageUrl && (<img src={task.imageUrl} alt={task.name} className="w-5 h-5 rounded-full object-cover mr-2 shrink-0"/>)}
+                                                        <span className="truncate pointer-events-none">{task.name}</span>
+                                                    </div>
+                                                    <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }} className="absolute -left-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                                    <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }} className="absolute -right-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
                                                 </div>
                                             );
-                                        }
-
-                                        const startOffset = dayDiff(chartStartDate, taskStart);
-                                        const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
-                                        const left = startOffset * dayWidth;
-                                        const width = duration * dayWidth;
-
-                                        return (
-                                            <div 
-                                                ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }}
-                                                data-task-id={task.id} 
-                                                className="absolute h-7 top-1/2 -translate-y-1/2 group" 
-                                                style={{ left: `${left}px`, width: `${width}px`, zIndex: interaction?.taskId === task.id ? 20 : 1 }}
-                                                onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }}>
-                                                <div title={`${task.name}\n${task.startDate} to ${task.endDate}`} className={`h-full w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${task.completed ? 'bg-gray-600' : task.projectColor} ${task.completed ? 'opacity-50' : ''}`}>
-                                                    {task.imageUrl && (<img src={task.imageUrl} alt={task.name} className="w-5 h-5 rounded-full object-cover mr-2 shrink-0"/>)}
-                                                    <span className="truncate pointer-events-none">{task.name}</span>
-                                                </div>
-                                                <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }} className="absolute -left-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                                <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }} className="absolute -right-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                            </div>
-                                        );
-                                    })()}
+                                        })()}
+                                    </div>
                                 </div>
-                            </div>
-                        );
+                            );
+                        } else {
+                            const isGroup = item.type === 'group';
+                            const isProject = item.type === 'project';
+                            const data = item.data;
+
+                             return (
+                                <div key={item.type + '-' + data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                    <div className={`w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color 
+                                        ${isGroup ? 'bg-secondary font-bold text-text-secondary' : ''}
+                                        ${isProject ? 'bg-highlight font-bold' : ''}
+                                    `}>
+                                        {isGroup && (
+                                            <div className="flex items-center w-full">
+                                                <button onClick={() => toggleGroupCollapse(data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
+                                                    <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedGroups.has(data.id) ? 'rotate-90' : ''}`} />
+                                                </button>
+                                                <FolderIcon className="w-5 h-5 mr-2" />
+                                                <span className="truncate">{data.name}</span>
+                                            </div>
+                                        )}
+                                        {isProject && (
+                                            <div className="flex items-center justify-between w-full group" style={{ paddingLeft: '1rem' }}>
+                                                <div className="flex items-center truncate">
+                                                    <button onClick={() => toggleProjectCollapse(data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
+                                                        <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedProjects.has(data.id) ? 'rotate-90' : ''}`} />
+                                                    </button>
+                                                    <span className="truncate">{data.name}</span>
+                                                </div>
+                                                <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(data.id); }} className="opacity-0 group-hover:opacity-100 text-accent hover:text-blue-400 p-1"><PlusIcon className="w-5 h-5"/></button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex-grow h-full relative border-b border-border-color">
+                                        <div className="w-full h-px bg-border-color absolute top-1/2"></div>
+                                    </div>
+                                </div>
+                            );
+                        }
                     })}
                     {creatingState && tempCreatingBar && (
                         <div className="absolute h-7 top-1/2 -translate-y-1/2 pointer-events-none bg-accent/50 rounded-md" style={{ ...tempCreatingBar, top: `${itemsToRender.findIndex(i => i.data.id === creatingState.task.data.id) * 40 + 6}px` }}></div>

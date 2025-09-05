@@ -15,6 +15,11 @@ interface InteractionState {
     originalWidth: number;
 }
 
+interface CreatingState {
+    task: GanttTask;
+    startX: number;
+}
+
 interface GanttTask extends Task {
   level: number;
 }
@@ -38,22 +43,6 @@ const dayDiff = (startDate: Date, endDate: Date): number => {
     return Math.floor((endUTC - startUTC) / MS_PER_DAY);
 }
 
-const getSettingsFromStorage = (storageKey: string): { dayWidth: number, scrollLeft: number } => {
-  try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-          const parsed = JSON.parse(saved);
-          return {
-              dayWidth: typeof parsed.dayWidth === 'number' && parsed.dayWidth >= 10 ? parsed.dayWidth : 30,
-              scrollLeft: typeof parsed.scrollLeft === 'number' ? parsed.scrollLeft : 0,
-          };
-      }
-  } catch (error) {
-      console.warn('Could not parse Gantt settings from localStorage', error);
-  }
-  return { dayWidth: 30, scrollLeft: 0 };
-};
-
 const getMondayOfWeek = (d: Date): Date => {
   const date = new Date(d);
   date.setUTCHours(0, 0, 0, 0);
@@ -68,43 +57,17 @@ const GanttChartView: React.FC = () => {
   const { selectedProject, updateTask, updateMultipleTasks, reparentTask } = useProject();
   const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
   const project = selectedProject!; // Assert non-null
-  const storageKey = `gantt_view_settings_${project.id}`;
   
-  const [dayWidth, setDayWidth] = useState(() => getSettingsFromStorage(storageKey).dayWidth);
+  const [dayWidth, setDayWidth] = useState(30);
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
+  const [creatingState, setCreatingState] = useState<CreatingState | null>(null);
+  const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number } | null>(null);
   const [tempTaskPositions, setTempTaskPositions] = useState<Map<string, { left: number; width: number }>>(new Map());
   const [generatingImageFor, setGeneratingImageFor] = useState<string|null>(null);
 
   const ganttContainerRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const taskBarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const scrollSaveTimer = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollLeft = getSettingsFromStorage(storageKey).scrollLeft;
-    }
-  }, [project.id, storageKey]);
-
-  const saveSettings = (newSettings: { dayWidth?: number; scrollLeft?: number }) => {
-    try {
-      const currentSettings = getSettingsFromStorage(storageKey);
-      const updatedSettings = { ...currentSettings, ...newSettings };
-      localStorage.setItem(storageKey, JSON.stringify(updatedSettings));
-    } catch (error) {
-      console.warn('Could not save Gantt settings to localStorage', error);
-    }
-  };
   
-  const handleScroll = () => {
-    if (scrollSaveTimer.current) clearTimeout(scrollSaveTimer.current);
-    scrollSaveTimer.current = window.setTimeout(() => {
-      if (scrollContainerRef.current) saveSettings({ scrollLeft: scrollContainerRef.current.scrollLeft });
-    }, 500);
-  };
-
-  useEffect(() => { saveSettings({ dayWidth }); }, [dayWidth, storageKey]);
-
   const { allTasks, minDate, maxDate, taskMap, parentMap } = useMemo(() => {
     let min: Date | null = null;
     let max: Date | null = null;
@@ -181,19 +144,6 @@ const GanttChartView: React.FC = () => {
     return localTaskPositions;
   }, [allTasks, chartStartDate, dayWidth]);
   
-  const handleGenerateImage = async (task: Task) => {
-    setGeneratingImageFor(task.id);
-    try {
-        const imageUrl = await generateImageForTask(task.name);
-        await updateTask(project.id, { ...task, imageUrl });
-    } catch (error) {
-        console.error("Failed to generate image for task:", error);
-        alert("Could not generate image. Please check the console for details.");
-    } finally {
-        setGeneratingImageFor(null);
-    }
-  };
-
   useEffect(() => {
     if (tempTaskPositions.size > 0) {
       const newTempPositions = new Map(tempTaskPositions);
@@ -208,6 +158,53 @@ const GanttChartView: React.FC = () => {
       if (changed) setTempTaskPositions(newTempPositions);
     }
   }, [project.tasks, taskPositions, tempTaskPositions]);
+
+  const handleCreateMouseUp = useCallback(async (e: MouseEvent) => {
+      if (!creatingState || !ganttContainerRef.current) return;
+      const { task, startX } = creatingState;
+      const timelineRect = ganttContainerRef.current.querySelector('.timeline-body')?.getBoundingClientRect();
+      if (!timelineRect) return;
+
+      const endX = e.clientX - timelineRect.left;
+      
+      const startDayIndex = Math.floor(Math.min(startX, endX) / dayWidth);
+      const endDayIndex = Math.floor(Math.max(startX, endX) / dayWidth);
+
+      const newStartDate = new Date(chartStartDate);
+      newStartDate.setUTCDate(newStartDate.getUTCDate() + startDayIndex);
+      const newEndDate = new Date(chartStartDate);
+      newEndDate.setUTCDate(newEndDate.getUTCDate() + endDayIndex);
+
+      const taskToUpdate = task;
+      if (taskToUpdate) {
+          // FIX: The `updateTask` function requires the project ID as the first argument.
+          await updateTask(project.id, { ...taskToUpdate, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) });
+      }
+      
+      setCreatingState(null);
+      setTempCreatingBar(null);
+  }, [creatingState, dayWidth, chartStartDate, updateTask, project.id]);
+
+  useEffect(() => {
+    if (!creatingState) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!ganttContainerRef.current) return;
+      const timelineRect = ganttContainerRef.current.querySelector('.timeline-body')?.getBoundingClientRect();
+      if (!timelineRect) return;
+
+      const currentX = e.clientX - timelineRect.left;
+      const width = Math.max(dayWidth / 2, Math.abs(currentX - creatingState.startX));
+      const left = Math.min(currentX, creatingState.startX);
+      setTempCreatingBar({ left, width });
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleCreateMouseUp, { once: true });
+    return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleCreateMouseUp);
+    };
+  }, [creatingState, dayWidth, handleCreateMouseUp]);
   
   const handleMouseUp = useCallback(async (e: MouseEvent, interaction: InteractionState) => {
     const finalOffsetPx = e.clientX - interaction.startX;
@@ -350,48 +347,40 @@ const GanttChartView: React.FC = () => {
   if (!minDate || !maxDate) return <div className="text-center text-text-secondary p-8">No tasks with valid dates.</div>;
   
   return (
-    <div ref={downloadRef} className="flex flex-col h-full bg-secondary rounded-lg">
+    <div ref={downloadRef} className="flex flex-col h-full bg-card-background rounded-xl border border-border-color">
         <div className="p-2 border-b border-border-color flex items-center justify-between">
             <div className="flex items-center space-x-1">
-                <button onClick={() => handleZoom('out')} className="p-1 rounded text-text-secondary hover:bg-highlight"><MinusIcon className="w-5 h-5" /></button>
-                <button onClick={() => handleZoom('in')} className="p-1 rounded text-text-secondary hover:bg-highlight"><PlusIcon className="w-5 h-5" /></button>
+                <button onClick={() => handleZoom('out')} className="p-1 rounded text-text-secondary hover:bg-app-background"><MinusIcon className="w-5 h-5" /></button>
+                <button onClick={() => handleZoom('in')} className="p-1 rounded text-text-secondary hover:bg-app-background"><PlusIcon className="w-5 h-5" /></button>
             </div>
              <button 
                 onClick={() => downloadImage(`${project?.name}-gantt-chart.png`)} 
                 disabled={isDownloading} 
-                className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+                className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color transition-colors disabled:opacity-50"
              >
                 <DownloadIcon className="w-4 h-4" />
                 <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
             </button>
         </div>
         <div className="flex-grow flex overflow-hidden">
-            <div className="w-64 shrink-0 border-r border-border-color bg-primary z-10 overflow-y-hidden flex flex-col">
+            <div className="w-64 shrink-0 border-r border-border-color bg-card-background z-10 overflow-y-hidden flex flex-col">
                 <div className="h-16 flex items-center p-2 border-b border-border-color shrink-0"><h3 className="font-semibold">Task Name</h3></div>
                 <div className="overflow-y-auto">
-                    {allTasks.map((task, index) => {
-                        const canIndent = index > 0 && allTasks[index - 1].level === task.level;
-                        const canOutdent = parentMap.get(task.id) !== null;
-                        return (
-                            <div key={task.id} className="h-10 flex items-center border-b border-border-color text-sm truncate group" style={{ paddingLeft: `${10 + task.level * 20}px` }}>
-                                <span className="flex-grow truncate">{task.name}</span>
-                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
-                                    <button onClick={() => handleIndent(task, index)} disabled={!canIndent} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed">
-                                        <ArrowLongRightIcon className="w-5 h-5" />
-                                    </button>
-                                    <button onClick={() => handleOutdent(task)} disabled={!canOutdent} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed">
-                                        <ArrowLongLeftIcon className="w-5 h-5" />
-                                    </button>
-                                </div>
+                    {allTasks.map((task, index) => (
+                        <div key={task.id} className="h-10 flex items-center border-b border-border-color text-sm truncate group" style={{ paddingLeft: `${10 + task.level * 20}px` }}>
+                            <span className="flex-grow truncate">{task.name}</span>
+                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+                                <button onClick={() => handleIndent(task, index)} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongRightIcon className="w-5 h-5" /></button>
+                                <button onClick={() => handleOutdent(task)} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongLeftIcon className="w-5 h-5" /></button>
                             </div>
-                        );
-                    })}
+                        </div>
+                    ))}
                 </div>
             </div>
-            <div ref={scrollContainerRef} className="flex-grow overflow-auto" onScroll={handleScroll}>
+            <div className="flex-grow overflow-auto">
                 <div ref={ganttContainerRef} style={{ width: totalWidth, height: allTasks.length * 40 + 64 }}>
-                    <div className="sticky top-0 z-10 bg-secondary"><div className="h-16 relative"><div className="flex absolute top-0 left-0 w-full h-8 border-b border-border-color">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div><div className="flex absolute bottom-0 left-0 w-full h-8 border-b border-border-color">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div></div></div>
-                    <div className="relative" style={{ height: allTasks.length * 40 }}>
+                    <div className="sticky top-0 z-10 bg-card-background"><div className="h-16 relative"><div className="flex absolute top-0 left-0 w-full h-8 border-b border-border-color">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div><div className="flex absolute bottom-0 left-0 w-full h-8 border-b border-border-color">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div></div></div>
+                    <div className="relative timeline-body" style={{ height: allTasks.length * 40 }}>
                         {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
                         {allTasks.map((_, index) => (<div key={index} className="absolute w-full h-10 border-b border-border-color" style={{ top: index * 40 }}></div>))}
                         
@@ -405,7 +394,16 @@ const GanttChartView: React.FC = () => {
 
                         {allTasks.map((task, index) => {
                             const taskPos = taskPositions.get(task.id);
-                            if (!taskPos) return null;
+                            if (!taskPos) {
+                                // Render row for unscheduled tasks
+                                return (
+                                    <div key={`unscheduled-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: index * 40 }} onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: task, startX: e.clientX - timelineRect.left }); }}>
+                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent-blue/10 transition-colors flex items-center justify-center">
+                                            <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
+                                        </div>
+                                    </div>
+                                );
+                            }
                             const isInteracting = interaction?.taskId === task.id;
                             const tempPos = tempTaskPositions.get(task.id);
                             const left = tempPos ? tempPos.left : taskPos.startX;
@@ -416,25 +414,18 @@ const GanttChartView: React.FC = () => {
 
                             return (
                                 <div key={task.id} ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }} data-task-id={task.id} className="absolute group" style={barStyles}>
-                                    <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 rounded-md flex items-center justify-between px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-red-500' : 'bg-accent'}`}
+                                    <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 rounded-md flex items-center justify-between px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : 'bg-accent-blue'}`}
                                         onMouseDown={(e) => { e.preventDefault(); const pos = taskPositions.get(task.id); if (!pos) return; setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: pos.startX, originalWidth: pos.endX - pos.startX }); }}>
-                                        {task.imageUrl && (<img src={task.imageUrl} alt={task.name} className="w-5 h-5 rounded-full object-cover mr-2" />)}
                                         <span className="truncate pointer-events-none">{task.name}</span>
-                                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button 
-                                                title="Generate image with AI"
-                                                onClick={(e) => { e.stopPropagation(); handleGenerateImage(task); }}
-                                                className="p-0.5 rounded-full bg-white/20 hover:bg-white/40 text-white"
-                                                disabled={generatingImageFor === task.id}>
-                                                {generatingImageFor === task.id ? <Spinner/> : <ImageIcon className="w-4 h-4" />}
-                                            </button>
-                                        </div>
                                     </div>
                                     <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const pos = taskPositions.get(task.id); if (!pos) return; setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: pos.startX, originalWidth: pos.endX - pos.startX }); }} className="absolute -left-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
                                     <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const pos = taskPositions.get(task.id); if (!pos) return; setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: pos.startX, originalWidth: pos.endX - pos.startX }); }} className="absolute -right-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
                                 </div>
                             )
                         })}
+                         {creatingState && tempCreatingBar && (
+                            <div className="absolute h-7 top-1/2 -translate-y-1/2 pointer-events-none bg-accent-blue/50 rounded-md" style={{ ...tempCreatingBar, top: `${allTasks.findIndex(t => t.id === creatingState.task.id) * 40 + 6}px` }}></div>
+                        )}
                     </div>
                 </div>
             </div>
