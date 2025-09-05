@@ -40,6 +40,7 @@ export interface Habit {
 export interface InboxTask {
   id: string;
   name: string;
+  createdAt: number; // timestamp
 }
 
 export interface Resource {

@@ -17,9 +17,37 @@ export const INITIAL_PROJECT_GROUPS: ProjectGroup[] = [
 export const INITIAL_PROJECTS: Project[] = [
   // Work
   { id: 'proj-1', name: 'Q4 Marketing Plan', groupId: 'group-1', tasks: [], isHidden: false, icon: '📈' },
-  { id: 'proj-2', name: 'Website Redesign', groupId: 'group-1', tasks: [], isHidden: false, icon: '🎨' },
+  { 
+    id: 'proj-2', 
+    name: 'Website Redesign', 
+    groupId: 'group-1', 
+    tasks: [
+        { id: 'task-2-1', name: 'Phase 1: Research', completed: true, description: 'Analyze competitor sites and user feedback.', startDate: '2024-08-01', endDate: '2024-08-07', subtasks: [
+            { id: 'task-2-1-1', name: 'User Persona Interviews', completed: true, description: '', subtasks: [], startDate: '2024-08-01', endDate: '2024-08-03' },
+            { id: 'task-2-1-2', name: 'Competitor Analysis', completed: true, description: '', subtasks: [], startDate: '2024-08-04', endDate: '2024-08-07' },
+        ]},
+        { id: 'task-2-2', name: 'Phase 2: Design', completed: false, description: 'Create wireframes and mockups.', startDate: '2024-08-08', endDate: '2024-08-21', subtasks: [
+             { id: 'task-2-2-1', name: 'Homepage Wireframe', completed: true, description: '', subtasks: [], startDate: '2024-08-08', endDate: '2024-08-14' },
+             { id: 'task-2-2-2', name: 'Final Mockups', completed: false, description: '', subtasks: [], startDate: '2024-08-15', endDate: '2024-08-21' },
+        ]},
+        { id: 'task-2-3', name: 'Phase 3: Development', completed: false, description: 'Build and deploy the new website.', startDate: '2024-08-22', endDate: '2024-09-12', subtasks: []},
+    ], 
+    isHidden: false, 
+    icon: '🎨' 
+  },
   // Personal
-  { id: 'proj-3', name: 'Vacation Planning', groupId: 'group-2', tasks: [], isHidden: false, icon: '✈️' },
+  { 
+    id: 'proj-3', 
+    name: 'Vacation Planning', 
+    groupId: 'group-2', 
+    tasks: [
+        { id: 'task-3-1', name: 'Book Flights', completed: false, description: 'Find best deals for flights to Hawaii.', startDate: '2024-09-01', endDate: '2024-09-05', subtasks: [] },
+        { id: 'task-3-2', name: 'Book Hotel', completed: false, description: 'Reserve beachfront hotel.', startDate: '2024-09-06', endDate: '2024-09-10', subtasks: [] },
+        { id: 'task-3-3', name: 'Plan Itinerary', completed: false, description: 'List out daily activities and tours.', startDate: '2024-09-11', endDate: '2024-09-15', subtasks: [] },
+    ], 
+    isHidden: false, 
+    icon: '✈️' 
+  },
   { id: 'proj-4', name: 'Side Project: "Synergize"', groupId: 'group-2', tasks: [], isHidden: false, icon: '🚀' },
   // Learning
   { id: 'proj-5', name: 'Learn TypeScript', groupId: 'group-3', tasks: [], isHidden: false, icon: '📚' },

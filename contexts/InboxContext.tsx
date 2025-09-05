@@ -2,7 +2,6 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { InboxTask } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-// FIX: Removed unused v9 modular imports. v8 API is used via the 'db' service.
 
 interface InboxState {
   tasks: InboxTask[];
@@ -21,8 +20,7 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   useEffect(() => {
     if (user) {
-      // FIX: Use v8 namespaced API for collection queries and snapshots.
-      const inboxQuery = db.collection(`users/${user.id}/inbox`);
+      const inboxQuery = db.collection(`users/${user.id}/inbox`).orderBy('createdAt', 'desc');
       const unsubscribe = inboxQuery.onSnapshot((snapshot) => {
         const userTasks = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as InboxTask));
         setTasks(userTasks);
@@ -37,30 +35,60 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (!user || !taskName.trim()) {
         return;
     };
+    
+    // Note: The final ID will be the one assigned by Firestore on the backend listener,
+    // but we need a temporary, unique one for the optimistic UI update.
+    const tempId = `inbox-${Date.now()}`;
+    const newTask: InboxTask = {
+        id: tempId,
+        name: taskName.trim(),
+        createdAt: Date.now(),
+    };
+    
+    // Optimistic update for instant UI feedback
+    setTasks(prev => [newTask, ...prev]);
+
     try {
-        // Let Firestore generate a unique ID for robustness
-        // FIX: Use v8 namespaced API to add a document to a collection.
-        await db.collection(`users/${user.id}/inbox`).add({ name: taskName.trim() });
+        // Let Firestore generate the ID, but save the data.
+        // The listener will pick up the "real" task from the server.
+        // We use the tempId to ensure we can revert if needed.
+        await db.collection(`users/${user.id}/inbox`).add({
+            name: newTask.name,
+            createdAt: newTask.createdAt
+        });
     } catch(error) {
-        console.error("Error adding task to inbox:", error);
+        console.error("Error adding task to inbox, reverting:", error);
+        // Revert by removing the temporary task that failed to add
+        setTasks(prev => prev.filter(t => t.id !== tempId)); 
     }
   }, [user]);
 
   const deleteTask = useCallback(async (taskId: string) => {
     if (!user) return;
     
-    // Optimistic update for better UX
-    const originalTasks = tasks;
-    setTasks(prev => prev.filter(t => t.id !== taskId));
+    let originalTask: InboxTask | null = null;
+
+    // Remove the task optimistically and capture it for a potential revert.
+    setTasks(prev => {
+      originalTask = prev.find(t => t.id === taskId) || null;
+      return prev.filter(t => t.id !== taskId);
+    });
+    
+    // If the task wasn't in the state, don't try to delete from DB.
+    if (!originalTask) return;
 
     try {
-        // FIX: Use v8 namespaced API to delete a document.
         await db.doc(`users/${user.id}/inbox/${taskId}`).delete();
     } catch (error) {
         console.error("Error deleting task from inbox, reverting:", error);
-        setTasks(originalTasks); // Revert
+        // Re-add the task that failed to be deleted.
+        // This is a safe revert, though order might change until next DB sync.
+        if (originalTask) {
+            setTasks(prev => [...prev, originalTask]); 
+        }
+        alert("Failed to delete task. Please try again.");
     }
-  }, [user, tasks]);
+  }, [user]);
 
   const contextValue = useMemo(() => ({
     tasks,
