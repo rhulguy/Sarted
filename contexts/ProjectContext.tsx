@@ -42,34 +42,6 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showHiddenProjects, setShowHiddenProjects] = useState(false);
-
-  // Seed initial data for new users
-  useEffect(() => {
-    if (user) {
-      const userDocRef = db.doc(`users/${user.id}`);
-      userDocRef.get().then(docSnap => {
-        if (!docSnap.exists) { // Only seed if the user document itself doesn't exist
-            const projectColRef = db.collection(`users/${user.id}/projects`);
-            projectColRef.get().then(projectSnap => {
-                if (projectSnap.empty) {
-                    console.log("New user detected, seeding project data...");
-                    const batch = db.batch();
-                    batch.set(userDocRef, { projectSeeded: true }, { merge: true });
-                    INITIAL_PROJECT_GROUPS.forEach(group => {
-                        const groupRef = db.doc(`users/${user.id}/projectGroups/${group.id}`);
-                        batch.set(groupRef, group);
-                    });
-                    INITIAL_PROJECTS.forEach(project => {
-                        const projectRef = db.doc(`users/${user.id}/projects/${project.id}`);
-                        batch.set(projectRef, { ...project, isHidden: false });
-                    });
-                    batch.commit();
-                }
-            });
-        }
-      });
-    }
-  }, [user]);
   
   // Listen for data changes from Firestore
   useEffect(() => {
@@ -84,6 +56,26 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     if (user) {
       setLoading(true);
+
+      // --- Robust Seeding Logic ---
+      const projectsRef = db.collection(`users/${user.id}/projects`);
+      projectsRef.limit(1).get().then(snapshot => {
+        if (snapshot.empty) {
+          console.log("New user project collection is empty. Seeding initial data.");
+          const batch = db.batch();
+          INITIAL_PROJECT_GROUPS.forEach(group => {
+            const groupRef = db.doc(`users/${user.id}/projectGroups/${group.id}`);
+            batch.set(groupRef, group);
+          });
+          INITIAL_PROJECTS.forEach(project => {
+            const projectRef = db.doc(`users/${user.id}/projects/${project.id}`);
+            batch.set(projectRef, project);
+          });
+          batch.commit().catch(err => console.error("Failed to seed projects:", err));
+        }
+      });
+      // --- End Seeding Logic ---
+
       const projectsQuery = db.collection(`users/${user.id}/projects`);
       const groupsQuery = db.collection(`users/${user.id}/projectGroups`);
 
@@ -217,7 +209,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     setProjects(prev => prev.map(p => p.id === id ? { ...p, isHidden } : p));
     if (isHidden && selectedProjectId === id) {
-        await selectProject(null);
+        selectProject(null);
     }
 
     if (user) {
@@ -383,36 +375,30 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-      if (user) {
-        const userDocRef = db.doc(`users/${user.id}`);
-        userDocRef.get().then(docSnap => {
-          if (!docSnap.exists) { // Only seed if the user document itself doesn't exist
-              const resourceColRef = db.collection(`users/${user.id}/resources`);
-              resourceColRef.get().then(resourceSnap => {
-                  if (resourceSnap.empty) {
-                      console.log("New user detected, seeding resource data...");
-                      const batch = db.batch();
-                      batch.set(userDocRef, { resourceSeeded: true }, { merge: true });
-                      INITIAL_RESOURCES.forEach(resource => {
-                          const resourceRef = db.doc(`users/${user.id}/resources/${resource.id}`);
-                          batch.set(resourceRef, resource);
-                      });
-                      batch.commit();
-                  }
-              });
-          }
-        });
-      }
-    }, [user]);
-
-    useEffect(() => {
         if (authLoading) {
             setLoading(true);
             setResources([]);
             return;
         }
+
         if (user) {
             setLoading(true);
+
+            // --- Robust Seeding Logic for Resources ---
+            const resourcesRef = db.collection(`users/${user.id}/resources`);
+            resourcesRef.limit(1).get().then(snapshot => {
+                if (snapshot.empty) {
+                    console.log("New user resource collection is empty. Seeding initial data.");
+                    const batch = db.batch();
+                    INITIAL_RESOURCES.forEach(resource => {
+                        const resourceRef = db.doc(`users/${user.id}/resources/${resource.id}`);
+                        batch.set(resourceRef, resource);
+                    });
+                    batch.commit().catch(err => console.error("Failed to seed resources:", err));
+                }
+            });
+            // --- End Seeding Logic ---
+
             const resourcesQuery = db.collection(`users/${user.id}/resources`).orderBy('createdAt', 'desc');
             const unsubscribe = resourcesQuery.onSnapshot(snapshot => {
                 const userResources = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Resource));

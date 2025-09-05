@@ -2,7 +2,6 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { Habit } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-// FIX: Removed unused v9 modular imports. v8 API is used via the 'db' service.
 import { INITIAL_HABITS } from '../constants';
 
 interface HabitContextType {
@@ -18,25 +17,6 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const { user, loading: authLoading } = useAuth();
   const [habits, setHabits] = useState<Habit[]>([]);
 
-  // Seed initial data for new users
-  useEffect(() => {
-    if (user) {
-      // FIX: Use v8 namespaced API for document access and batch writes.
-      const userDocRef = db.doc(`users/${user.id}`);
-      userDocRef.get().then(docSnap => {
-        if (!docSnap.exists || !docSnap.data()?.habitSeeded) {
-          const batch = db.batch();
-          batch.set(userDocRef, { habitSeeded: true }, { merge: true });
-          INITIAL_HABITS.forEach(habit => {
-            const habitRef = db.doc(`users/${user.id}/habits/${habit.id}`);
-            batch.set(habitRef, habit);
-          });
-          batch.commit();
-        }
-      });
-    }
-  }, [user]);
-
   // Listen for data changes from Firestore
   useEffect(() => {
     if (authLoading) {
@@ -45,7 +25,21 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     if (user) {
-      // FIX: Use v8 namespaced API for collection queries and snapshots.
+      // --- Robust Seeding Logic for Habits ---
+      const habitsRef = db.collection(`users/${user.id}/habits`);
+      habitsRef.limit(1).get().then(snapshot => {
+          if (snapshot.empty) {
+              console.log("New user habit collection is empty. Seeding initial data.");
+              const batch = db.batch();
+              INITIAL_HABITS.forEach(habit => {
+                  const habitRef = db.doc(`users/${user.id}/habits/${habit.id}`);
+                  batch.set(habitRef, habit);
+              });
+              batch.commit().catch(err => console.error("Failed to seed habits:", err));
+          }
+      });
+      // --- End Seeding Logic ---
+      
       const habitsQuery = db.collection(`users/${user.id}/habits`);
       const unsubscribe = habitsQuery.onSnapshot((snapshot) => {
         const userHabits = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Habit));
@@ -65,7 +59,6 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     if (user) {
         try {
-            // FIX: Use v8 namespaced API to set document data.
             await db.doc(`users/${user.id}/habits/${newHabit.id}`).set(newHabit);
         } catch (error) {
             console.error("Failed to add habit, reverting:", error);
@@ -80,7 +73,6 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     
     if (user) {
         try {
-            // FIX: Use v8 namespaced API to set document data.
             await db.doc(`users/${user.id}/habits/${habit.id}`).set(habit);
         } catch (error) {
             console.error("Failed to update habit, reverting:", error);
@@ -95,7 +87,6 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     if (user) {
         try {
-            // FIX: Use v8 namespaced API to delete a document.
             await db.doc(`users/${user.id}/habits/${habitId}`).delete();
         } catch (error) {
             console.error("Failed to delete habit, reverting:", error);
