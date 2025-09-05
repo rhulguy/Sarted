@@ -120,7 +120,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       const settingsRef = db.doc(`users/${user.id}/settings/main`);
       const unsubSettings = settingsRef.onSnapshot((docSnap) => {
         if (docSnap.exists) {
-            setSelectedProjectId(docSnap.data()?.selectedProjectId || null);
+            setShowHiddenProjects(docSnap.data()?.showHiddenProjects || false);
         }
       }, (error) => console.error("Error fetching settings:", error));
       
@@ -129,21 +129,25 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       // Not logged in, show initial data
       setProjects(INITIAL_PROJECTS);
       setProjectGroups(INITIAL_PROJECT_GROUPS);
-      setSelectedProjectId(INITIAL_PROJECTS.length > 0 ? INITIAL_PROJECTS[0].id : null);
+      setSelectedProjectId(null);
       setLoading(false);
     }
   }, [user, authLoading]);
 
   const selectProject = useCallback(async (id: string | null) => {
     setSelectedProjectId(id);
-    if (user) {
-      try {
-        const settingsRef = db.doc(`users/${user.id}/settings/main`);
-        await settingsRef.set({ selectedProjectId: id }, { merge: true });
-      } catch (error) {
-        console.error("Failed to save selected project:", error);
-      }
-    }
+  }, []);
+  
+  const handleSetShowHiddenProjects = useCallback(async (show: boolean) => {
+      setShowHiddenProjects(show);
+       if (user) {
+          try {
+            const settingsRef = db.doc(`users/${user.id}/settings/main`);
+            await settingsRef.set({ showHiddenProjects: show }, { merge: true });
+          } catch (error) {
+            console.error("Failed to save showHiddenProjects setting:", error);
+          }
+       }
   }, [user]);
 
   const addProject = useCallback(async (projectData: Omit<Project, 'id' | 'isHidden'>) => {
@@ -205,25 +209,26 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   
   const toggleProjectVisibility = useCallback(async (id: string, isHidden: boolean) => {
     const originalProjects = projects;
-    const originalSelectedId = selectedProjectId;
 
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, isHidden } : p));
+    // Deselect project *before* hiding to prevent race conditions/crashes
     if (isHidden && selectedProjectId === id) {
-        selectProject(null);
+      await selectProject(null);
     }
+
+    // Now, perform the optimistic update to hide the project
+    setProjects(prev => prev.map(p => (p.id === id ? { ...p, isHidden } : p)));
 
     if (user) {
-        try {
-            await db.doc(`users/${user.id}/projects/${id}`).update({ isHidden });
-        } catch (error) {
-            console.error("Failed to update project visibility, reverting:", error);
-            setProjects(originalProjects);
-            if (isHidden && originalSelectedId === id) {
-                 await selectProject(originalSelectedId);
-            }
-        }
+      try {
+        await db.doc(`users/${user.id}/projects/${id}`).update({ isHidden });
+      } catch (error) {
+        console.error("Failed to update project visibility, reverting:", error);
+        setProjects(originalProjects); // Revert all changes on error
+        // If we deselected, we might need to re-select on error, but this is complex.
+        // For now, the optimistic deselection is safer.
+      }
     }
-}, [projects, user, selectedProjectId, selectProject]);
+  }, [projects, user, selectedProjectId, selectProject]);
 
   const addProjectGroup = useCallback(async (groupData: Omit<ProjectGroup, 'id'>) => {
     if (!user) return;
@@ -343,11 +348,11 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [projects, showHiddenProjects]);
 
   const contextValue = useMemo(() => ({
-    projects, visibleProjects, projectGroups, selectedProjectId, selectedProject, loading, showHiddenProjects, setShowHiddenProjects,
+    projects, visibleProjects, projectGroups, selectedProjectId, selectedProject, loading, showHiddenProjects, setShowHiddenProjects: handleSetShowHiddenProjects,
     selectProject, addProject, updateProject, deleteProject, toggleProjectVisibility, addProjectGroup, updateProjectGroup, deleteProjectGroup,
     addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask,
     reparentTask
-  }), [projects, visibleProjects, projectGroups, selectedProjectId, selectedProject, loading, showHiddenProjects, selectProject, addProject, updateProject, deleteProject, toggleProjectVisibility, addProjectGroup, updateProjectGroup, deleteProjectGroup, addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask]);
+  }), [projects, visibleProjects, projectGroups, selectedProjectId, selectedProject, loading, showHiddenProjects, handleSetShowHiddenProjects, selectProject, addProject, updateProject, deleteProject, toggleProjectVisibility, addProjectGroup, updateProjectGroup, deleteProjectGroup, addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask]);
 
   return <ProjectContext.Provider value={contextValue}>{children}</ProjectContext.Provider>;
 };
