@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { Habit } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc, getDoc, writeBatch, query } from 'firebase/firestore';
+// FIX: Removed unused v9 modular imports. v8 API is used via the 'db' service.
 import { INITIAL_HABITS } from '../constants';
 
 interface HabitContextType {
@@ -15,19 +15,20 @@ interface HabitContextType {
 export const HabitContext = createContext<HabitContextType | undefined>(undefined);
 
 export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const [habits, setHabits] = useState<Habit[]>(INITIAL_HABITS);
+  const { user, loading: authLoading } = useAuth();
+  const [habits, setHabits] = useState<Habit[]>([]);
 
   // Seed initial data for new users
   useEffect(() => {
     if (user) {
-      const userDocRef = doc(db, 'users', user.id);
-      getDoc(userDocRef).then(docSnap => {
-        if (!docSnap.exists() || !docSnap.data()?.habitSeeded) {
-          const batch = writeBatch(db);
+      // FIX: Use v8 namespaced API for document access and batch writes.
+      const userDocRef = db.doc(`users/${user.id}`);
+      userDocRef.get().then(docSnap => {
+        if (!docSnap.exists || !docSnap.data()?.habitSeeded) {
+          const batch = db.batch();
           batch.set(userDocRef, { habitSeeded: true }, { merge: true });
           INITIAL_HABITS.forEach(habit => {
-            const habitRef = doc(db, `users/${user.id}/habits`, habit.id);
+            const habitRef = db.doc(`users/${user.id}/habits/${habit.id}`);
             batch.set(habitRef, habit);
           });
           batch.commit();
@@ -38,9 +39,15 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Listen for data changes from Firestore
   useEffect(() => {
+    if (authLoading) {
+      setHabits([]);
+      return; // Wait for authentication to resolve
+    }
+
     if (user) {
-      const habitsQuery = query(collection(db, `users/${user.id}/habits`));
-      const unsubscribe = onSnapshot(habitsQuery, (snapshot) => {
+      // FIX: Use v8 namespaced API for collection queries and snapshots.
+      const habitsQuery = db.collection(`users/${user.id}/habits`);
+      const unsubscribe = habitsQuery.onSnapshot((snapshot) => {
         const userHabits = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Habit));
         setHabits(userHabits);
       }, (error) => console.error("Error fetching habits:", error));
@@ -49,7 +56,7 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     } else {
       setHabits(INITIAL_HABITS);
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   const addHabit = useCallback(async (habitData: Omit<Habit, 'id'>) => {
     const newHabit: Habit = { ...habitData, id: `habit-${Date.now()}` };
@@ -58,7 +65,8 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     if (user) {
         try {
-            await setDoc(doc(db, `users/${user.id}/habits`, newHabit.id), newHabit);
+            // FIX: Use v8 namespaced API to set document data.
+            await db.doc(`users/${user.id}/habits/${newHabit.id}`).set(newHabit);
         } catch (error) {
             console.error("Failed to add habit, reverting:", error);
             setHabits(originalHabits); // Revert
@@ -72,7 +80,8 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     
     if (user) {
         try {
-            await setDoc(doc(db, `users/${user.id}/habits`, habit.id), habit);
+            // FIX: Use v8 namespaced API to set document data.
+            await db.doc(`users/${user.id}/habits/${habit.id}`).set(habit);
         } catch (error) {
             console.error("Failed to update habit, reverting:", error);
             setHabits(originalHabits); // Revert
@@ -86,7 +95,8 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     if (user) {
         try {
-            await deleteDoc(doc(db, `users/${user.id}/habits`, habitId));
+            // FIX: Use v8 namespaced API to delete a document.
+            await db.doc(`users/${user.id}/habits/${habitId}`).delete();
         } catch (error) {
             console.error("Failed to delete habit, reverting:", error);
             setHabits(originalHabits); // Revert

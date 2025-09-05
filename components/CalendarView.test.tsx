@@ -58,6 +58,8 @@ describe('CalendarView component', () => {
           setShowHiddenProjects: vi.fn(),
           selectProject: vi.fn(),
           addProject: vi.fn(),
+          // FIX: Added missing 'updateProject' property to the mock context provider value to satisfy the ProjectContextType interface.
+          updateProject: vi.fn(),
           deleteProject: vi.fn(),
           toggleProjectVisibility: vi.fn(),
           addProjectGroup: vi.fn(),

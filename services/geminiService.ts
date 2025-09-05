@@ -29,6 +29,11 @@ export interface AIScheduledTask {
     endDate: string;
 }
 
+export interface ResourceMetadata {
+    title: string;
+    thumbnailUrl: string;
+}
+
 
 // --- Helper Function to Call the Secure API Proxy ---
 async function callApiProxy(action: string, payload: any) {
@@ -101,5 +106,17 @@ export const generateImageForTask = async (prompt: string): Promise<string> => {
         throw new Error("No image URL was returned by the API.");
     } catch (error) {
         throw new Error(`Failed to generate image. ${error instanceof Error ? error.message : 'Please check your API key permissions and try again.'}`);
+    }
+};
+
+export const fetchResourceMetadata = async (url: string): Promise<ResourceMetadata> => {
+    try {
+        const result = await callApiProxy('getResourceMetadata', { url });
+        if (result?.title && result?.thumbnailUrl) {
+            return result;
+        }
+        throw new Error("API response did not match expected structure for resource metadata.");
+    } catch (error) {
+        throw new Error(`Failed to fetch resource metadata. ${error instanceof Error ? error.message : 'Please check the console for details.'}`);
     }
 };

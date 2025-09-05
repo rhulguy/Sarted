@@ -1,12 +1,56 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ProjectGroup, Task } from '../types';
-import { PlusIcon, TrashIcon, CogIcon, EyeIcon, EyeSlashIcon } from './IconComponents';
+import { ProjectGroup, Task, Project } from '../types';
+import { PlusIcon, TrashIcon, CogIcon, EyeIcon, EyeSlashIcon, PencilIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
 import { useInbox } from '../contexts/InboxContext';
 
 interface ProjectListProps {
   onNewProject: () => void;
   onEditGroups: () => void;
+}
+
+const EMOJI_OPTIONS = ['🎨', '🚀', '💡', '💰', '📈', '💼', '🏠', '❤️', '✈️', '💻', '🌐', '📚', '⚙️', '⚡️', '🔒', '🎯', '😊', '🥗', '💪', '🚲', '🏋️', '🚗', '🔄', '📊', '🦍', '📁', '🗺️'];
+
+const IconPickerPopover: React.FC<{ project: Project }> = ({ project }) => {
+    const { updateProject } = useProject();
+    const [isOpen, setIsOpen] = useState(false);
+    const pickerRef = useRef<HTMLDivElement>(null);
+    
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative" ref={pickerRef}>
+            <button onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} title="Change Icon" className="p-1 text-text-secondary hover:text-accent">
+                <PencilIcon className="w-4 h-4" />
+            </button>
+            {isOpen && (
+                 <div className="absolute top-full -right-2 mt-1 w-56 bg-secondary border border-border-color rounded-lg p-2 grid grid-cols-6 gap-1 z-20">
+                     {EMOJI_OPTIONS.map(emoji => (
+                        <button
+                            key={emoji}
+                            type="button"
+                            onClick={(e) => { 
+                                e.stopPropagation();
+                                updateProject(project.id, { icon: emoji }); 
+                                setIsOpen(false); 
+                            }}
+                            className={`text-xl rounded-md p-1 hover:bg-highlight ${project.icon === emoji ? 'bg-accent' : ''}`}
+                        >
+                            {emoji}
+                        </button>
+                    ))}
+                 </div>
+            )}
+        </div>
+    );
 }
 
 const ProjectList: React.FC<ProjectListProps> = ({ 
@@ -93,13 +137,17 @@ const ProjectList: React.FC<ProjectListProps> = ({
                             <a
                                 href="#"
                                 onClick={(e) => { e.preventDefault(); selectProject(project.id); }}
-                                className={`flex items-center justify-between text-sm py-2 pr-2 pl-5 rounded-lg group relative transition-colors ${
+                                className={`flex items-center justify-between text-sm py-2 pr-2 pl-2 rounded-lg group relative transition-colors ${
                                 selectedProjectId === project.id ? 'bg-accent text-white' : 'text-text-primary hover:bg-highlight'
                                 } ${isDragOver === project.id ? 'ring-2 ring-accent' : ''} ${project.isHidden ? 'opacity-50' : ''}`}
                             >
                                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${group.color}`}></div>
-                                <span className="truncate">{project.name}</span>
+                                <div className="flex items-center gap-2 truncate pl-2">
+                                    <span className="text-lg">{project.icon || '📁'}</span>
+                                    <span className="truncate">{project.name}</span>
+                                </div>
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <IconPickerPopover project={project} />
                                     <button onClick={(e) => handleToggleVisibility(e, project.id, project.isHidden)} title={project.isHidden ? "Show Project" : "Hide Project"} className="p-1 text-text-secondary hover:text-accent">
                                         {project.isHidden ? <EyeIcon className="w-4 h-4" /> : <EyeSlashIcon className="w-4 h-4" />}
                                     </button>

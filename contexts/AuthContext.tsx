@@ -1,12 +1,23 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { auth } from '../services/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+
+// Inform TypeScript that `firebase` exists on the global scope and its types are available.
+declare const firebase: any;
 
 export interface User {
   id: string;
   name: string | null;
   email: string | null;
   picture: string | null;
+}
+
+// FIX: Define the shape of the Firebase user object locally to avoid issues
+// with global type resolution for `firebase.User`.
+interface FirebaseUser {
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
 }
 
 interface AuthContextType {
@@ -24,7 +35,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+    // The firebaseUser object is typed from the global firebase namespace
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         setUser({
           id: firebaseUser.uid,

@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
-import { GoogleAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
+
+// Inform TypeScript that `firebase` exists on the global scope.
+declare const firebase: any;
 
 declare global {
   interface Window {
@@ -26,19 +28,17 @@ const Auth: React.FC = () => {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const handleCredentialResponse = async (response: any) => {
-        // FIX: Removed check for placeholder GOOGLE_CLIENT_ID as it is configured.
-        // This check was causing a compile error because it would always be false.
         try {
             const idToken = response.credential;
-            const credential = GoogleAuthProvider.credential(idToken);
-            await signInWithCredential(auth, credential);
+            const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+            await auth.signInWithCredential(credential);
         } catch (error) {
             console.error("Error signing in with Firebase:", error);
         }
     };
 
     const handleLogout = () => {
-        signOut(auth);
+        auth.signOut();
         setIsDropdownOpen(false);
     };
 

@@ -19,11 +19,25 @@
               'text-secondary': '#8B949E',
               'border-color': '#30363D',
             },
+            keyframes: {
+              'fade-in': {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+            },
+            animation: {
+              'fade-in': 'fade-in 0.3s ease-out forwards',
+            }
           },
         },
       }
     </script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Load Firebase Compat libraries as global scripts -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
   <script type="importmap">
 {
   "imports": {
@@ -35,11 +49,8 @@
     "@testing-library/react": "https://aistudiocdn.com/@testing-library/react@^16.3.0",
     "@testing-library/jest-dom": "https://aistudiocdn.com/@testing-library/jest-dom@^6.8.0",
     "@testing-library/jest-dom/": "https://aistudiocdn.com/@testing-library/jest-dom@^6.8.0/",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
-    "firebase/analytics": "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.2.1/"
+    "firebase/": "https://aistudiocdn.com/firebase@^12.2.1/",
+    "buffer": "https://aistudiocdn.com/buffer@^6.0.3"
   }
 }
 </script>

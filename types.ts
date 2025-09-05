@@ -8,6 +8,7 @@ export interface Task {
   endDate?: string;   // YYYY-MM-DD
   dependencies?: string[];
   imageUrl?: string;
+  resourceIds?: string[];
 }
 
 export interface Project {
@@ -16,6 +17,7 @@ export interface Project {
   groupId: string;
   tasks: Task[];
   isHidden: boolean;
+  icon?: string;
 }
 
 export interface ProjectGroup {
@@ -38,6 +40,18 @@ export interface Habit {
 export interface InboxTask {
   id: string;
   name: string;
+}
+
+export interface Resource {
+  id: string;
+  url: string;
+  title: string;
+  notes: string;
+  thumbnailUrl: string; // base64 data URL
+  projectGroupId: string;
+  projectIds: string[];
+  isPinned: boolean;
+  createdAt: number; // timestamp
 }
 
 // --- Mind Map Layout Types ---

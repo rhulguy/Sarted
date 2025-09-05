@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Project, Task } from '../types';
 import { generateProjectPlan, AIGeneratedTask } from '../services/geminiService';
 import { SparklesIcon } from './IconComponents';
@@ -10,6 +10,45 @@ interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+const EMOJI_OPTIONS = ['🎨', '🚀', '💡', '💰', '📈', '💼', '🏠', '❤️', '✈️', '💻', '🌐', '📚', '⚙️', '⚡️', '🔒', '🎯'];
+
+const IconPicker: React.FC<{ selectedIcon: string; onSelect: (icon: string) => void }> = ({ selectedIcon, onSelect }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const pickerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative" ref={pickerRef}>
+            <button type="button" onClick={() => setIsOpen(!isOpen)} className="h-10 w-10 text-2xl bg-highlight rounded-md flex items-center justify-center shrink-0">
+                {selectedIcon}
+            </button>
+            {isOpen && (
+                <div className="absolute bottom-full mb-2 w-64 bg-secondary border border-border-color rounded-lg p-2 grid grid-cols-6 gap-2 z-10">
+                    {EMOJI_OPTIONS.map(emoji => (
+                        <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => { onSelect(emoji); setIsOpen(false); }}
+                            className={`text-2xl rounded-md p-1 hover:bg-highlight ${selectedIcon === emoji ? 'bg-accent' : ''}`}
+                        >
+                            {emoji}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 // Helper to recursively add IDs and default properties to tasks from AI
 const processTasks = (tasks: AIGeneratedTask[]): Task[] => {
@@ -29,10 +68,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
   const { isLoading, dispatch: loadingDispatch } = useLoading();
   const [projectName, setProjectName] = useState('');
   const [groupId, setGroupId] = useState(projectGroups[0]?.id || '');
+  const [icon, setIcon] = useState('🎯');
   const [aiGoal, setAiGoal] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // FIX: Refactor project creation to align with the addProject context function signature.
   const handleCreateProject = (projectData: Omit<Project, 'id' | 'isHidden'>) => {
     addProject(projectData);
     onClose();
@@ -44,11 +83,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
     setError(null);
     try {
       const generatedTasks = await generateProjectPlan(aiGoal);
-      // FIX: Create a project data object without 'id' or 'isHidden'.
       const newProjectData = {
         name: projectName || aiGoal,
         groupId,
         tasks: processTasks(generatedTasks),
+        icon,
       };
       handleCreateProject(newProjectData);
     } catch (err: any) {
@@ -60,11 +99,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
 
   const handleCreateManually = () => {
     if (!projectName.trim() || !groupId) return;
-    // FIX: Create a project data object without 'id' or 'isHidden'.
     const newProjectData = {
       name: projectName,
       groupId,
       tasks: [],
+      icon,
     };
     handleCreateProject(newProjectData);
   };
@@ -81,15 +120,18 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
 
         <div className="space-y-4 flex-grow overflow-y-auto">
           <div>
-            <label htmlFor="projectName" className="block text-sm font-medium text-text-secondary">Project Name</label>
-            <input
-              id="projectName"
-              type="text"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              placeholder="e.g., Q3 Marketing Campaign"
-              className="mt-1 block w-full bg-highlight border border-border-color rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-accent focus:border-accent"
-            />
+            <label htmlFor="projectName" className="block text-sm font-medium text-text-secondary">Project Name & Icon</label>
+            <div className="mt-1 flex items-center gap-2">
+                <IconPicker selectedIcon={icon} onSelect={setIcon} />
+                <input
+                  id="projectName"
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="e.g., Q3 Marketing Campaign"
+                  className="block w-full h-10 bg-highlight border border-border-color rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-accent focus:border-accent"
+                />
+            </div>
           </div>
           <div>
             <label htmlFor="projectGroup" className="block text-sm font-medium text-text-secondary">Project Group</label>

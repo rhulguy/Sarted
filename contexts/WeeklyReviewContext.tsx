@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+// FIX: Removed unused v9 modular imports. v8 API is used via the 'db' service.
 
 interface WeeklyReviewContextType {
   shouldShowReview: boolean;
@@ -18,11 +18,13 @@ export const WeeklyReviewProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   useEffect(() => {
     if (user) {
-      const settingsRef = doc(db, `users/${user.id}/settings`, 'main');
-      const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-        if (docSnap.exists()) {
+      // FIX: Use v8 namespaced API for document access and snapshots.
+      const settingsRef = db.doc(`users/${user.id}/settings/main`);
+      const unsubscribe = settingsRef.onSnapshot((docSnap) => {
+        if (docSnap.exists) {
           const data = docSnap.data();
-          const lastShownTimestamp = data.weeklyReviewLastShown?.toDate();
+          // FIX: In v8, a Timestamp is retrieved with .toDate()
+          const lastShownTimestamp = data?.weeklyReviewLastShown?.toDate();
           if (lastShownTimestamp && (Date.now() - lastShownTimestamp.getTime() < ONE_WEEK_IN_MS)) {
             setShouldShowReview(false);
           } else {
@@ -42,8 +44,9 @@ export const WeeklyReviewProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const setReviewShown = useCallback(async () => {
     if (user) {
-      const settingsRef = doc(db, `users/${user.id}/settings`, 'main');
-      await setDoc(settingsRef, { weeklyReviewLastShown: new Date() }, { merge: true });
+      // FIX: Use v8 namespaced API to set document data.
+      const settingsRef = db.doc(`users/${user.id}/settings/main`);
+      await settingsRef.set({ weeklyReviewLastShown: new Date() }, { merge: true });
       setShouldShowReview(false);
     }
   }, [user]);

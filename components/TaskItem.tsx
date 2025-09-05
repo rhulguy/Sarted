@@ -1,6 +1,6 @@
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, memo, useRef } from 'react';
 import { Task, Project } from '../types';
-import { TrashIcon, ChevronRightIcon, CornerDownRightIcon, EditIcon, ImageIcon } from './IconComponents';
+import { TrashIcon, ChevronRightIcon, CornerDownRightIcon, EditIcon, ImageIcon, UploadIcon } from './IconComponents';
 import { generateImageForTask } from '../services/geminiService';
 import Spinner from './Spinner';
 
@@ -27,6 +27,8 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
     const [newSubtaskStartDate, setNewSubtaskStartDate] = useState('');
     const [newSubtaskEndDate, setNewSubtaskEndDate] = useState('');
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setDescription(task.description);
@@ -93,6 +95,58 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
         }
     };
 
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 256;
+                const MAX_HEIGHT = 256;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height;
+                        height = MAX_HEIGHT;
+                    }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+
+                // Use WebP for better compression
+                const dataUrl = canvas.toDataURL('image/webp', 0.8);
+                onUpdate({ ...task, imageUrl: dataUrl });
+                setIsUploading(false);
+            };
+            img.onerror = () => {
+                alert("Failed to process image file.");
+                setIsUploading(false);
+            }
+            img.src = event.target?.result as string;
+        };
+        reader.onerror = () => {
+            alert("Failed to read image file.");
+            setIsUploading(false);
+        }
+        reader.readAsDataURL(file);
+
+        // Reset file input value to allow re-uploading the same file
+        e.target.value = '';
+    };
+
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
 
     return (
@@ -112,7 +166,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                         onChange={handleToggleComplete}
                         className="w-5 h-5 rounded bg-secondary border-border-color text-accent focus:ring-accent shrink-0"
                     />
-                     {isGeneratingImage ? (
+                     {isGeneratingImage || isUploading ? (
                         <div className="w-8 h-8 flex items-center justify-center shrink-0"><Spinner /></div>
                     ) : task.imageUrl && (
                         <img src={task.imageUrl} alt={task.name} className="w-8 h-8 rounded object-cover shrink-0" />
@@ -125,6 +179,10 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                 </div>
                 {/* Action buttons are now always visible on mobile and appear on hover on desktop */}
                 <div className="flex items-center space-x-2 md:space-x-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                    <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" style={{ display: 'none' }} />
+                    <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="p-2 text-text-secondary hover:text-accent disabled:opacity-50" title="Upload custom image">
+                        <UploadIcon className="w-5 h-5" />
+                    </button>
                     <button onClick={handleGenerateImage} disabled={isGeneratingImage} className="p-2 text-text-secondary hover:text-accent disabled:opacity-50" title="Generate image with AI">
                         <ImageIcon className="w-5 h-5" />
                     </button>

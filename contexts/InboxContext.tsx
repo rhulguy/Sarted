@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { InboxTask } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { collection, onSnapshot, doc, deleteDoc, query, addDoc } from 'firebase/firestore';
+// FIX: Removed unused v9 modular imports. v8 API is used via the 'db' service.
 
 interface InboxState {
   tasks: InboxTask[];
@@ -21,8 +21,9 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   useEffect(() => {
     if (user) {
-      const inboxQuery = query(collection(db, `users/${user.id}/inbox`));
-      const unsubscribe = onSnapshot(inboxQuery, (snapshot) => {
+      // FIX: Use v8 namespaced API for collection queries and snapshots.
+      const inboxQuery = db.collection(`users/${user.id}/inbox`);
+      const unsubscribe = inboxQuery.onSnapshot((snapshot) => {
         const userTasks = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as InboxTask));
         setTasks(userTasks);
       }, (error) => console.error("Error fetching inbox:", error));
@@ -38,7 +39,8 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
     try {
         // Let Firestore generate a unique ID for robustness
-        await addDoc(collection(db, `users/${user.id}/inbox`), { name: taskName.trim() });
+        // FIX: Use v8 namespaced API to add a document to a collection.
+        await db.collection(`users/${user.id}/inbox`).add({ name: taskName.trim() });
     } catch(error) {
         console.error("Error adding task to inbox:", error);
     }
@@ -52,7 +54,8 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setTasks(prev => prev.filter(t => t.id !== taskId));
 
     try {
-        await deleteDoc(doc(db, `users/${user.id}/inbox`, taskId));
+        // FIX: Use v8 namespaced API to delete a document.
+        await db.doc(`users/${user.id}/inbox/${taskId}`).delete();
     } catch (error) {
         console.error("Error deleting task from inbox, reverting:", error);
         setTasks(originalTasks); // Revert

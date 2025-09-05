@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Task, Project } from '../types';
-import { PlusIcon, MinusIcon, DownloadIcon, ArrowLongRightIcon, ArrowLongLeftIcon } from './IconComponents';
+import { Task, Project, ProjectGroup } from '../types';
+import { PlusIcon, MinusIcon, DownloadIcon, ChevronRightIcon, ImageIcon, FolderIcon, ArrowLongLeftIcon, ArrowLongRightIcon, TrashIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
 import { useDownloadImage } from '../hooks/useDownloadImage';
 
@@ -14,14 +14,16 @@ interface InteractionState {
 }
 
 interface CreatingState {
-    taskId: string;
-    projectId: string;
+    task: RenderItem;
     startX: number;
-    taskTop: number;
 }
 
+type RenderItem = 
+    | { type: 'group'; data: ProjectGroup }
+    | { type: 'project'; data: Project }
+    | { type: 'task'; data: GlobalGanttTask; level: number };
+
 interface GlobalGanttTask extends Task {
-  level: number;
   projectId: string;
   projectName: string;
   projectColor: string;
@@ -55,89 +57,140 @@ const getMondayOfWeek = (d: Date): Date => {
 };
 
 const GlobalGanttView: React.FC = () => {
-  const { visibleProjects, projectGroups, addTask, updateTask, updateMultipleTasks, reparentTask } = useProject();
+  const { visibleProjects, projectGroups, addTask, updateTask, updateMultipleTasks, deleteTask, reparentTask } = useProject();
   const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
   
   const [dayWidth, setDayWidth] = useState(30);
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
   const [creatingState, setCreatingState] = useState<CreatingState | null>(null);
-  const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number; top: number } | null>(null);
+  const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number } | null>(null);
   const [addingTaskToProject, setAddingTaskToProject] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState('');
-  const [isNewTaskFormFocused, setIsNewTaskFormFocused] = useState(false);
+  const [collapsedProjects, setCollapsedProjects] = useState(new Set<string>());
+  const [collapsedGroups, setCollapsedGroups] = useState(new Set<string>());
   
-  const ganttContainerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const taskBarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const sortedProjects = useMemo(() => {
-    return [...visibleProjects].sort((a, b) => a.name.localeCompare(b.name));
-  }, [visibleProjects]);
-
-  const { allTasks, minDate, maxDate, taskMap, parentMap, projectHeaders } = useMemo(() => {
+  const { allTasksWithMeta, minDate, maxDate } = useMemo(() => {
     let min: Date | null = null;
     let max: Date | null = null;
     const flattenedTasks: GlobalGanttTask[] = [];
-    const localTaskMap = new Map<string, Task>();
-    const localParentMap = new Map<string, string | null>();
     const groupColorMap = new Map(projectGroups.map(g => [g.id, g.color]));
-    const localProjectHeaders: { id: string, name: string, yPos: number }[] = [];
 
-    let currentY = 0;
-
-    sortedProjects.forEach(project => {
-      localProjectHeaders.push({ id: project.id, name: project.name, yPos: currentY });
-      currentY += 40; // Height of the header
-
+    visibleProjects.forEach(project => {
       const projectColor = groupColorMap.get(project.groupId) || 'bg-gray-500';
-      const findDateRangeAndFlatten = (tasks: Task[], level: number, parentId: string | null) => {
+      const findDateRangeAndFlatten = (tasks: Task[]) => {
           tasks.forEach(task => {
-              flattenedTasks.push({ ...task, level, projectId: project.id, projectName: project.name, projectColor });
-              localTaskMap.set(task.id, task);
-              localParentMap.set(task.id, parentId);
+              flattenedTasks.push({ ...task, projectId: project.id, projectName: project.name, projectColor });
               const start = parseDate(task.startDate);
               const end = parseDate(task.endDate);
               if (!isNaN(start.getTime())) { if (!min || start < min) min = start; }
               if (!isNaN(end.getTime())) { if (!max || end > max) max = end; }
-              currentY += 40; // Height of a task row
-              if (task.subtasks) findDateRangeAndFlatten(task.subtasks, level + 1, task.id);
+              if (task.subtasks) findDateRangeAndFlatten(task.subtasks);
           });
       };
-      findDateRangeAndFlatten(project.tasks, 0, null);
+      findDateRangeAndFlatten(project.tasks);
     });
 
     const mondayThisWeek = getMondayOfWeek(new Date());
-
-    let effectiveMin = mondayThisWeek;
-    if (min && min < mondayThisWeek) {
-        effectiveMin = min;
-    }
-
+    let effectiveMin = min && min < mondayThisWeek ? min : mondayThisWeek;
+    
     let effectiveMax = max;
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    const futureDate = new Date(today);
+    const futureDate = new Date();
     futureDate.setUTCDate(futureDate.getUTCDate() + 30);
     if (!effectiveMax || effectiveMax < futureDate) {
         effectiveMax = futureDate;
     }
 
-    return { allTasks: flattenedTasks, minDate: effectiveMin, maxDate: effectiveMax, taskMap: localTaskMap, parentMap: localParentMap, projectHeaders: localProjectHeaders };
-  }, [sortedProjects, projectGroups]);
+    return { allTasksWithMeta: flattenedTasks, minDate: effectiveMin, maxDate: effectiveMax };
+  }, [visibleProjects, projectGroups]);
   
+  const parentMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    visibleProjects.forEach(project => {
+        const buildMap = (tasks: Task[], parentId: string | null) => {
+            tasks.forEach(task => {
+                map.set(task.id, parentId);
+                if (task.subtasks) {
+                    buildMap(task.subtasks, task.id);
+                }
+            });
+        };
+        buildMap(project.tasks, null);
+    });
+    return map;
+}, [visibleProjects]);
+
+  const itemsToRender = useMemo((): RenderItem[] => {
+    const items: RenderItem[] = [];
+    const sortedGroups = [...projectGroups].sort((a, b) => a.name.localeCompare(b.name));
+
+    sortedGroups.forEach(group => {
+        const projectsInGroup = visibleProjects.filter(p => p.groupId === group.id).sort((a,b) => a.name.localeCompare(b.name));
+        if (projectsInGroup.length > 0) {
+            items.push({ type: 'group', data: group });
+
+            if (!collapsedGroups.has(group.id)) {
+                projectsInGroup.forEach(project => {
+                    items.push({ type: 'project', data: project });
+
+                    if (project.id === addingTaskToProject) {
+                        const placeholderTask: GlobalGanttTask = {
+                            id: `new-task-form-${project.id}`, name: '', completed: false, description: '', subtasks: [],
+                            projectId: project.id, projectName: project.name, projectColor: ''
+                        };
+                        items.push({ type: 'task', data: placeholderTask, level: 0 });
+                    }
+
+                    if (!collapsedProjects.has(project.id)) {
+                        const taskMap = new Map(allTasksWithMeta.filter(t => t.projectId === project.id).map(t => [t.id, t]));
+                        
+                        const addTasksRecursively = (tasks: Task[], level: number) => {
+                            tasks.forEach(task => {
+                                const taskWithMeta = taskMap.get(task.id);
+                                if (taskWithMeta) {
+                                    items.push({ type: 'task', data: taskWithMeta, level });
+                                    if (task.subtasks) addTasksRecursively(task.subtasks, level + 1);
+                                }
+                            });
+                        };
+                        addTasksRecursively(project.tasks, 0);
+                    }
+                });
+            }
+        }
+    });
+
+    return items;
+  }, [visibleProjects, projectGroups, collapsedGroups, collapsedProjects, allTasksWithMeta, addingTaskToProject]);
+
+  const toggleProjectCollapse = useCallback((projectId: string) => {
+    setCollapsedProjects(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(projectId)) newSet.delete(projectId);
+        else newSet.add(projectId);
+        return newSet;
+    });
+  }, []);
+
+  const toggleGroupCollapse = useCallback((groupId: string) => {
+    setCollapsedGroups(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(groupId)) newSet.delete(groupId);
+        else newSet.add(groupId);
+        return newSet;
+    });
+  }, []);
+
   const handleNewTaskSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (newTaskName.trim() && addingTaskToProject) {
       const newTask: Task = {
-        id: `task-${Date.now()}`,
-        name: newTaskName.trim(),
-        description: '',
-        completed: false,
-        subtasks: [],
+        id: `task-${Date.now()}`, name: newTaskName.trim(), description: '', completed: false, subtasks: [],
       };
       await addTask(addingTaskToProject, newTask);
       setNewTaskName('');
-      // Keep the form open for the next task
-      // setAddingTaskToProject(null) is now handled by onBlur
     }
   }, [newTaskName, addingTaskToProject, addTask]);
 
@@ -165,180 +218,212 @@ const GlobalGanttView: React.FC = () => {
     return { chartStartDate: startDate, totalDays: days, months: monthHeaders, totalWidth: width };
   }, [minDate, maxDate, dayWidth]);
 
-  const handleMouseUp = useCallback(async (e: MouseEvent) => {
-    if (!interaction) return;
+  const handleMouseUp = useCallback(async (e: MouseEvent, currentInteraction: InteractionState) => {
+    const { originalTask, startX, type, taskId } = currentInteraction;
+    const taskInfo = allTasksWithMeta.find(t => t.id === taskId);
+    if (!taskInfo) {
+      setInteraction(null);
+      return;
+    }
 
-    const finalOffsetPx = e.clientX - interaction.startX;
+    const finalOffsetPx = e.clientX - startX;
     const dayDelta = Math.round(finalOffsetPx / dayWidth);
     
-    if (dayDelta !== 0) {
-        const { originalTask } = interaction;
-        const taskInfo = allTasks.find(t => t.id === originalTask.id);
-        if (!taskInfo) return;
+    if (dayDelta === 0) {
+        setInteraction(null);
+        return;
+    }
 
-        const originalStart = parseDate(originalTask.startDate);
-        const originalEnd = parseDate(originalTask.endDate);
+    const originalStart = parseDate(originalTask.startDate);
+    const originalEnd = parseDate(originalTask.endDate);
 
-        if (!isNaN(originalStart.getTime()) && !isNaN(originalEnd.getTime())) {
-            let newStart = new Date(originalStart);
-            let newEnd = new Date(originalEnd);
+    if (isNaN(originalStart.getTime()) || isNaN(originalEnd.getTime())) {
+        setInteraction(null);
+        return;
+    }
 
-            if (interaction.type === 'drag') {
-                newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
-                newEnd.setUTCDate(newEnd.getUTCDate() + dayDelta);
-            } else if (interaction.type === 'resize-start') {
-                newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
-            } else if (interaction.type === 'resize-end') {
-                newEnd.setUTCDate(newEnd.getUTCDate() + dayDelta);
-            }
+    let newStart = new Date(originalStart);
+    let newEnd = new Date(originalEnd);
+
+    if (type === 'drag') {
+        newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
+        const duration = dayDiff(originalStart, originalEnd);
+        newEnd = new Date(newStart);
+        newEnd.setUTCDate(newEnd.getUTCDate() + duration);
+    } else if (type === 'resize-start') {
+        newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
+    } else if (type === 'resize-end') {
+        newEnd.setUTCDate(newEnd.getUTCDate() + dayDelta);
+    }
+    
+    if (newStart <= newEnd) {
+        const draggedTaskUpdate = { ...originalTask, startDate: formatDate(newStart), endDate: formatDate(newEnd) };
+        const tasksToUpdate: Task[] = [draggedTaskUpdate];
+
+        // If dragging a parent, move all children too.
+        if (type === 'drag' && originalTask.subtasks && originalTask.subtasks.length > 0) {
+            const dragDayDelta = dayDiff(originalStart, newStart);
             
-            if (newStart <= newEnd) {
-                const updatedMainTask = { ...originalTask, startDate: formatDate(newStart), endDate: formatDate(newEnd) };
-                const tasksToUpdate: Task[] = [updatedMainTask];
-
-                if (interaction.type === 'drag' && originalTask.subtasks?.length > 0) {
-                    const collectSubtasks = (tasks: Task[]) => {
-                        tasks.forEach(subtask => {
-                            const subStart = parseDate(subtask.startDate);
-                            if (!isNaN(subStart.getTime())) {
-                                const newSubStart = new Date(subStart);
-                                newSubStart.setUTCDate(newSubStart.getUTCDate() + dayDelta);
-                                const duration = dayDiff(parseDate(subtask.startDate), parseDate(subtask.endDate));
-                                const newSubEnd = new Date(newSubStart);
-                                newSubEnd.setUTCDate(newSubEnd.getUTCDate() + duration);
-                                tasksToUpdate.push({ ...subtask, startDate: formatDate(newSubStart), endDate: formatDate(newSubEnd) });
-                            }
-                            if (subtask.subtasks) collectSubtasks(subtask.subtasks);
-                        });
-                    };
-                    collectSubtasks(originalTask.subtasks);
-                }
-                
-                await updateMultipleTasks(taskInfo.projectId, tasksToUpdate);
-            }
+            const collectSubtasks = (tasks: Task[], delta: number) => {
+                tasks.forEach(subtask => {
+                    const originalSubStart = parseDate(subtask.startDate);
+                    const originalSubEnd = parseDate(subtask.endDate);
+                    if (!isNaN(originalSubStart.getTime()) && !isNaN(originalSubEnd.getTime())) {
+                        const newSubStart = new Date(originalSubStart);
+                        newSubStart.setUTCDate(newSubStart.getUTCDate() + delta);
+                        const duration = dayDiff(originalSubStart, originalSubEnd);
+                        const newSubEnd = new Date(newSubStart);
+                        newSubEnd.setUTCDate(newSubEnd.getUTCDate() + duration);
+                        tasksToUpdate.push({ ...subtask, startDate: formatDate(newSubStart), endDate: formatDate(newSubEnd) });
+                    }
+                    if (subtask.subtasks) collectSubtasks(subtask.subtasks, delta);
+                });
+            };
+            collectSubtasks(originalTask.subtasks, dragDayDelta);
         }
+        
+        await updateMultipleTasks(taskInfo.projectId, tasksToUpdate);
     }
+    
     setInteraction(null);
-  }, [dayWidth, updateMultipleTasks, allTasks, interaction]);
+  }, [dayWidth, updateMultipleTasks, allTasksWithMeta]);
+  
+  const handleCreateMouseUp = useCallback(async (e: MouseEvent) => {
+      if (!creatingState || !scrollContainerRef.current) return;
+      const { task, startX } = creatingState;
+      const timelineRect = scrollContainerRef.current.querySelector('.timeline-body')?.getBoundingClientRect();
+      if (!timelineRect) return;
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!interaction) return;
-      const currentOffsetPx = e.clientX - interaction.startX;
-      const { originalLeft, originalWidth } = interaction;
-      if (ganttContainerRef.current) {
-        const bar = ganttContainerRef.current.querySelector(`[data-task-id="${interaction.taskId}"]`) as HTMLElement;
-        if (bar) {
-          const snappedOffset = Math.round(currentOffsetPx / dayWidth) * dayWidth;
-          if (interaction.type === 'drag') {
-            bar.style.transform = `translateX(${snappedOffset}px)`;
-          } else if (interaction.type === 'resize-start') {
-             if (originalWidth - snappedOffset >= dayWidth) {
-                bar.style.width = `${originalWidth - snappedOffset}px`;
-                bar.style.transform = `translateX(${snappedOffset}px)`;
-             }
-          } else if (interaction.type === 'resize-end') {
-            if (originalWidth + snappedOffset >= dayWidth) bar.style.width = `${originalWidth + snappedOffset}px`;
-          }
-        }
+      if (task.type !== 'task') {
+        setCreatingState(null);
+        setTempCreatingBar(null);
+        return;
       }
-    };
 
-    if (interaction) {
-      document.body.style.cursor = interaction.type === 'drag' ? 'grabbing' : 'ew-resize';
-      document.body.style.userSelect = 'none';
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp, { once: true });
-    }
-    
-    return () => {
-      document.body.style.cursor = 'default';
-      document.body.style.userSelect = 'auto';
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [interaction, handleMouseUp, dayWidth]);
-  
-  const handleMouseDown = (e: React.MouseEvent, type: 'drag' | 'resize-start' | 'resize-end', task: Task) => {
-    e.preventDefault(); e.stopPropagation();
-    const taskStart = parseDate(task.startDate); const taskEnd = parseDate(task.endDate);
-    if (isNaN(taskStart.getTime()) || isNaN(taskEnd.getTime())) return;
-    const startOffset = dayDiff(chartStartDate, taskStart); const duration = dayDiff(taskStart, taskEnd) + 1;
-    setInteraction({ type, taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: startOffset * dayWidth, originalWidth: duration * dayWidth });
-  };
-  
-  const handleCreateMouseDown = (e: React.MouseEvent, task: GlobalGanttTask, taskTop: number) => {
-    e.preventDefault();
-    if (!scrollContainerRef.current) return;
-    const containerRect = scrollContainerRef.current.getBoundingClientRect();
-    const startX = e.clientX - containerRect.left + scrollContainerRef.current.scrollLeft;
-    
-    setCreatingState({ taskId: task.id, projectId: task.projectId, startX, taskTop });
-  };
+      const endX = e.clientX - timelineRect.left;
+      
+      const startDayIndex = Math.floor(Math.min(startX, endX) / dayWidth);
+      const endDayIndex = Math.floor(Math.max(startX, endX) / dayWidth);
+
+      const newStartDate = new Date(chartStartDate);
+      newStartDate.setUTCDate(newStartDate.getUTCDate() + startDayIndex);
+      const newEndDate = new Date(chartStartDate);
+      newEndDate.setUTCDate(newEndDate.getUTCDate() + endDayIndex);
+
+      const taskToUpdate = task.data;
+      if (taskToUpdate) {
+          await updateTask(taskToUpdate.projectId, { ...taskToUpdate, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) });
+      }
+      
+      setCreatingState(null);
+      setTempCreatingBar(null);
+  }, [creatingState, dayWidth, chartStartDate, updateTask]);
 
   useEffect(() => {
     if (!creatingState) return;
     const handleMouseMove = (e: MouseEvent) => {
-        if (!scrollContainerRef.current) return;
-        const containerRect = scrollContainerRef.current.getBoundingClientRect();
-        const currentX = e.clientX - containerRect.left + scrollContainerRef.current.scrollLeft;
-        const width = Math.max(dayWidth / 2, Math.abs(currentX - creatingState.startX));
-        const left = Math.min(currentX, creatingState.startX);
-        setTempCreatingBar({ left, width, top: creatingState.taskTop });
+      if (!scrollContainerRef.current) return;
+      const timelineRect = scrollContainerRef.current.querySelector('.timeline-body')?.getBoundingClientRect();
+      if (!timelineRect) return;
+
+      const currentX = e.clientX - timelineRect.left;
+      const width = Math.max(dayWidth / 2, Math.abs(currentX - creatingState.startX));
+      const left = Math.min(currentX, creatingState.startX);
+      setTempCreatingBar({ left, width });
     };
-
-    const handleMouseUp = async (e: MouseEvent) => {
-        if (!scrollContainerRef.current) return;
-        const containerRect = scrollContainerRef.current.getBoundingClientRect();
-        const endX = e.clientX - containerRect.left + scrollContainerRef.current.scrollLeft;
-        
-        const startDayIndex = Math.floor(Math.min(creatingState.startX, endX) / dayWidth);
-        const endDayIndex = Math.floor(Math.max(creatingState.startX, endX) / dayWidth);
-
-        const newStartDate = new Date(chartStartDate);
-        newStartDate.setUTCDate(newStartDate.getUTCDate() + startDayIndex);
-        const newEndDate = new Date(chartStartDate);
-        newEndDate.setUTCDate(newEndDate.getUTCDate() + endDayIndex);
-
-        const taskToUpdate = taskMap.get(creatingState.taskId);
-        if (taskToUpdate) {
-            await updateTask(creatingState.projectId, { ...taskToUpdate, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) });
-        }
-        
-        setCreatingState(null);
-        setTempCreatingBar(null);
-    };
-
+    
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp, { once: true });
+    window.addEventListener('mouseup', handleCreateMouseUp, { once: true });
     return () => {
         window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('mouseup', handleCreateMouseUp);
     };
-  }, [creatingState, dayWidth, chartStartDate, taskMap, updateTask]);
+  }, [creatingState, dayWidth, handleCreateMouseUp]);
+  
+  useEffect(() => {
+    const currentInteraction = interaction;
+    if (!currentInteraction) return;
 
+    const taskBarEl = taskBarRefs.current.get(currentInteraction.taskId);
+
+    const handleMouseMove = (e: MouseEvent) => {
+        if (!taskBarEl) return;
+        const currentOffsetPx = e.clientX - currentInteraction.startX;
+        const dayDelta = Math.round(currentOffsetPx / dayWidth);
+        const snappedOffset = dayDelta * dayWidth;
+        const { originalLeft, originalWidth } = currentInteraction;
+
+        if (currentInteraction.type === 'drag') {
+            taskBarEl.style.left = `${originalLeft + snappedOffset}px`;
+        } else if (currentInteraction.type === 'resize-start') {
+            const newLeft = originalLeft + snappedOffset;
+            const newWidth = originalWidth - snappedOffset;
+            if (newWidth >= dayWidth) {
+                taskBarEl.style.left = `${newLeft}px`;
+                taskBarEl.style.width = `${newWidth}px`;
+            }
+        } else if (currentInteraction.type === 'resize-end') {
+            const newWidth = originalWidth + snappedOffset;
+            if (newWidth >= dayWidth) {
+                taskBarEl.style.width = `${newWidth}px`;
+            }
+        }
+    };
+    
+    const onMouseUp = (e: MouseEvent) => {
+        handleMouseUp(e, currentInteraction);
+    };
+
+    document.body.style.cursor = currentInteraction.type === 'drag' ? 'grabbing' : 'ew-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', onMouseUp, { once: true });
+    
+    return () => {
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = 'auto';
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        if (taskBarEl) {
+            taskBarEl.style.left = `${currentInteraction.originalLeft}px`;
+            taskBarEl.style.width = `${currentInteraction.originalWidth}px`;
+        }
+    };
+  }, [interaction, handleMouseUp, dayWidth]);
+  
   const handleZoom = (direction: 'in' | 'out') => setDayWidth(prev => Math.max(10, Math.min(100, direction === 'in' ? prev * 1.5 : prev / 1.5)));
 
-  const handleIndent = async (task: GlobalGanttTask) => {
-    const taskIndex = allTasks.findIndex(t => t.id === task.id);
-    if (taskIndex <= 0) return;
-    const potentialParent = allTasks[taskIndex - 1];
-    if (potentialParent && potentialParent.projectId === task.projectId && potentialParent.level === task.level) {
-        await reparentTask(task.projectId, task.id, potentialParent.id);
+  const handleDelete = useCallback(async (projectId: string, taskId: string) => {
+    if (window.confirm('Are you sure you want to delete this task and all its subtasks?')) {
+        await deleteTask(projectId, taskId);
     }
-  };
+  }, [deleteTask]);
 
-  const handleOutdent = async (task: GlobalGanttTask) => {
-    const parentId = parentMap.get(task.id);
-    if (parentId === undefined || parentId === null) return;
-    const grandparentId = parentMap.get(parentId) ?? null;
-    await reparentTask(task.projectId, task.id, grandparentId);
-  };
-  
+  const handleIndent = useCallback(async (taskData: GlobalGanttTask, itemIndex: number) => {
+      if (itemIndex === 0) return;
+      const potentialParentItem = itemsToRender[itemIndex - 1];
+      const currentItem = itemsToRender[itemIndex];
+      
+      if (potentialParentItem.type === 'task' && currentItem.type === 'task' &&
+          potentialParentItem.data.projectId === taskData.projectId && 
+          potentialParentItem.level === currentItem.level) {
+          await reparentTask(taskData.projectId, taskData.id, potentialParentItem.data.id);
+      }
+  }, [itemsToRender, reparentTask]);
+
+  const handleOutdent = useCallback(async (taskData: GlobalGanttTask) => {
+      const parentId = parentMap.get(taskData.id);
+      if (parentId === null || parentId === undefined) return;
+      
+      const grandparentId = parentMap.get(parentId) ?? null;
+      await reparentTask(taskData.projectId, taskData.id, grandparentId);
+  }, [parentMap, reparentTask]);
+
+
   if (visibleProjects.length === 0) return <div className="text-center text-text-secondary p-8">No projects to display.</div>;
   
   return (
-    <div ref={downloadRef} className="flex flex-col bg-secondary rounded-lg">
+    <div ref={downloadRef} className="h-full flex flex-col bg-secondary rounded-lg">
         <div className="p-2 border-b border-border-color flex items-center justify-between">
             <div className="flex items-center space-x-1">
                 <button onClick={() => handleZoom('out')} className="p-1 rounded text-text-secondary hover:bg-highlight"><MinusIcon className="w-5 h-5" /></button>
@@ -346,101 +431,148 @@ const GlobalGanttView: React.FC = () => {
             </div>
              <button onClick={() => downloadImage(`global-gantt-chart.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
         </div>
-        <div className="flex-grow flex">
-            <div className="w-72 shrink-0 border-r border-border-color bg-primary z-10 flex flex-col">
-                <div className="h-16 flex items-center p-2 border-b border-border-color shrink-0 sticky top-0 bg-primary z-10"><h3 className="font-semibold">Task Name</h3></div>
-                <div>
-                    {projectHeaders && projectHeaders.map(header => (
-                        <div key={header.id}>
-                            <div className="h-10 flex items-center justify-between p-2 bg-highlight font-bold border-b border-t border-border-color text-text-primary group">
-                                {header.name}
-                                <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(header.id); }} className="opacity-0 group-hover:opacity-100 text-accent hover:text-blue-400"><PlusIcon className="w-5 h-5"/></button>
-                            </div>
-                            {addingTaskToProject === header.id && (
-                                <form onSubmit={handleNewTaskSubmit} onBlur={() => { if(!isNewTaskFormFocused) { setAddingTaskToProject(null); }}}>
-                                    <input 
-                                        autoFocus 
-                                        type="text" 
-                                        value={newTaskName} 
-                                        onChange={e => setNewTaskName(e.target.value)} 
-                                        onFocus={() => setIsNewTaskFormFocused(true)}
-                                        onBlur={() => {
-                                            setIsNewTaskFormFocused(false);
-                                            // A tiny delay to allow the submit to process before the input disappears
-                                            setTimeout(() => setAddingTaskToProject(null), 100);
-                                        }}
-                                        onKeyDown={e => {if (e.key === 'Escape') setAddingTaskToProject(null)}} 
-                                        placeholder="New task name..." 
-                                        className="w-full bg-secondary border border-accent rounded p-1 text-sm m-2 max-w-[calc(100%-1rem)]"
-                                    />
-                                </form>
-                            )}
-                            {allTasks.filter(t => t.projectId === header.id).map((task) => {
-                                const canIndent = allTasks.findIndex(t => t.id === task.id) > 0 && allTasks[allTasks.findIndex(t => t.id === task.id) - 1].projectId === task.projectId && allTasks[allTasks.findIndex(t => t.id === task.id) - 1].level === task.level;
-                                const canOutdent = parentMap.get(task.id) !== null;
-                                return (
-                                    <div key={task.id} className="h-10 flex items-center border-b border-border-color text-sm truncate group" style={{ paddingLeft: `${10 + task.level * 20}px` }}>
-                                        <div className={`w-2 h-2 rounded-full ${task.projectColor} mr-2 shrink-0`}></div>
-                                        <span className="flex-grow truncate">{task.name}</span>
-                                        <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
-                                            <button onClick={() => handleIndent(task)} disabled={!canIndent} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongRightIcon className="w-5 h-5" /></button>
-                                            <button onClick={() => handleOutdent(task)} disabled={!canOutdent} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongLeftIcon className="w-5 h-5" /></button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
-                </div>
-            </div>
-            <div ref={scrollContainerRef} className="flex-grow overflow-x-auto">
-                <div style={{ width: totalWidth, position: 'relative' }}>
-                    <div className="sticky top-0 z-10 bg-secondary"><div className="h-16 relative"><div className="flex absolute top-0 left-0 w-full h-8 border-b border-border-color">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div><div className="flex absolute bottom-0 left-0 w-full h-8 border-b border-border-color">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div></div></div>
-                    <div ref={ganttContainerRef} className="relative" style={{ height: (allTasks.length * 40) + (projectHeaders.length * 40) }}>
-                        {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
-                        {projectHeaders.map(h => <div key={`header-row-${h.id}`} className="absolute w-full h-10 border-b border-border-color bg-highlight/30" style={{ top: h.yPos }}></div>)}
-                        {(() => { const todayOffset = dayDiff(chartStartDate, new Date()) * dayWidth; if (todayOffset >= 0 && todayOffset <= totalWidth) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10" title="Today" style={{ left: todayOffset }}></div>; } return null; })()}
-                        
-                        {allTasks.map((task) => {
-                            const projectHeader = projectHeaders.find(h => h.id === task.projectId);
-                            const projectTaskIndex = allTasks.filter(t => t.projectId === task.projectId).findIndex(t => t.id === task.id);
-                            if(!projectHeader) return null;
-                            const taskTop = projectHeader.yPos + 40 + (projectTaskIndex * 40);
-                            const taskStart = parseDate(task.startDate);
 
-                            if (isNaN(taskStart.getTime())) {
-                                return (
-                                    <div key={`creator-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: taskTop, left: 0 }} onMouseDown={(e) => handleCreateMouseDown(e, task, taskTop)}>
-                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent/10 transition-colors flex items-center justify-center cursor-cell">
-                                            <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
-                                        </div>
-                                    </div>
-                                );
-                            }
-
-                            const startOffset = dayDiff(chartStartDate, taskStart);
-                            const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
-                            const left = startOffset * dayWidth;
-                            const width = duration * dayWidth;
-                            const isInteracting = interaction?.taskId === task.id;
-                            const containerStyles: React.CSSProperties = { top: `${taskTop}px`, left: `${left}px`, width: `${width}px`, zIndex: isInteracting ? 10 : 1, transition: isInteracting ? 'none' : 'all 0.2s ease' };
-                            
-                            return (
-                                <div key={task.id} data-task-id={task.id} className="absolute h-10 flex items-center group" style={containerStyles}>
-                                    <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${task.projectColor} ${task.completed ? 'opacity-50' : ''}`} onMouseDown={(e) => handleMouseDown(e, 'drag', task)}>
-                                        <span className="truncate pointer-events-none">{task.name}</span>
-                                    </div>
-                                    <div onMouseDown={(e) => handleMouseDown(e, 'resize-start', task)} className="absolute -left-2 top-0 w-4 h-10 cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                    <div onMouseDown={(e) => handleMouseDown(e, 'resize-end', task)} className="absolute -right-2 top-0 w-4 h-10 cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                </div>
-                            );
-                        })}
-                        {tempCreatingBar && (
-                            <div className="absolute h-10 flex items-center pointer-events-none" style={{...tempCreatingBar}}>
-                                <div className="h-7 w-full rounded-md bg-accent/50"/>
-                            </div>
-                        )}
+        <div ref={scrollContainerRef} className="flex-grow overflow-auto">
+            <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
+                {/* Sticky Header */}
+                <div className="sticky top-0 z-20 h-16 bg-secondary flex">
+                    <div className="w-72 shrink-0 sticky left-0 z-10 bg-primary border-r border-b border-border-color flex items-center p-2">
+                        <h3 className="font-semibold">Task Name</h3>
                     </div>
+                    <div className="flex-grow relative border-b border-border-color">
+                        <div className="absolute top-0 left-0 w-full h-8 flex">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div>
+                        <div className="absolute bottom-0 left-0 w-full h-8 flex">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div>
+                    </div>
+                </div>
+
+                {/* Body */}
+                <div className="relative timeline-body">
+                     {/* Vertical Grid Lines & Weekend Highlights */}
+                    {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
+                    {/* Today Marker */}
+                    {(() => { const todayOffset = dayDiff(chartStartDate, new Date()); if (todayOffset >= 0 && todayOffset < totalDays) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10" title="Today" style={{ left: todayOffset * dayWidth }}></div>; } return null; })()}
+                    
+                    {itemsToRender.map((item, index) => {
+                        const isGroup = item.type === 'group';
+                        const isProject = item.type === 'project';
+                        const isTask = item.type === 'task';
+                        const data = item.data;
+                        const rowHeight = 40;
+                        const top = index * rowHeight;
+
+                        let canIndent = false;
+                        let canOutdent = false;
+                        if (isTask) {
+                            if (index > 0) {
+                                const potentialParentItem = itemsToRender[index - 1];
+                                // FIX: Add type assertion to 'data' to ensure 'projectId' is accessible for comparison.
+                                if (potentialParentItem.type === 'task' && potentialParentItem.data.projectId === (data as GlobalGanttTask).projectId && potentialParentItem.level === item.level) {
+                                    canIndent = true;
+                                }
+                            }
+                            canOutdent = parentMap.get(data.id) !== null;
+                        }
+                        
+                        return (
+                            <div key={item.type + '-' + data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                {/* Task Name Column (Sticky) */}
+                                <div className={`w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color 
+                                    ${isGroup ? 'bg-secondary font-bold text-text-secondary' : ''}
+                                    ${isProject ? 'bg-highlight font-bold' : 'bg-primary'}
+                                    ${isTask ? 'bg-primary' : ''}
+                                `}>
+                                    {isGroup && (
+                                        <div className="flex items-center w-full">
+                                            <button onClick={() => toggleGroupCollapse(data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
+                                                <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedGroups.has(data.id) ? 'rotate-90' : ''}`} />
+                                            </button>
+                                            <FolderIcon className="w-5 h-5 mr-2" />
+                                            <span className="truncate">{data.name}</span>
+                                        </div>
+                                    )}
+                                    {isProject && (
+                                        <div className="flex items-center justify-between w-full group" style={{ paddingLeft: '1rem' }}>
+                                            <div className="flex items-center truncate">
+                                                <button onClick={() => toggleProjectCollapse(data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
+                                                    <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedProjects.has(data.id) ? 'rotate-90' : ''}`} />
+                                                </button>
+                                                <span className="truncate">{data.name}</span>
+                                            </div>
+                                            <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(data.id); }} className="opacity-0 group-hover:opacity-100 text-accent hover:text-blue-400 p-1"><PlusIcon className="w-5 h-5"/></button>
+                                        </div>
+                                    )}
+                                    {isTask && (
+                                        data.id.startsWith('new-task-form') ? (
+                                            <form onSubmit={handleNewTaskSubmit} className="w-full" style={{ paddingLeft: '1.5rem' }}>
+                                                <input
+                                                    type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
+                                                    onBlur={() => { if (newTaskName.trim() === '') setAddingTaskToProject(null); }}
+                                                    onKeyDown={e => { if (e.key === 'Escape') { setNewTaskName(''); setAddingTaskToProject(null); } }}
+                                                    placeholder="New task..." autoFocus
+                                                    className="w-full bg-secondary border border-accent rounded p-1 text-sm"
+                                                />
+                                            </form>
+                                        ) : (
+                                            <div className="flex items-center group w-full" style={{ paddingLeft: '1.5rem' }}>
+                                                <div className="flex-grow truncate text-sm" style={{ paddingLeft: `${item.level * 20}px` }}>
+                                                  {data.name}
+                                                </div>
+                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {/* FIX: Add type assertions to 'data' in handlers to satisfy TypeScript's strict checks on the union type. */}
+                                                    <button onClick={() => handleIndent(data as GlobalGanttTask, index)} disabled={!canIndent} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongRightIcon className="w-5 h-5" /></button>
+                                                    <button onClick={() => handleOutdent(data as GlobalGanttTask)} disabled={!canOutdent} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongLeftIcon className="w-5 h-5" /></button>
+                                                    <button onClick={() => handleDelete((data as GlobalGanttTask).projectId, data.id)} title="Delete Task" className="p-1 text-red-500 hover:text-red-400"><TrashIcon className="w-5 h-5" /></button>
+                                                </div>
+                                            </div>
+                                        )
+                                    )}
+                                </div>
+                                {/* Timeline Column (Scrollable) */}
+                                <div className="flex-grow h-full relative border-b border-border-color">
+                                    {(isProject || isGroup) && (
+                                        <div className="w-full h-px bg-border-color absolute top-1/2"></div>
+                                    )}
+                                    {isTask && !data.id.startsWith('new-task-form') && (() => {
+                                        const task = data as GlobalGanttTask;
+                                        const taskStart = parseDate(task.startDate);
+                                        if (isNaN(taskStart.getTime())) {
+                                            return (
+                                                <div className="absolute inset-0 group/creator cursor-cell" onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: item as { type: 'task', data: GlobalGanttTask, level: number }, startX: e.clientX - timelineRect.left }); }}>
+                                                    <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent/10 transition-colors flex items-center justify-center">
+                                                        <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+
+                                        const startOffset = dayDiff(chartStartDate, taskStart);
+                                        const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
+                                        const left = startOffset * dayWidth;
+                                        const width = duration * dayWidth;
+
+                                        return (
+                                            <div 
+                                                ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }}
+                                                data-task-id={task.id} 
+                                                className="absolute h-7 top-1/2 -translate-y-1/2 group" 
+                                                style={{ left: `${left}px`, width: `${width}px`, zIndex: interaction?.taskId === task.id ? 20 : 1 }}
+                                                onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }}>
+                                                <div title={`${task.name}\n${task.startDate} to ${task.endDate}`} className={`h-full w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${task.completed ? 'bg-gray-600' : task.projectColor} ${task.completed ? 'opacity-50' : ''}`}>
+                                                    {task.imageUrl && (<img src={task.imageUrl} alt={task.name} className="w-5 h-5 rounded-full object-cover mr-2 shrink-0"/>)}
+                                                    <span className="truncate pointer-events-none">{task.name}</span>
+                                                </div>
+                                                <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }} className="absolute -left-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                                <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }} className="absolute -right-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {creatingState && tempCreatingBar && (
+                        <div className="absolute h-7 top-1/2 -translate-y-1/2 pointer-events-none bg-accent/50 rounded-md" style={{ ...tempCreatingBar, top: `${itemsToRender.findIndex(i => i.data.id === creatingState.task.data.id) * 40 + 6}px` }}></div>
+                    )}
                 </div>
             </div>
         </div>

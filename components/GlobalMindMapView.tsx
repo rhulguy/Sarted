@@ -34,6 +34,11 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
     const newNodeInputRef = useRef<HTMLInputElement>(null);
     const isSubmittingRef = useRef(false);
     const lastMousePos = useRef({ x: 0, y: 0 });
+    const viewStateRef = useRef(viewBox);
+
+    useEffect(() => {
+        viewStateRef.current = viewBox;
+    }, [viewBox]);
 
     useEffect(() => {
         if (addingToNode) {
@@ -87,8 +92,11 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
 
         return { nodes: flattenedNodes, links: flattenedLinks };
     }, [visibleProjects, groupColorMap]);
+    
+    const projectIdsKey = useMemo(() => visibleProjects.map(p => p.id).sort().join(','), [visibleProjects]);
 
     useEffect(() => {
+        // This effect only resets the view when projects are added/removed.
         if (svgRef.current && nodes.length > 0) {
             const { width, height } = svgRef.current.getBoundingClientRect();
             if (width > 0 && height > 0) {
@@ -97,7 +105,7 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         }
         setAddingToNode(null);
         setEditingNode(null);
-    }, [visibleProjects]);
+    }, [projectIdsKey]);
 
     const handleNewNodeCommit = async () => {
         if (isSubmittingRef.current || !addingToNode) return;
@@ -152,10 +160,11 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         if (!isPanning) return;
         const dx = e.clientX - lastMousePos.current.x;
         const dy = e.clientY - lastMousePos.current.y;
-        const scale = viewBox.w / (svgRef.current?.clientWidth || 1);
+        const scale = viewStateRef.current.w / (svgRef.current?.clientWidth || 1);
         setViewBox(vb => ({ ...vb, x: vb.x - dx * scale, y: vb.y - dy * scale }));
         lastMousePos.current = { x: e.clientX, y: e.clientY };
-    }, [isPanning, viewBox.w]);
+    }, [isPanning]);
+    
     const handleWheel = useCallback((e: React.WheelEvent) => {
         e.preventDefault();
         const svg = svgRef.current; if (!svg) return;
@@ -163,11 +172,12 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         const { clientX, clientY, deltaY } = e;
         const rect = svg.getBoundingClientRect();
         const mouseX = clientX - rect.left; const mouseY = clientY - rect.top;
-        const [svgX, svgY] = [(mouseX / rect.width) * viewBox.w + viewBox.x, (mouseY / rect.height) * viewBox.h + viewBox.y];
+        const currentVB = viewStateRef.current;
+        const [svgX, svgY] = [(mouseX / rect.width) * currentVB.w + currentVB.x, (mouseY / rect.height) * currentVB.h + currentVB.y];
         const zoom = deltaY < 0 ? 1 / zoomFactor : zoomFactor;
-        const newW = viewBox.w * zoom; const newH = viewBox.h * zoom;
+        const newW = currentVB.w * zoom; const newH = currentVB.h * zoom;
         setViewBox({ w: newW, h: newH, x: svgX - (mouseX / rect.width) * newW, y: svgY - (mouseY / rect.height) * newH });
-    }, [viewBox]);
+    }, []);
     
     const tailwindColorToHex = (c: string) => ({ 'bg-red-500': '#EF4444', 'bg-orange-500': '#F97316', 'bg-yellow-500': '#EAB308', 'bg-green-500': '#22C55E', 'bg-teal-500': '#14B8A6', 'bg-blue-500': '#3B82F6', 'bg-indigo-500': '#6366F1', 'bg-purple-500': '#8B5CF6', 'bg-pink-500': '#EC4899', 'bg-gray-500': '#6B7280', 'bg-accent-placeholder': '#58A6FF' }[c] || '#21262D');
 

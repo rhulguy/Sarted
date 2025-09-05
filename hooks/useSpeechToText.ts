@@ -76,13 +76,18 @@ interface UseSpeechToTextOptions {
 export const useSpeechToText = ({ onTranscriptFinalized }: UseSpeechToTextOptions) => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
-  // The ref is now correctly typed with the SpeechRecognition instance interface.
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const finalTranscriptRef = useRef(''); // Ref to hold the final transcript state reliably
+
+  // Update ref whenever transcript state changes
+  useEffect(() => {
+    finalTranscriptRef.current = transcript;
+  }, [transcript]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
-      // The onend event will handle cleanup
+      // onend will handle finalization and cleanup
     }
   }, []);
 
@@ -116,21 +121,19 @@ export const useSpeechToText = ({ onTranscriptFinalized }: UseSpeechToTextOption
       const fullTranscript = accumulatedTranscript + interimTranscript;
       setTranscript(fullTranscript);
 
-      // Check for the "next" keyword to finalize a task and continue
       if (fullTranscript.toLowerCase().endsWith('next')) {
         const taskName = fullTranscript.slice(0, -4).trim();
         if (taskName) {
           onTranscriptFinalized(taskName);
         }
-        // Reset for the next utterance
         accumulatedTranscript = '';
         setTranscript('');
       }
     };
 
     recognition.onend = () => {
-      // Finalize any remaining transcript when listening stops
-      const finalTranscript = accumulatedTranscript.trim();
+      // Use the ref to get the absolute latest transcript value, avoiding stale closures.
+      const finalTranscript = finalTranscriptRef.current.trim();
       if (finalTranscript) {
         onTranscriptFinalized(finalTranscript);
       }
@@ -157,11 +160,9 @@ export const useSpeechToText = ({ onTranscriptFinalized }: UseSpeechToTextOption
                 errorMessage = 'Could not capture audio. Please check your microphone.';
                 break;
             case 'aborted':
-                // This can happen if the user stops it manually or due to no-speech timeout.
-                // We'll provide a subtle log instead of an alert for a better UX.
                 console.warn('Speech recognition aborted.');
                 setIsListening(false);
-                return; // Exit without showing a disruptive alert
+                return;
         }
         alert(errorMessage);
         setIsListening(false);
@@ -171,7 +172,6 @@ export const useSpeechToText = ({ onTranscriptFinalized }: UseSpeechToTextOption
     setIsListening(true);
   }, [isListening, onTranscriptFinalized]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopListening();
