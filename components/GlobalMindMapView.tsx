@@ -64,13 +64,13 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
 
         const projectNodes = visibleProjects.map(p => ({
             id: p.id, name: p.name, isProject: true, isCompleted: false,
-            color: groupColorMap.get(p.groupId) || 'bg-gray-500', projectId: p.id,
+            color: groupColorMap.get(p.groupId) || 'bg-text-secondary', projectId: p.id,
             children: buildTaskHierarchy(p.tasks || [], p.id),
         }));
 
         const rootNode: EditableBaseMindMapNode = {
             id: 'global-root', name: 'All Projects', isProject: true, isCompleted: false,
-            color: 'bg-accent-placeholder', children: projectNodes,
+            color: 'bg-accent-blue', children: projectNodes,
         };
         
         const laidOutRoot = layoutGlobalTree(rootNode);
@@ -179,27 +179,35 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         setViewBox({ w: newW, h: newH, x: svgX - (mouseX / rect.width) * newW, y: svgY - (mouseY / rect.height) * newH });
     }, []);
     
-    const tailwindColorToHex = (c: string) => ({ 'bg-red-500': '#EF4444', 'bg-orange-500': '#F97316', 'bg-yellow-500': '#EAB308', 'bg-green-500': '#22C55E', 'bg-teal-500': '#14B8A6', 'bg-blue-500': '#3B82F6', 'bg-indigo-500': '#6366F1', 'bg-purple-500': '#8B5CF6', 'bg-pink-500': '#EC4899', 'bg-gray-500': '#6B7280', 'bg-accent-placeholder': '#58A6FF' }[c] || '#21262D');
+    const getHexColor = (tailwindClass: string) => {
+      const colorMap: { [key: string]: string } = {
+        'bg-brand-teal': '#14B8A6', 'bg-brand-orange': '#F97316', 'bg-brand-purple': '#8B5CF6',
+        'bg-brand-pink': '#EC4899', 'bg-accent-blue': '#3B82F6', 'bg-accent-green': '#10B981',
+        'bg-yellow-500': '#FBBF24', 'bg-red-500': '#EF4444', 'bg-indigo-500': '#6366F1',
+        'bg-text-secondary': '#6B7280'
+      };
+      return colorMap[tailwindClass] || '#6B7280'; // Default to secondary text color
+    };
 
     return (
-        <div className="w-full h-full relative bg-secondary rounded-lg">
+        <div className="w-full h-full relative bg-app-background rounded-xl border border-border-color">
              <header className="absolute top-0 left-0 p-4 z-10">
                 <h1 className="text-2xl font-bold text-text-primary">Global Mind Map</h1>
                 <p className="text-sm text-text-secondary">A unified view of all your projects.</p>
-                <button onClick={onNewProject} className="mt-2 flex items-center space-x-2 px-3 py-1.5 bg-accent text-white rounded-lg hover:bg-blue-500"><PlusIcon className="w-4 h-4" /><span>Add Project</span></button>
+                <button onClick={onNewProject} className="mt-2 flex items-center space-x-2 px-3 py-1.5 bg-accent-blue text-white rounded-lg hover:opacity-90"><PlusIcon className="w-4 h-4" /><span>Add Project</span></button>
             </header>
             <svg ref={svgRef} className="w-full h-full cursor-grab" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onWheel={handleWheel}>
-                <g>{links.map((link, i) => <path key={`link-${i}`} d={`M ${link.source.x} ${link.source.y} L ${link.target.x} ${link.target.y}`} stroke="#30363D" strokeWidth="2" fill="none" />)}</g>
+                <g>{links.map((link, i) => <path key={`link-${i}`} d={`M ${link.source.x} ${link.source.y} L ${link.target.x} ${link.target.y}`} stroke="#E5E7EB" strokeWidth="2" fill="none" />)}</g>
                 <g>{nodes.map(node => (
                     <g key={node.id} transform={`translate(${node.x}, ${node.y})`} className="cursor-pointer group" onDoubleClick={(e) => handleAddClick(e, node)} onMouseDown={(e) => e.stopPropagation()}>
-                        <rect x={-NODE_WIDTH / 2} y={-NODE_HEIGHT / 2} width={NODE_WIDTH} height={NODE_HEIGHT} rx={20} fill={node.isProject ? tailwindColorToHex(node.color!) : "#21262D"} stroke={"#8B949E"} strokeWidth="1" />
-                        <text x={0} y={node.task?.startDate ? -8 : 0} textAnchor="middle" dominantBaseline="middle" fill="#C9D1D9" fontSize="14" fontWeight={node.isProject ? "bold" : "normal"} style={{ pointerEvents: 'none', userSelect: 'none', textDecoration: node.isCompleted ? 'line-through' : 'none', opacity: node.isCompleted ? 0.6 : 1, }}>{node.name.length > 25 ? `${node.name.slice(0, 24)}…` : node.name}</text>
-                        {node.task?.startDate && <text x={0} y={15} textAnchor="middle" dominantBaseline="middle" fill="#8B949E" fontSize="11">{node.task.startDate} → {node.task.endDate}</text>}
+                        <rect x={-NODE_WIDTH / 2} y={-NODE_HEIGHT / 2} width={NODE_WIDTH} height={NODE_HEIGHT} rx={20} fill={node.isProject ? getHexColor(node.color!) : "#FFFFFF"} stroke={"#E5E7EB"} strokeWidth="1" />
+                        <text x={0} y={node.task?.startDate ? -8 : 0} textAnchor="middle" dominantBaseline="middle" fill={node.isProject ? "#FFFFFF" : "#1F2937"} fontSize="14" fontWeight={node.isProject ? "bold" : "normal"} style={{ pointerEvents: 'none', userSelect: 'none', textDecoration: node.isCompleted ? 'line-through' : 'none', opacity: node.isCompleted ? 0.6 : 1, }}>{node.name.length > 25 ? `${node.name.slice(0, 24)}…` : node.name}</text>
+                        {node.task?.startDate && <text x={0} y={15} textAnchor="middle" dominantBaseline="middle" fill={node.isProject ? "#FFFFFF" : "#6B7280"} fontSize="11">{node.task.startDate} → {node.task.endDate}</text>}
                         <g className="opacity-0 group-hover:opacity-100 transition-opacity" transform={`translate(95, -12)`}>
-                            <g onClick={(e) => handleAddClick(e, node)} className="cursor-pointer"><rect x="0" y="0" width="24" height="24" rx="4" fill="#30363D" /><PlusIcon x="4" y="4" className="w-4 h-4 text-text-secondary" /></g>
+                            <g onClick={(e) => handleAddClick(e, node)} className="cursor-pointer"><rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" /><PlusIcon x="4" y="4" className="w-4 h-4 text-text-secondary" /></g>
                             {!node.isProject && (<>
-                                <g onClick={(e) => { e.stopPropagation(); setEditingNode(node); }} transform={`translate(28, 0)`}><rect x="0" y="0" width="24" height="24" rx="4" fill="#30363D" /><EditIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/></g>
-                                <g onClick={(e) => { e.stopPropagation(); handleGenerateImage(node); }} transform={`translate(56, 0)`}>{generatingImageFor === node.id ? (<foreignObject x="0" y="0" width="24" height="24"><Spinner /></foreignObject>) : (<><rect x="0" y="0" width="24" height="24" rx="4" fill="#30363D" /><ImageIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/></>)}</g>
+                                <g onClick={(e) => { e.stopPropagation(); setEditingNode(node); }} transform={`translate(28, 0)`}><rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" /><EditIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/></g>
+                                <g onClick={(e) => { e.stopPropagation(); handleGenerateImage(node); }} transform={`translate(56, 0)`}>{generatingImageFor === node.id ? (<foreignObject x="0" y="0" width="24" height="24"><Spinner /></foreignObject>) : (<><rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" /><ImageIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/></>)}</g>
                             </>)}
                         </g>
                     </g>
@@ -207,16 +215,16 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
                 {addingToNode && (
                     <foreignObject x={addingToNode.x + NODE_WIDTH/2 + 5} y={addingToNode.y - 25} width={NODE_WIDTH + 20} height={100}>
                         <form onSubmit={async (e) => { e.preventDefault(); await handleNewNodeCommit(); }}>
-                            <input ref={newNodeInputRef} type="text" value={newNodeName} onChange={e => setNewNodeName(e.target.value)} placeholder={addingToNode.isProject ? "New task..." : "New sub-task..."} className="w-full bg-highlight border border-accent rounded-md p-2 text-sm focus:outline-none" onClick={e => e.stopPropagation()} onBlur={handleNewNodeCommit} onKeyDown={(e) => { if (e.key === 'Escape') setAddingToNode(null); }} />
-                            <div className="flex gap-1 mt-1"><input type="date" aria-label="Start Date" value={newNodeStartDate} onChange={(e) => setNewNodeStartDate(e.target.value)} max={newNodeEndDate} className="w-full bg-highlight border rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent" /><input type="date" aria-label="End Date" value={newNodeEndDate} onChange={(e) => setNewNodeEndDate(e.target.value)} min={newNodeStartDate} className="w-full bg-highlight border rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent" /></div>
+                            <input ref={newNodeInputRef} type="text" value={newNodeName} onChange={e => setNewNodeName(e.target.value)} placeholder={addingToNode.isProject ? "New task..." : "New sub-task..."} className="w-full bg-card-background border border-accent-blue rounded-md p-2 text-sm focus:outline-none" onClick={e => e.stopPropagation()} onBlur={handleNewNodeCommit} onKeyDown={(e) => { if (e.key === 'Escape') setAddingToNode(null); }} />
+                            <div className="flex gap-1 mt-1"><input type="date" aria-label="Start Date" value={newNodeStartDate} onChange={(e) => setNewNodeStartDate(e.target.value)} max={newNodeEndDate} className="w-full bg-card-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue" /><input type="date" aria-label="End Date" value={newNodeEndDate} onChange={(e) => setNewNodeEndDate(e.target.value)} min={newNodeStartDate} className="w-full bg-card-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue" /></div>
                         </form>
                     </foreignObject>
                 )}
                 {editingNode && editingNode.task && (
                     <foreignObject x={editingNode.x - NODE_WIDTH/2} y={editingNode.y - NODE_HEIGHT/2} width={NODE_WIDTH} height={NODE_HEIGHT}>
-                        <div className="w-full h-full bg-highlight/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-2 gap-1" onClick={(e) => e.stopPropagation()}>
-                            <input type="date" aria-label="Start Date" defaultValue={editingNode.task.startDate} onBlur={(e) => handleDateUpdate(editingNode, { startDate: e.target.value })} onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}} className="w-full bg-secondary border rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent" />
-                            <input type="date" aria-label="End Date" defaultValue={editingNode.task.endDate} onBlur={(e) => handleDateUpdate(editingNode, { endDate: e.target.value })} onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}} min={editingNode.task.startDate} className="w-full bg-secondary border rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent" />
+                        <div className="w-full h-full bg-card-background/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-2 gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input type="date" aria-label="Start Date" defaultValue={editingNode.task.startDate} onBlur={(e) => handleDateUpdate(editingNode, { startDate: e.target.value })} onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}} className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue" />
+                            <input type="date" aria-label="End Date" defaultValue={editingNode.task.endDate} onBlur={(e) => handleDateUpdate(editingNode, { endDate: e.target.value })} onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}} min={editingNode.task.startDate} className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue" />
                         </div>
                     </foreignObject>
                 )}

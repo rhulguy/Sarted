@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Task } from '../types';
-import { PlusIcon, CogIcon, ArchiveBoxIcon, ArrowUturnLeftIcon, ChevronRightIcon } from './IconComponents';
+import { PlusIcon, TagIcon, ArchiveBoxIcon, ArrowUturnLeftIcon, ChevronRightIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
 import { useInbox } from '../contexts/InboxContext';
 
@@ -43,7 +43,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
             <div className="flex justify-between items-center mb-2 px-2">
                 <h2 className="text-lg font-semibold text-text-primary">Projects</h2>
                 <div className="flex items-center space-x-2">
-                    <button onClick={onEditGroups} title="Edit Project Groups" className="text-text-secondary hover:text-text-primary p-1"><CogIcon className="w-5 h-5"/></button>
+                    <button onClick={onEditGroups} title="Manage Project Groups" className="text-text-secondary hover:text-text-primary p-1"><TagIcon className="w-5 h-5"/></button>
                 </div>
             </div>
 

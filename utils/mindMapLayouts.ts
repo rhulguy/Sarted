@@ -96,7 +96,8 @@ export const layoutGlobalTree = (root: BaseMindMapNode): LaidoutMindMapNode => {
 
     laidOutRoot.children = root.children.map((projectNode, i) => {
         const angle = i * angleStep;
-        const radius = RADIUS_STEP * 1.5; // Larger radius for projects
+        // FIX: Increased radius to prevent project trees from overlapping
+        const radius = RADIUS_STEP * 2.5; 
         const projectX = radius * Math.cos(angle - Math.PI / 2);
         const projectY = radius * Math.sin(angle - Math.PI / 2);
 

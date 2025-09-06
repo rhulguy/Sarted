@@ -115,34 +115,34 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <header className="flex flex-col md:flex-row items-center justify-between p-4 border-b border-border-color shrink-0 gap-4">
+    <div className="h-full flex flex-col p-4 md:p-6">
+      <header className="flex flex-col md:flex-row items-center justify-between pb-6 shrink-0 gap-4">
         <h1 className="text-2xl md:text-3xl font-bold text-text-primary">Habit Tracker</h1>
         <div className="flex items-center space-x-2">
-          <button onClick={() => changeWeek(-1)} aria-label="Previous week" className="p-1 rounded text-text-secondary hover:bg-highlight"><ChevronLeftIcon className="w-5 h-5"/></button>
+          <button onClick={() => changeWeek(-1)} aria-label="Previous week" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button>
           <span className="text-base md:text-lg font-semibold w-64 text-center">
               {weekStartDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })}
               {' - '}
               {weekEndDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
           </span>
-          <button onClick={() => changeWeek(1)} aria-label="Next week" className="p-1 rounded text-text-secondary hover:bg-highlight"><ChevronRightIcon className="w-5 h-5"/></button>
+          <button onClick={() => changeWeek(1)} aria-label="Next week" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button>
         </div>
         <button 
           onClick={onNewHabit}
-          className="flex items-center space-x-2 px-4 py-2 bg-accent text-white rounded-lg hover:bg-blue-500 transition-colors duration-200"
+          className="flex items-center space-x-2 px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90 transition-colors duration-200"
         >
           <PlusIcon className="w-5 h-5" />
           <span className="hidden md:inline">New Habit</span>
         </button>
       </header>
       
-      <div className="flex-grow overflow-auto p-2 md:p-6">
+      <div className="flex-grow overflow-auto bg-card-background rounded-2xl border border-border-color shadow-card">
         <div className="overflow-x-auto">
             <div className="min-w-[700px]">
                 <div className="grid grid-cols-[2fr_repeat(7,1fr)] gap-2">
-                <div className="font-semibold text-text-secondary sticky left-0 bg-primary py-2 z-10 pl-2">Habit</div>
+                <div className="font-semibold text-text-secondary sticky left-0 bg-card-background py-2 z-10 pl-2">Habit</div>
                 {weekDates.map(date => (
-                    <div key={date.toISOString()} className="font-semibold text-text-secondary text-center sticky top-0 bg-primary py-2 z-10">
+                    <div key={date.toISOString()} className="font-semibold text-text-secondary text-center sticky top-0 bg-card-background py-2 z-10">
                     <div>{date.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })}</div>
                     <div className="text-2xl">{date.getUTCDate()}</div>
                     </div>
@@ -157,13 +157,13 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
 
                 {habits.map(habit => (
                     <React.Fragment key={habit.id}>
-                    <div className="flex items-center space-x-3 group pr-4 min-h-[4rem] sticky left-0 bg-primary">
+                    <div className="flex items-center space-x-3 group pr-4 min-h-[4rem] sticky left-0 bg-card-background">
                         <div className={`w-2 h-8 rounded shrink-0 ${habit.color}`}></div>
                         <div className="flex-grow">
                             <p className="font-semibold text-text-primary">{habit.name}</p>
                             <p className="text-sm text-text-secondary">{habitStreaks.get(habit.id) || 0} day streak</p>
                         </div>
-                        <button onClick={() => deleteHabit(habit.id)} title={`Delete habit: ${habit.name}`} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => deleteHabit(habit.id)} title={`Delete habit: ${habit.name}`} className="text-accent-red opacity-0 group-hover:opacity-100 transition-opacity">
                             <TrashIcon className="w-4 h-4" />
                         </button>
                     </div>
@@ -178,7 +178,7 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
                                     <button 
                                         onClick={() => handleToggleCompletion(habit, date)}
                                         className={`w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center transition-colors
-                                            ${isCompleted ? `${habit.color} text-white` : 'bg-highlight hover:bg-border-color'}`}
+                                            ${isCompleted ? `${habit.color} text-white` : 'bg-app-background hover:bg-border-color'}`}
                                         aria-label={`Mark ${habit.name} as ${isCompleted ? 'incomplete' : 'complete'} for ${dateString}`}
                                     >
                                         {isCompleted && <CheckCircleIcon className="w-7 h-7" />}

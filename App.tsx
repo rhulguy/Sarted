@@ -17,11 +17,15 @@ import WeeklyReviewModal from './components/WeeklyReviewModal';
 import { useWeeklyReview } from './contexts/WeeklyReviewContext';
 import GlobalCalendar from './components/GlobalCalendar';
 import GlobalMindMapView from './components/GlobalMindMapView';
-import { useAuth } from './contexts/AuthContext';
+// FIX: Import User type for the inlined MyAccountView component.
+import { useAuth, User } from './contexts/AuthContext';
 import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
+// MyAccountView will be inlined in this file
+// import MyAccountView from './components/MyAccountView';
 import { Resource, Project, ProjectGroup } from './types';
-import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon } from './components/IconComponents';
+// FIX: Import EditIcon for the inlined MyAccountView component.
+import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
 
@@ -384,9 +388,117 @@ const ProjectCard: React.FC<{ project: Project, onClick: () => void, onArchive: 
     );
 };
 
+// FIX: Inlined MyAccountView to avoid creating a new file, respecting constraints.
+const MyAccountView: React.FC = () => {
+    const { user, updateUserProfile, deleteUserAccount, loading } = useAuth();
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [displayName, setDisplayName] = useState(user?.name || '');
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    useEffect(() => {
+        if (user) {
+            setDisplayName(user.name);
+        }
+    }, [user]);
+
+    const handleNameSave = async () => {
+        if (user && displayName.trim() && displayName.trim() !== user.name) {
+            await updateUserProfile({ name: displayName.trim() });
+        }
+        setIsEditingName(false);
+    };
+
+    const handleDeleteAccount = async () => {
+        if (user && window.confirm('Are you absolutely sure? This will permanently delete all your projects, tasks, habits, and resources. This action cannot be undone.')) {
+            setIsDeleting(true);
+            try {
+                await deleteUserAccount();
+                // The AuthProvider will handle logging the user out upon successful deletion.
+            } catch (error) {
+                console.error("Failed to delete account:", error);
+                alert("Could not delete account. Please try again.");
+                setIsDeleting(false);
+            }
+        }
+    };
+
+    if (loading || !user) {
+        return (
+            <div className="h-full flex items-center justify-center">
+                <Spinner />
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-full flex flex-col p-4 md:p-6 lg:p-8">
+            <header className="mb-8">
+                <h1 className="text-3xl font-bold text-text-primary">My Account</h1>
+                <p className="text-text-secondary">Manage your profile and account settings.</p>
+            </header>
+
+            <div className="flex-grow overflow-y-auto max-w-3xl mx-auto w-full space-y-8">
+                {/* Profile Section */}
+                <div className="bg-card-background rounded-2xl shadow-card border border-border-color p-6">
+                    <h2 className="text-xl font-semibold mb-4 text-text-primary">Profile</h2>
+                    <div className="flex items-center space-x-6">
+                        <img src={user.picture || ''} alt="Profile" className="w-20 h-20 rounded-full" />
+                        <div className="flex-grow">
+                            <div className="flex items-center gap-4">
+                                {isEditingName ? (
+                                    <input
+                                        type="text"
+                                        value={displayName}
+                                        onChange={(e) => setDisplayName(e.target.value)}
+                                        onBlur={handleNameSave}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleNameSave(); if (e.key === 'Escape') setIsEditingName(false);}}
+                                        className="text-2xl font-bold bg-app-background border border-accent-blue rounded-lg px-2 py-1"
+                                        autoFocus
+                                    />
+                                ) : (
+                                    <h3 className="text-2xl font-bold text-text-primary">{user.name}</h3>
+                                )}
+                                <button onClick={() => setIsEditingName(!isEditingName)} className="text-text-secondary hover:text-accent-blue">
+                                    <EditIcon className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <p className="text-text-secondary">{user.email}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Plan Section */}
+                <div className="bg-card-background rounded-2xl shadow-card border border-border-color p-6">
+                     <h2 className="text-xl font-semibold mb-4 text-text-primary">Current Plan</h2>
+                     <div className="flex items-center justify-between">
+                        <p className="text-text-primary">You are currently on the <span className="font-bold text-brand-teal">{user.plan === 'free' ? 'Free Tier' : 'Paid Tier'}</span>.</p>
+                        <button className="px-4 py-2 bg-accent-blue text-white rounded-lg opacity-50 cursor-not-allowed" disabled>Upgrade Plan</button>
+                     </div>
+                </div>
+
+                {/* Danger Zone */}
+                <div className="bg-card-background rounded-2xl shadow-card border border-accent-red/50 p-6">
+                    <h2 className="text-xl font-semibold text-accent-red mb-2">Danger Zone</h2>
+                    <p className="text-text-secondary mb-4">
+                        Permanently delete your account and all associated data. This action is irreversible.
+                    </p>
+                    <button
+                        onClick={handleDeleteAccount}
+                        disabled={isDeleting}
+                        className="px-4 py-2 bg-accent-red text-white font-semibold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
+                    >
+                        {isDeleting && <Spinner />}
+                        {isDeleting ? 'Deleting...' : 'Delete My Account'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- App Component ---
-type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources';
+type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account';
 
 export default function App() {
   const { projects, selectedProject, selectedProjectId, selectProject } = useProject();
@@ -463,6 +575,8 @@ export default function App() {
         return <HabitTracker onNewHabit={() => setIsHabitModalOpen(true)} />;
       case 'resources':
         return <ResourceView onAddResource={() => setIsAddResourceModalOpen(true)} />;
+      case 'my-account':
+        return <MyAccountView />;
       case 'projects':
       default:
         if (selectedProject) {

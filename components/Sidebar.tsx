@@ -1,7 +1,7 @@
 import React from 'react';
-import { FolderIcon, TrendingUpIcon, InboxIcon, CalendarIcon, MindMapIcon, GanttIcon, BookmarkSquareIcon } from './IconComponents';
+import { FolderIcon, TrendingUpIcon, InboxIcon, CalendarIcon, MindMapIcon, GanttIcon, BookmarkSquareIcon, UserCircleIcon } from './IconComponents';
 
-type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources';
+type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account';
 
 interface SidebarProps {
   mainView: MainView;
@@ -21,6 +21,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMob
     { id: 'resources', name: 'Resources', icon: BookmarkSquareIcon },
     { id: 'projects', name: 'Projects', icon: FolderIcon },
     { id: 'habits', name: 'Habits', icon: TrendingUpIcon },
+    { id: 'my-account', name: 'My Account', icon: UserCircleIcon },
   ];
 
   const sidebarContent = (

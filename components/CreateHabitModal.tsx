@@ -50,8 +50,8 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({ isOpen, onClose }) 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-primary md:bg-black md:bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-secondary md:rounded-lg shadow-xl p-6 md:p-8 w-full h-full md:h-auto md:max-w-md transform transition-all flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card-background rounded-2xl shadow-soft p-6 md:p-8 w-full h-auto md:max-w-md transform transition-all flex flex-col">
         <div className="flex justify-between items-start mb-6">
           <h2 className="text-2xl font-bold text-text-primary">Create a New Habit</h2>
           <button onClick={onClose} className="text-text-secondary text-3xl hover:text-text-primary">&times;</button>
@@ -67,15 +67,15 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({ isOpen, onClose }) 
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Drink 8 glasses of water"
-                className="mt-1 block w-full bg-highlight border border-border-color rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-accent focus:border-accent"
+                className="mt-1 block w-full bg-app-background border border-border-color rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-accent-blue focus:border-accent-blue"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-text-secondary">Frequency</label>
-              <div className="mt-2 flex space-x-2 bg-highlight p-1 rounded-lg">
-                <button type="button" onClick={() => setFrequency('daily')} className={`flex-1 py-1 rounded-md text-sm ${frequency === 'daily' ? 'bg-accent text-white' : 'hover:bg-gray-700'}`}>Daily</button>
-                <button type="button" onClick={() => setFrequency('weekly')} className={`flex-1 py-1 rounded-md text-sm ${frequency === 'weekly' ? 'bg-accent text-white' : 'hover:bg-gray-700'}`}>Weekly</button>
+              <div className="mt-2 flex space-x-2 bg-app-background p-1 rounded-lg">
+                <button type="button" onClick={() => setFrequency('daily')} className={`flex-1 py-1 rounded-md text-sm ${frequency === 'daily' ? 'bg-accent-blue text-white' : 'hover:bg-border-color'}`}>Daily</button>
+                <button type="button" onClick={() => setFrequency('weekly')} className={`flex-1 py-1 rounded-md text-sm ${frequency === 'weekly' ? 'bg-accent-blue text-white' : 'hover:bg-border-color'}`}>Weekly</button>
               </div>
             </div>
 
@@ -88,7 +88,7 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({ isOpen, onClose }) 
                       key={day}
                       type="button"
                       onClick={() => handleDayToggle(index)}
-                      className={`p-2 rounded-md text-sm text-center border transition-colors ${daysOfWeek.includes(index) ? 'bg-accent text-white border-accent' : 'bg-highlight border-border-color hover:border-gray-500'}`}
+                      className={`p-2 rounded-md text-sm text-center border transition-colors ${daysOfWeek.includes(index) ? 'bg-accent-blue text-white border-accent-blue' : 'bg-app-background border-border-color hover:border-gray-400'}`}
                     >
                       {day}
                     </button>
@@ -105,7 +105,7 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({ isOpen, onClose }) 
                           key={c}
                           type="button"
                           onClick={() => setColor(c)}
-                          className={`w-full pt-[100%] relative rounded-full ${c} ${color === c ? 'ring-2 ring-offset-2 ring-offset-secondary ring-white' : ''}`}
+                          className={`w-full pt-[100%] relative rounded-full ${c} ${color === c ? 'ring-2 ring-offset-2 ring-offset-card-background ring-accent-blue' : ''}`}
                           aria-label={`Set color to ${c.split('-')[1]}`}
                       ></button>
                   ))}
@@ -114,10 +114,10 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({ isOpen, onClose }) 
           </div>
           
           <div className="mt-8 flex flex-col-reverse md:flex-row justify-end md:space-x-4 gap-2">
-            <button type="submit" disabled={!name.trim()} className="px-4 py-3 md:py-2 rounded-md text-white bg-accent hover:bg-blue-500 disabled:opacity-50 w-full md:w-auto">
+            <button type="submit" disabled={!name.trim()} className="px-4 py-3 md:py-2 rounded-lg text-white bg-accent-blue hover:opacity-90 disabled:opacity-50 w-full md:w-auto">
               Create Habit
             </button>
-            <button type="button" onClick={onClose} className="px-4 py-3 md:py-2 rounded-md text-text-primary bg-highlight hover:bg-gray-700 w-full md:w-auto">Cancel</button>
+            <button type="button" onClick={onClose} className="px-4 py-3 md:py-2 rounded-lg text-text-primary bg-app-background hover:bg-border-color w-full md:w-auto">Cancel</button>
           </div>
         </form>
       </div>
