@@ -25,7 +25,7 @@ import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 // import MyAccountView from './components/MyAccountView';
 import { Resource, Project, ProjectGroup, ProjectView } from './types';
 // FIX: Import EditIcon for the inlined MyAccountView component.
-import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon } from './components/IconComponents';
+import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
 
@@ -593,7 +593,11 @@ export default function App() {
   };
 
   if (authLoading) {
-    return <GlobalLoader />;
+    return (
+        <div className="fixed inset-0 bg-app-background flex items-center justify-center">
+            <SartedLogoIcon className="w-16 h-16 animate-pulse-subtle" />
+        </div>
+    );
   }
 
   return (

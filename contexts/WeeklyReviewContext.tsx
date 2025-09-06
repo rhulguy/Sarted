@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-// FIX: Removed unused v9 modular imports. v8 API is used via the 'db' service.
+import { doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore';
 
 interface WeeklyReviewContextType {
   shouldShowReview: boolean;
@@ -18,35 +18,30 @@ export const WeeklyReviewProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   useEffect(() => {
     if (user) {
-      // FIX: Use v8 namespaced API for document access and snapshots.
-      const settingsRef = db.doc(`users/${user.id}/settings/main`);
-      const unsubscribe = settingsRef.onSnapshot((docSnap) => {
-        if (docSnap.exists) {
+      const settingsRef = doc(db, `users/${user.id}/settings/main`);
+      const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+        if (docSnap.exists()) {
           const data = docSnap.data();
-          // FIX: In v8, a Timestamp is retrieved with .toDate()
-          const lastShownTimestamp = data?.weeklyReviewLastShown?.toDate();
-          if (lastShownTimestamp && (Date.now() - lastShownTimestamp.getTime() < ONE_WEEK_IN_MS)) {
+          const lastShownTimestamp = data?.weeklyReviewLastShown as Timestamp | undefined;
+          if (lastShownTimestamp && (Date.now() - lastShownTimestamp.toMillis() < ONE_WEEK_IN_MS)) {
             setShouldShowReview(false);
           } else {
             setShouldShowReview(true);
           }
         } else {
-          // If settings doc doesn't exist, it's a new user or first time feature is used. Show it.
           setShouldShowReview(true);
         }
       });
       return () => unsubscribe();
     } else {
-      // Logic for logged-out user, maybe use localStorage or just don't show.
       setShouldShowReview(false);
     }
   }, [user]);
 
   const setReviewShown = useCallback(async () => {
     if (user) {
-      // FIX: Use v8 namespaced API to set document data.
-      const settingsRef = db.doc(`users/${user.id}/settings/main`);
-      await settingsRef.set({ weeklyReviewLastShown: new Date() }, { merge: true });
+      const settingsRef = doc(db, `users/${user.id}/settings/main`);
+      await setDoc(settingsRef, { weeklyReviewLastShown: new Date() }, { merge: true });
       setShouldShowReview(false);
     }
   }, [user]);

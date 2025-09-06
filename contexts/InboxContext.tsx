@@ -2,9 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { InboxTask } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-
-// Inform TypeScript that `firebase` exists on the global scope.
-declare const firebase: any;
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, deleteDoc, Timestamp } from 'firebase/firestore';
 
 interface InboxState {
   tasks: InboxTask[];
@@ -23,16 +21,15 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   useEffect(() => {
     if (user) {
-      const inboxQuery = db.collection(`users/${user.id}/inbox`).orderBy('createdAt', 'desc');
-      const unsubscribe = inboxQuery.onSnapshot((snapshot) => {
+      const inboxQuery = query(collection(db, `users/${user.id}/inbox`), orderBy('createdAt', 'desc'));
+      const unsubscribe = onSnapshot(inboxQuery, (snapshot) => {
         const userTasks = snapshot.docs.map(d => {
             const data = d.data();
-            // Handle Firestore Timestamp object
-            const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now();
+            const createdAtTimestamp = data.createdAt as Timestamp | null;
             return { 
                 id: d.id,
                 name: data.name,
-                createdAt
+                createdAt: createdAtTimestamp ? createdAtTimestamp.toMillis() : Date.now()
             } as InboxTask
         });
         setTasks(userTasks);
@@ -48,13 +45,10 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
     };
     
-    // No more optimistic updates. We write directly to the database.
-    // The onSnapshot listener will be the single source of truth for UI updates.
     try {
-        await db.collection(`users/${user.id}/inbox`).add({
+        await addDoc(collection(db, `users/${user.id}/inbox`), {
             name: taskName.trim(),
-            // Use a secure server-side timestamp for reliability
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: serverTimestamp()
         });
     } catch(error) {
         console.error("Error adding task to inbox:", error);
@@ -65,9 +59,8 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const deleteTask = useCallback(async (taskId: string) => {
     if (!user) return;
     
-    // No more optimistic updates. The UI will update via the listener.
     try {
-        await db.doc(`users/${user.id}/inbox/${taskId}`).delete();
+        await deleteDoc(doc(db, `users/${user.id}/inbox/${taskId}`));
     } catch (error) {
         console.error("Error deleting task from inbox:", error);
         alert("Failed to delete task. Please try again.");

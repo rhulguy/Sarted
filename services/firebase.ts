@@ -1,13 +1,6 @@
-
-
-
-
-
-// This file now uses the globally available `firebase` object,
-// which is loaded via script tags in `index.html`.
-
-// Inform TypeScript that `firebase` exists on the global scope.
-declare const firebase: any;
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -18,12 +11,9 @@ const firebaseConfig = {
   appId: "1:116829841158:web:4afdd2b00706541c3ba087"
 };
 
-
-// Initialize Firebase, but only if it hasn't been initialized already.
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase services
-export const auth = firebase.auth();
-export const db = firebase.firestore();
+export const auth = getAuth(app);
+export const db = getFirestore(app);

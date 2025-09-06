@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { Habit } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
+import { collection, doc, getDocs, query, limit, writeBatch, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { INITIAL_HABITS } from '../constants';
 
 interface HabitContextType {
@@ -17,31 +18,27 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const { user, loading: authLoading } = useAuth();
   const [habits, setHabits] = useState<Habit[]>([]);
 
-  // Listen for data changes from Firestore
   useEffect(() => {
     if (authLoading) {
       setHabits([]);
-      return; // Wait for authentication to resolve
+      return;
     }
-
     if (user) {
-      // --- Robust Seeding Logic for Habits ---
-      const habitsRef = db.collection(`users/${user.id}/habits`);
-      habitsRef.limit(1).get().then(snapshot => {
+      const habitsRef = collection(db, `users/${user.id}/habits`);
+      getDocs(query(habitsRef, limit(1))).then(snapshot => {
           if (snapshot.empty) {
               console.log("New user habit collection is empty. Seeding initial data.");
-              const batch = db.batch();
+              const batch = writeBatch(db);
               INITIAL_HABITS.forEach(habit => {
-                  const habitRef = db.doc(`users/${user.id}/habits/${habit.id}`);
+                  const habitRef = doc(db, `users/${user.id}/habits/${habit.id}`);
                   batch.set(habitRef, habit);
               });
               batch.commit().catch(err => console.error("Failed to seed habits:", err));
           }
       });
-      // --- End Seeding Logic ---
       
-      const habitsQuery = db.collection(`users/${user.id}/habits`);
-      const unsubscribe = habitsQuery.onSnapshot((snapshot) => {
+      const habitsQuery = collection(db, `users/${user.id}/habits`);
+      const unsubscribe = onSnapshot(habitsQuery, (snapshot) => {
         const userHabits = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Habit));
         setHabits(userHabits);
       }, (error) => console.error("Error fetching habits:", error));
@@ -54,51 +51,46 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const addHabit = useCallback(async (habitData: Omit<Habit, 'id'>) => {
     const newHabit: Habit = { ...habitData, id: `habit-${Date.now()}` };
-    
-    setHabits(currentHabits => {
-        const updatedHabits = [...currentHabits, newHabit];
-        if (user) {
-            db.doc(`users/${user.id}/habits/${newHabit.id}`).set(newHabit)
-                .catch(error => {
-                    console.error("Failed to add habit, reverting:", error);
-                    setHabits(currentHabits); // Revert on failure
-                });
-        }
-        return updatedHabits;
-    });
-  }, [user]);
+    const originalHabits = habits;
+    setHabits(prev => [...prev, newHabit]);
+
+    if (user) {
+      try {
+        await setDoc(doc(db, `users/${user.id}/habits/${newHabit.id}`), newHabit);
+      } catch (error) {
+        console.error("Failed to add habit, reverting:", error);
+        setHabits(originalHabits);
+      }
+    }
+  }, [user, habits]);
 
   const updateHabit = useCallback(async (habit: Habit) => {
-    setHabits(currentHabits => {
-        const originalHabits = currentHabits;
-        const updatedHabits = currentHabits.map(h => h.id === habit.id ? habit : h);
+    const originalHabits = habits;
+    setHabits(prev => prev.map(h => h.id === habit.id ? habit : h));
 
-        if (user) {
-            db.doc(`users/${user.id}/habits/${habit.id}`).set(habit)
-                .catch(error => {
-                    console.error("Failed to update habit, reverting:", error);
-                    setHabits(originalHabits); // Revert on failure
-                });
-        }
-        return updatedHabits;
-    });
-  }, [user]);
+    if (user) {
+      try {
+        await setDoc(doc(db, `users/${user.id}/habits/${habit.id}`), habit);
+      } catch (error) {
+        console.error("Failed to update habit, reverting:", error);
+        setHabits(originalHabits);
+      }
+    }
+  }, [user, habits]);
 
   const deleteHabit = useCallback(async (habitId: string) => {
-    setHabits(currentHabits => {
-        const originalHabits = currentHabits;
-        const updatedHabits = currentHabits.filter(h => h.id !== habitId);
-
-        if (user) {
-            db.doc(`users/${user.id}/habits/${habitId}`).delete()
-                .catch(error => {
-                    console.error("Failed to delete habit, reverting:", error);
-                    setHabits(originalHabits); // Revert on failure
-                });
-        }
-        return updatedHabits;
-    });
-  }, [user]);
+    const originalHabits = habits;
+    setHabits(prev => prev.filter(h => h.id !== habitId));
+    
+    if (user) {
+      try {
+        await deleteDoc(doc(db, `users/${user.id}/habits/${habitId}`));
+      } catch (error) {
+        console.error("Failed to delete habit, reverting:", error);
+        setHabits(originalHabits);
+      }
+    }
+  }, [user, habits]);
 
   const contextValue = useMemo(() => ({
     habits, addHabit, updateHabit, deleteHabit

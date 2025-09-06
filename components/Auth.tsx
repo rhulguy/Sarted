@@ -2,9 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { GoogleIcon } from './IconComponents';
-
-// Inform TypeScript that `firebase` exists on the global scope.
-declare const firebase: any;
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 
 const Auth: React.FC = () => {
     const { user } = useAuth();
@@ -12,9 +10,9 @@ const Auth: React.FC = () => {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const handleGoogleSignIn = async () => {
-        const provider = new firebase.auth.GoogleAuthProvider();
+        const provider = new GoogleAuthProvider();
         try {
-            await auth.signInWithPopup(provider);
+            await signInWithPopup(auth, provider);
         } catch (error) {
             console.error("Error during Google sign-in:", error);
             alert("Failed to sign in. Please ensure popups are enabled and try again. Check the console for more details.");
@@ -22,7 +20,7 @@ const Auth: React.FC = () => {
     };
 
     const handleLogout = () => {
-        auth.signOut();
+        signOut(auth);
         setIsDropdownOpen(false);
     };
 

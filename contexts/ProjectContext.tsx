@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { Project, ProjectGroup, Task, Resource } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
+import { collection, doc, getDocs, query, limit, writeBatch, onSnapshot, orderBy, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { INITIAL_PROJECT_GROUPS, INITIAL_PROJECTS, INITIAL_RESOURCES } from '../constants';
 import { updateTaskInTree, deleteTaskFromTree, addSubtaskToTree, updateTasksInTree, findAndRemoveTask } from '../utils/taskUtils';
 
@@ -57,29 +58,27 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (user) {
       setLoading(true);
 
-      // --- Robust Seeding Logic ---
-      const projectsRef = db.collection(`users/${user.id}/projects`);
-      projectsRef.limit(1).get().then(snapshot => {
+      const projectsRef = collection(db, `users/${user.id}/projects`);
+      getDocs(query(projectsRef, limit(1))).then(snapshot => {
         if (snapshot.empty) {
           console.log("New user project collection is empty. Seeding initial data.");
-          const batch = db.batch();
+          const batch = writeBatch(db);
           INITIAL_PROJECT_GROUPS.forEach(group => {
-            const groupRef = db.doc(`users/${user.id}/projectGroups/${group.id}`);
+            const groupRef = doc(db, `users/${user.id}/projectGroups/${group.id}`);
             batch.set(groupRef, group);
           });
           INITIAL_PROJECTS.forEach(project => {
-            const projectRef = db.doc(`users/${user.id}/projects/${project.id}`);
+            const projectRef = doc(db, `users/${user.id}/projects/${project.id}`);
             batch.set(projectRef, project);
           });
           batch.commit().catch(err => console.error("Failed to seed projects:", err));
         }
       });
-      // --- End Seeding Logic ---
 
-      const projectsQuery = db.collection(`users/${user.id}/projects`);
-      const groupsQuery = db.collection(`users/${user.id}/projectGroups`).orderBy('name');
+      const projectsQuery = collection(db, `users/${user.id}/projects`);
+      const groupsQuery = query(collection(db, `users/${user.id}/projectGroups`), orderBy('name'));
 
-      const unsubProjects = projectsQuery.onSnapshot((snapshot) => {
+      const unsubProjects = onSnapshot(projectsQuery, (snapshot) => {
         const userProjects = snapshot.docs.map(d => {
             const data = d.data();
             if (!data) {
@@ -87,36 +86,22 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
             }
             const traverseAndFixTasks = (tasks: any[]): Task[] => {
                 if (!Array.isArray(tasks)) return [];
-                return tasks.map(t => ({
-                    ...t,
-                    id: t.id || `task-${Math.random()}`,
-                    name: t.name || 'Untitled Task',
-                    completed: t.completed ?? false,
-                    description: t.description || '',
-                    subtasks: traverseAndFixTasks(t.subtasks)
-                }));
+                return tasks.map(t => ({ ...t, id: t.id || `task-${Math.random()}`, name: t.name || 'Untitled Task', completed: t.completed ?? false, description: t.description || '', subtasks: traverseAndFixTasks(t.subtasks) }));
             }
-            return {
-                id: d.id,
-                name: data.name || 'Untitled Project',
-                groupId: data.groupId || '',
-                tasks: traverseAndFixTasks(data.tasks),
-                isArchived: data.isArchived ?? false,
-                icon: data.icon,
-            } as Project;
+            return { id: d.id, name: data.name || 'Untitled Project', groupId: data.groupId || '', tasks: traverseAndFixTasks(data.tasks), isArchived: data.isArchived ?? false, icon: data.icon } as Project;
         });
         setProjects(userProjects);
       }, (error) => console.error("Error fetching projects:", error));
       
-      const unsubGroups = groupsQuery.onSnapshot((snapshot) => {
+      const unsubGroups = onSnapshot(groupsQuery, (snapshot) => {
         const userGroups = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as ProjectGroup));
 
         if (userGroups.length > 0 && userGroups.some(g => g.order === undefined)) {
             console.log("Migrating project groups to include order property...");
-            const batch = db.batch();
+            const batch = writeBatch(db);
             userGroups.forEach((group, index) => {
                 if (group.order === undefined) {
-                    const groupRef = db.doc(`users/${user.id}/projectGroups/${group.id}`);
+                    const groupRef = doc(db, `users/${user.id}/projectGroups/${group.id}`);
                     batch.update(groupRef, { order: index });
                 }
             });
@@ -133,7 +118,6 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       
       return () => { unsubProjects(); unsubGroups(); };
     } else {
-      // Not logged in, show initial data
       setProjects(INITIAL_PROJECTS);
       setProjectGroups(INITIAL_PROJECT_GROUPS);
       setSelectedProjectId(null);
@@ -144,7 +128,6 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const selectProject = useCallback((id: string | null) => {
     const project = projects.find(p => p.id === id);
     if (project && project.isArchived) {
-        // Do not allow selecting an archived project.
         return;
     }
     setSelectedProjectId(id);
@@ -158,7 +141,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     if (user) {
         try {
-            await db.doc(`users/${user.id}/projects/${newProject.id}`).set(newProject);
+            await setDoc(doc(db, `users/${user.id}/projects/${newProject.id}`), newProject);
         } catch (error) {
             console.error("Failed to add project, reverting:", error);
             setProjects(originalProjects); // Revert
@@ -172,7 +155,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     if (user) {
         try {
-            await db.doc(`users/${user.id}/projects/${projectId}`).update(updates);
+            await updateDoc(doc(db, `users/${user.id}/projects/${projectId}`), updates);
         } catch (error) {
             console.error("Failed to update project, reverting:", error);
             setProjects(originalProjects);
@@ -183,22 +166,15 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const deleteProject = useCallback(async (id: string) => {
     const originalProjects = projects;
     const originalSelectedId = selectedProjectId;
-
     const remainingProjects = originalProjects.filter(p => p.id !== id);
     let nextSelectedId = selectedProjectId;
-
-    if (selectedProjectId === id) {
-        nextSelectedId = null; // Go to dashboard view
-    }
-
+    if (selectedProjectId === id) nextSelectedId = null;
     setProjects(remainingProjects);
-    if (selectedProjectId === id) {
-        selectProject(nextSelectedId);
-    }
+    if (selectedProjectId === id) selectProject(nextSelectedId);
 
     if (user) {
         try {
-            await db.doc(`users/${user.id}/projects/${id}`).delete();
+            await deleteDoc(doc(db, `users/${user.id}/projects/${id}`));
         } catch (error) {
             console.error("Failed to delete project, reverting:", error);
             setProjects(originalProjects);
@@ -208,12 +184,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [projects, user, selectedProjectId, selectProject]);
   
   const archiveProject = useCallback(async (projectId: string) => {
-      // Step 1: Safely deselect the project if it's currently selected.
-      if (selectedProjectId === projectId) {
-          selectProject(null);
-      }
-      
-      // Step 2: Update the project's state and persist to DB.
+      if (selectedProjectId === projectId) selectProject(null);
       await updateProject(projectId, { isArchived: true });
   }, [selectedProjectId, selectProject, updateProject]);
 
@@ -224,63 +195,47 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const addProjectGroup = useCallback(async (groupData: Omit<ProjectGroup, 'id' | 'order'>) => {
     const newGroup = { ...groupData, id: `group-${Date.now()}`, order: projectGroups.length };
     const originalGroups = projectGroups;
-    setProjectGroups(prev => [...prev, newGroup]); // Optimistic update
-
+    setProjectGroups(prev => [...prev, newGroup]);
     if (user) {
       try {
-        await db.doc(`users/${user.id}/projectGroups/${newGroup.id}`).set(newGroup);
-      } catch (error) {
-        console.error("Failed to add project group, reverting:", error);
-        setProjectGroups(originalGroups);
-      }
+        await setDoc(doc(db, `users/${user.id}/projectGroups/${newGroup.id}`), newGroup);
+      } catch (error) { console.error("Failed to add project group, reverting:", error); setProjectGroups(originalGroups); }
     }
   }, [user, projectGroups]);
 
   const updateProjectGroup = useCallback(async (group: ProjectGroup) => {
     const originalGroups = projectGroups;
-    setProjectGroups(prev => prev.map(g => g.id === group.id ? group : g)); // Optimistic update
-
+    setProjectGroups(prev => prev.map(g => g.id === group.id ? group : g));
     if (user) {
       try {
-        await db.doc(`users/${user.id}/projectGroups/${group.id}`).update(group);
-      } catch (error) {
-        console.error("Failed to update project group, reverting:", error);
-        setProjectGroups(originalGroups);
-      }
+        await updateDoc(doc(db, `users/${user.id}/projectGroups/${group.id}`), group);
+      } catch (error) { console.error("Failed to update project group, reverting:", error); setProjectGroups(originalGroups); }
     }
   }, [user, projectGroups]);
 
   const deleteProjectGroup = useCallback(async (groupId: string) => {
     const originalGroups = projectGroups;
-    setProjectGroups(prev => prev.filter(g => g.id !== groupId)); // Optimistic update
-
+    setProjectGroups(prev => prev.filter(g => g.id !== groupId));
     if (user) {
       try {
-        await db.doc(`users/${user.id}/projectGroups/${groupId}`).delete();
-      } catch (error) {
-        console.error("Failed to delete project group, reverting:", error);
-        setProjectGroups(originalGroups);
-      }
+        await deleteDoc(doc(db, `users/${user.id}/projectGroups/${groupId}`));
+      } catch (error) { console.error("Failed to delete project group, reverting:", error); setProjectGroups(originalGroups); }
     }
   }, [user, projectGroups]);
 
   const reorderProjectGroups = useCallback(async (reorderedGroups: ProjectGroup[]) => {
     const originalGroups = [...projectGroups];
     const updatedGroupsWithOrder = reorderedGroups.map((group, index) => ({ ...group, order: index }));
-    setProjectGroups(updatedGroupsWithOrder); // Optimistic update
-
+    setProjectGroups(updatedGroupsWithOrder);
     if(user) {
         try {
-            const batch = db.batch();
+            const batch = writeBatch(db);
             updatedGroupsWithOrder.forEach(group => {
-                const groupRef = db.doc(`users/${user.id}/projectGroups/${group.id}`);
+                const groupRef = doc(db, `users/${user.id}/projectGroups/${group.id}`);
                 batch.update(groupRef, { order: group.order });
             });
             await batch.commit();
-        } catch (error) {
-            console.error("Failed to reorder groups, reverting:", error);
-            setProjectGroups(originalGroups); // Revert on failure
-        }
+        } catch (error) { console.error("Failed to reorder groups, reverting:", error); setProjectGroups(originalGroups); }
     }
   }, [user, projectGroups]);
 
@@ -321,37 +276,24 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   
   const moveTask = useCallback(async (sourceProjectId: string, targetProjectId: string, task: Task) => {
       if (sourceProjectId === targetProjectId) return;
-      
       const sourceProject = projects.find(p => p.id === sourceProjectId);
       const targetProject = projects.find(p => p.id === targetProjectId);
       if (!sourceProject || !targetProject) return;
-
       const { foundTask, newTasks: newSourceTasks } = findAndRemoveTask(sourceProject.tasks, task.id);
-      
       if (foundTask) {
           const newTargetTasks = [...targetProject.tasks, foundTask];
-          // Perform updates in parallel
-          await Promise.all([
-              updateProject(sourceProjectId, { tasks: newSourceTasks }),
-              updateProject(targetProjectId, { tasks: newTargetTasks })
-          ]);
+          await Promise.all([ updateProject(sourceProjectId, { tasks: newSourceTasks }), updateProject(targetProjectId, { tasks: newTargetTasks }) ]);
       }
   }, [projects, updateProject]);
 
   const reparentTask = useCallback(async (projectId: string, taskId: string, newParentId: string | null) => {
       const project = projects.find(p => p.id === projectId);
       if (!project) return;
-
       const { foundTask, newTasks } = findAndRemoveTask(project.tasks, taskId);
       if (!foundTask) return;
-
       let finalTasks: Task[];
-      if (newParentId === null) {
-          finalTasks = [...newTasks, foundTask];
-      } else {
-          finalTasks = addSubtaskToTree(newTasks, newParentId, foundTask);
-      }
-      
+      if (newParentId === null) finalTasks = [...newTasks, foundTask];
+      else finalTasks = addSubtaskToTree(newTasks, newParentId, foundTask);
       await updateProject(projectId, { tasks: finalTasks });
   }, [projects, updateProject]);
   
@@ -359,50 +301,14 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const archivedProjects = useMemo(() => projects.filter(p => p.isArchived), [projects]);
   const selectedProject = useMemo(() => projects.find(p => p.id === selectedProjectId) ?? null, [projects, selectedProjectId]);
 
-  const contextValue = useMemo(() => ({
-    projects,
-    visibleProjects,
-    archivedProjects,
-    projectGroups,
-    selectedProjectId,
-    selectedProject,
-    loading,
-    selectProject,
-    addProject,
-    updateProject,
-    deleteProject,
-    archiveProject,
-    unarchiveProject,
-    addProjectGroup,
-    updateProjectGroup,
-    deleteProjectGroup,
-    reorderProjectGroups,
-    addTask,
-    addSubtask,
-    updateTask,
-    updateMultipleTasks,
-    deleteTask,
-    moveTask,
-    reparentTask,
-  }), [
-    projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading,
-    selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject,
-    addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups, addTask, addSubtask, updateTask,
-    updateMultipleTasks, deleteTask, moveTask, reparentTask
-  ]);
+  const contextValue = useMemo(() => ({ projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading, selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject, addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups, addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask }), [ projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading, selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject, addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups, addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask ]);
 
-  return (
-    <ProjectContext.Provider value={contextValue}>
-      {children}
-    </ProjectContext.Provider>
-  );
+  return ( <ProjectContext.Provider value={contextValue}> {children} </ProjectContext.Provider> );
 };
 
 export const useProject = (): ProjectContextType => {
   const context = useContext(ProjectContext);
-  if (context === undefined) {
-    throw new Error('useProject must be used within a ProjectProvider');
-  }
+  if (context === undefined) throw new Error('useProject must be used within a ProjectProvider');
   return context;
 };
 
@@ -424,34 +330,24 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading) {
-      setLoading(true);
-      setResources([]);
-      return;
-    }
+    if (authLoading) { setLoading(true); setResources([]); return; }
     if (user) {
       setLoading(true);
-      const resourcesRef = db.collection(`users/${user.id}/resources`);
-      resourcesRef.limit(1).get().then(snapshot => {
+      const resourcesRef = collection(db, `users/${user.id}/resources`);
+      getDocs(query(resourcesRef, limit(1))).then(snapshot => {
         if (snapshot.empty) {
           console.log("New user resource collection is empty. Seeding initial data.");
-          const batch = db.batch();
-          INITIAL_RESOURCES.forEach(resource => {
-            const resourceRef = db.doc(`users/${user.id}/resources/${resource.id}`);
-            batch.set(resourceRef, resource);
-          });
+          const batch = writeBatch(db);
+          INITIAL_RESOURCES.forEach(resource => batch.set(doc(db, `users/${user.id}/resources/${resource.id}`), resource));
           batch.commit().catch(err => console.error("Failed to seed resources:", err));
         }
       });
-      const resourcesQuery = db.collection(`users/${user.id}/resources`).orderBy('createdAt', 'desc');
-      const unsubscribe = resourcesQuery.onSnapshot((snapshot) => {
+      const resourcesQuery = query(collection(db, `users/${user.id}/resources`), orderBy('createdAt', 'desc'));
+      const unsubscribe = onSnapshot(resourcesQuery, (snapshot) => {
         const userResources = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Resource));
         setResources(userResources);
         setLoading(false);
-      }, (error) => {
-        console.error("Error fetching resources:", error);
-        setLoading(false);
-      });
+      }, (error) => { console.error("Error fetching resources:", error); setLoading(false); });
       return () => unsubscribe();
     } else {
       setResources(INITIAL_RESOURCES);
@@ -463,14 +359,9 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
     const newResource: Resource = { ...resourceData, id: `res-${Date.now()}`};
     const originalResources = resources;
     setResources(prev => [newResource, ...prev]);
-
     if (user) {
-      try {
-        await db.doc(`users/${user.id}/resources/${newResource.id}`).set(newResource);
-      } catch (error) {
-        console.error("Failed to add resource, reverting:", error);
-        setResources(originalResources);
-      }
+      try { await setDoc(doc(db, `users/${user.id}/resources/${newResource.id}`), newResource); } 
+      catch (error) { console.error("Failed to add resource, reverting:", error); setResources(originalResources); }
     }
   }, [resources, user]);
   
@@ -478,12 +369,8 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
     const originalResources = resources;
     setResources(prev => prev.map(r => r.id === resource.id ? resource : r));
     if (user) {
-      try {
-        await db.doc(`users/${user.id}/resources/${resource.id}`).update(resource);
-      } catch (error) {
-        console.error("Failed to update resource, reverting:", error);
-        setResources(originalResources);
-      }
+      try { await updateDoc(doc(db, `users/${user.id}/resources/${resource.id}`), resource); }
+      catch (error) { console.error("Failed to update resource, reverting:", error); setResources(originalResources); }
     }
   }, [resources, user]);
 
@@ -491,26 +378,18 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
     const originalResources = resources;
     setResources(prev => prev.filter(r => r.id !== resourceId));
     if (user) {
-      try {
-        await db.doc(`users/${user.id}/resources/${resourceId}`).delete();
-      } catch (error) {
-        console.error("Failed to delete resource, reverting:", error);
-        setResources(originalResources);
-      }
+      try { await deleteDoc(doc(db, `users/${user.id}/resources/${resourceId}`)); }
+      catch (error) { console.error("Failed to delete resource, reverting:", error); setResources(originalResources); }
     }
   }, [resources, user]);
 
-  const contextValue = useMemo(() => ({
-    resources, loading, addResource, updateResource, deleteResource
-  }), [resources, loading, addResource, updateResource, deleteResource]);
+  const contextValue = useMemo(() => ({ resources, loading, addResource, updateResource, deleteResource }), [resources, loading, addResource, updateResource, deleteResource]);
 
   return <ResourceContext.Provider value={contextValue}>{children}</ResourceContext.Provider>;
 };
 
 export const useResource = (): ResourceContextType => {
   const context = useContext(ResourceContext);
-  if (context === undefined) {
-    throw new Error('useResource must be used within a ResourceProvider');
-  }
+  if (context === undefined) throw new Error('useResource must be used within a ResourceProvider');
   return context;
 };

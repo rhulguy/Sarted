@@ -1,9 +1,8 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
+import { onAuthStateChanged, User as FirebaseUser, signOut as firebaseSignOut } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { Project, Habit, Resource, InboxTask, ProjectGroup } from '../types';
-
-// Inform TypeScript that `firebase` exists on the global scope and its types are available.
-declare const firebase: any;
 
 export interface User {
   id: string;
@@ -11,13 +10,6 @@ export interface User {
   email: string | null;
   picture: string | null;
   plan: 'free' | 'paid';
-}
-
-interface FirebaseUser {
-  uid: string;
-  displayName: string | null;
-  email: string | null;
-  photoURL: string | null;
 }
 
 interface AuthContextType {
@@ -39,12 +31,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: FirebaseUser | null) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        const userRef = db.doc(`users/${firebaseUser.uid}/profile/main`);
-        const userDoc = await userRef.get();
+        const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
+        const userDoc = await getDoc(userRef);
 
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
           // First time sign-in, create a profile document
           const newUser: User = {
             id: firebaseUser.uid,
@@ -53,7 +45,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             picture: firebaseUser.photoURL,
             plan: 'free'
           };
-          await userRef.set(newUser);
+          await setDoc(userRef, newUser);
           setUser(newUser);
         } else {
           // Existing user, merge auth data with profile data
@@ -82,8 +74,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(updatedUser); // Optimistic update
 
       try {
-          const userRef = db.doc(`users/${user.id}/profile/main`);
-          await userRef.update(updates);
+          const userRef = doc(db, `users/${user.id}/profile/main`);
+          await updateDoc(userRef, updates);
       } catch (error) {
           console.error("Failed to update user profile:", error);
           setUser(user); // Revert on failure
@@ -94,17 +86,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const deleteUserAccount = async () => {
       if (!user) return;
       
-      // A helper function to delete all documents in a collection
       const deleteCollection = async (collectionPath: string) => {
-          const collectionRef = db.collection(collectionPath);
-          const snapshot = await collectionRef.get();
-          const batch = db.batch();
+          const collectionRef = collection(db, collectionPath);
+          const snapshot = await getDocs(collectionRef);
+          const batch = writeBatch(db);
           snapshot.docs.forEach(doc => batch.delete(doc.ref));
           await batch.commit();
       }
 
       try {
-          // Delete all user data subcollections
           await Promise.all([
               deleteCollection(`users/${user.id}/projects`),
               deleteCollection(`users/${user.id}/projectGroups`),
@@ -114,11 +104,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               deleteCollection(`users/${user.id}/settings`),
           ]);
 
-          // Delete the main profile document
-          await db.doc(`users/${user.id}/profile/main`).delete();
-
-          // Finally sign out (deleting the auth user is more complex and requires re-auth)
-          await auth.signOut();
+          await deleteDoc(doc(db, `users/${user.id}/profile/main`));
+          await firebaseSignOut(auth);
           setUser(null);
 
       } catch (error) {
