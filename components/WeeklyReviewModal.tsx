@@ -55,11 +55,11 @@ const WeeklyReviewModal: React.FC<WeeklyReviewModalProps> = ({ isOpen, onClose }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-primary md:bg-black md:bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-secondary md:rounded-lg shadow-xl p-6 md:p-8 w-full h-full md:h-auto md:max-w-2xl transform transition-all flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-card-background md:rounded-lg shadow-xl p-6 md:p-8 w-full h-full md:h-auto md:max-w-2xl transform transition-all flex flex-col">
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-2xl font-bold text-text-primary flex items-center gap-2">
-            <SparklesIcon className="w-6 h-6 text-accent"/>
+            <SparklesIcon className="w-6 h-6 text-accent-blue"/>
             Your Weekly Review
           </h2>
           <button onClick={onClose} className="text-text-secondary text-3xl hover:text-text-primary">&times;</button>
@@ -88,7 +88,7 @@ const WeeklyReviewModal: React.FC<WeeklyReviewModalProps> = ({ isOpen, onClose }
         <div className="mt-6 flex justify-end">
           <button 
             onClick={onClose} 
-            className="px-6 py-2 rounded-md text-white bg-accent hover:bg-blue-500"
+            className="px-6 py-2 rounded-md text-white bg-accent-blue hover:opacity-90"
           >
             Got it!
           </button>

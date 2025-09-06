@@ -37,8 +37,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMob
               onClick={() => onSetMainView(item.id as MainView)}
               className={`flex items-center space-x-3 py-2 px-3 text-sm font-semibold rounded-md transition-colors duration-200 w-full text-left ${
                 (mainView === item.id || (mainView === 'projects' && item.id === 'projects'))
-                  ? 'bg-highlight text-text-primary' 
-                  : 'text-text-secondary hover:bg-highlight/50 hover:text-text-primary'
+                  ? 'bg-app-background text-text-primary' 
+                  : 'text-text-secondary hover:bg-app-background hover:text-text-primary'
               }`}
             >
               <item.icon className="w-5 h-5" />
@@ -62,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMob
           aria-hidden="true"
         />
         <aside 
-          className={`fixed top-0 left-0 h-full w-72 bg-secondary p-4 z-40 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+          className={`fixed top-0 left-0 h-full w-72 bg-sidebar-background p-4 z-40 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
           aria-label="Main Navigation"
         >
           {sidebarContent}
@@ -72,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMob
   }
 
   return (
-    <aside className="w-72 bg-secondary p-4 border-r border-border-color flex-col shrink-0 hidden md:flex">
+    <aside className="w-72 bg-sidebar-background p-4 border-r border-border-color flex-col shrink-0 hidden md:flex">
       {sidebarContent}
     </aside>
   );

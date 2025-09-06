@@ -21,9 +21,10 @@ interface ProjectContextType {
   deleteProject: (id: string) => Promise<void>;
   archiveProject: (id: string) => Promise<void>;
   unarchiveProject: (id: string) => Promise<void>;
-  addProjectGroup: (group: Omit<ProjectGroup, 'id'>) => Promise<void>;
+  addProjectGroup: (group: Omit<ProjectGroup, 'id' | 'order'>) => Promise<void>;
   updateProjectGroup: (group: ProjectGroup) => Promise<void>;
   deleteProjectGroup: (groupId: string) => Promise<void>;
+  reorderProjectGroups: (groups: ProjectGroup[]) => Promise<void>;
   addTask: (projectId: string, task: Task) => Promise<void>;
   addSubtask: (projectId: string, parentId: string, subtask: Task) => Promise<void>;
   updateTask: (projectId: string, task: Task) => Promise<void>;
@@ -76,7 +77,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       // --- End Seeding Logic ---
 
       const projectsQuery = db.collection(`users/${user.id}/projects`);
-      const groupsQuery = db.collection(`users/${user.id}/projectGroups`);
+      const groupsQuery = db.collection(`users/${user.id}/projectGroups`).orderBy('order');
 
       const unsubProjects = projectsQuery.onSnapshot((snapshot) => {
         const userProjects = snapshot.docs.map(d => {
@@ -109,7 +110,21 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       
       const unsubGroups = groupsQuery.onSnapshot((snapshot) => {
         const userGroups = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as ProjectGroup));
-        setProjectGroups(userGroups);
+
+        if (userGroups.length > 0 && userGroups.some(g => g.order === undefined)) {
+            console.log("Migrating project groups to include order property...");
+            const batch = db.batch();
+            userGroups.forEach((group, index) => {
+                if (group.order === undefined) {
+                    const groupRef = db.doc(`users/${user.id}/projectGroups/${group.id}`);
+                    batch.update(groupRef, { order: index });
+                }
+            });
+            batch.commit().catch(err => console.error("Failed to migrate group order:", err));
+        } else {
+            setProjectGroups(userGroups);
+        }
+
         setLoading(false);
       }, (error) => {
           console.error("Error fetching groups:", error);
@@ -206,8 +221,8 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       await updateProject(projectId, { isArchived: false });
   }, [updateProject]);
 
-  const addProjectGroup = useCallback(async (groupData: Omit<ProjectGroup, 'id'>) => {
-    const newGroup = { ...groupData, id: `group-${Date.now()}` };
+  const addProjectGroup = useCallback(async (groupData: Omit<ProjectGroup, 'id' | 'order'>) => {
+    const newGroup = { ...groupData, id: `group-${Date.now()}`, order: projectGroups.length };
     const originalGroups = projectGroups;
     setProjectGroups(prev => [...prev, newGroup]); // Optimistic update
 
@@ -246,6 +261,26 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
         console.error("Failed to delete project group, reverting:", error);
         setProjectGroups(originalGroups);
       }
+    }
+  }, [user, projectGroups]);
+
+  const reorderProjectGroups = useCallback(async (reorderedGroups: ProjectGroup[]) => {
+    const originalGroups = [...projectGroups];
+    const updatedGroupsWithOrder = reorderedGroups.map((group, index) => ({ ...group, order: index }));
+    setProjectGroups(updatedGroupsWithOrder); // Optimistic update
+
+    if(user) {
+        try {
+            const batch = db.batch();
+            updatedGroupsWithOrder.forEach(group => {
+                const groupRef = db.doc(`users/${user.id}/projectGroups/${group.id}`);
+                batch.update(groupRef, { order: group.order });
+            });
+            await batch.commit();
+        } catch (error) {
+            console.error("Failed to reorder groups, reverting:", error);
+            setProjectGroups(originalGroups); // Revert on failure
+        }
     }
   }, [user, projectGroups]);
 
@@ -341,6 +376,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     addProjectGroup,
     updateProjectGroup,
     deleteProjectGroup,
+    reorderProjectGroups,
     addTask,
     addSubtask,
     updateTask,
@@ -351,7 +387,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   }), [
     projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading,
     selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject,
-    addProjectGroup, updateProjectGroup, deleteProjectGroup, addTask, addSubtask, updateTask,
+    addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups, addTask, addSubtask, updateTask,
     updateMultipleTasks, deleteTask, moveTask, reparentTask
   ]);
 

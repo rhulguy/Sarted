@@ -32,7 +32,7 @@ const CommandBar: React.FC<CommandBarProps> = ({ isOpen, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-start pt-20 z-50" onClick={onClose}>
       <div 
-        className="bg-secondary rounded-lg shadow-xl w-full max-w-lg transform transition-all"
+        className="bg-card-background rounded-lg shadow-xl w-full max-w-lg transform transition-all"
         onClick={(e) => e.stopPropagation()}
       >
         <form onSubmit={handleSubmit}>

@@ -35,7 +35,8 @@ const mockProject: Project = {
   isArchived: false,
 };
 
-const mockProjectGroups: ProjectGroup[] = [{ id: 'work', name: 'Work', color: 'bg-blue-500' }];
+// FIX: Add the required 'order' property to the mock ProjectGroup.
+const mockProjectGroups: ProjectGroup[] = [{ id: 'work', name: 'Work', color: 'bg-blue-500', order: 0 }];
 
 describe('CalendarView component', () => {
   const mockOnAddTask = vi.fn();
@@ -64,6 +65,8 @@ describe('CalendarView component', () => {
           addProjectGroup: vi.fn(),
           updateProjectGroup: vi.fn(),
           deleteProjectGroup: vi.fn(),
+          // FIX: Add the missing 'reorderProjectGroups' function to the mock context value.
+          reorderProjectGroups: vi.fn(),
           addTask: vi.fn(),
           addSubtask: vi.fn(),
           updateTask: vi.fn(),
@@ -103,7 +106,7 @@ describe('CalendarView component', () => {
     
     // Check for "today" highlight
     const todayCell = screen.getByText('15');
-    expect(todayCell).toHaveClass('bg-accent');
+    expect(todayCell).toHaveClass('bg-accent-blue');
   });
 
   it('renders tasks correctly on the calendar', () => {

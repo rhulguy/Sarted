@@ -103,7 +103,7 @@ const GlobalCalendar: React.FC = () => {
     };
 
     return (
-        <div className="h-full flex flex-col bg-secondary rounded-lg">
+        <div className="h-full flex flex-col bg-card-background rounded-lg">
             {displayMode === 'month' ? (
                 <MonthView 
                     allTasks={allTasks}
@@ -123,7 +123,7 @@ const GlobalCalendar: React.FC = () => {
             )}
              {focusedTask && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onClick={() => setFocusedTask(null)}>
-                    <div className="bg-secondary rounded-lg shadow-xl p-4 md:p-6 w-full max-w-2xl mx-2" onClick={e => e.stopPropagation()}>
+                    <div className="bg-card-background rounded-lg shadow-xl p-4 md:p-6 w-full max-w-2xl mx-2" onClick={e => e.stopPropagation()}>
                         <div className="max-h-[80vh] overflow-y-auto">
                            <TaskItem 
                                 task={focusedTask}
@@ -222,20 +222,20 @@ const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTas
         <div className="h-full flex flex-col">
              <header className="flex items-center justify-between p-4 border-b border-border-color shrink-0 flex-wrap gap-2">
                 <div className="flex items-center space-x-2">
-                    <button onClick={() => changeDay(-1)} aria-label="Previous day" className="p-1 rounded text-text-secondary hover:bg-highlight"><ChevronLeftIcon className="w-5 h-5"/></button>
-                    <button onClick={() => setSelectedDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-highlight hover:bg-gray-700">Today</button>
-                    <button onClick={() => changeDay(1)} aria-label="Next day" className="p-1 rounded text-text-secondary hover:bg-highlight"><ChevronRightIcon className="w-5 h-5"/></button>
+                    <button onClick={() => changeDay(-1)} aria-label="Previous day" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button>
+                    <button onClick={() => setSelectedDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-gray-700">Today</button>
+                    <button onClick={() => changeDay(1)} aria-label="Next day" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button>
                 </div>
                 <h2 className="text-lg md:text-xl font-bold text-center order-first w-full md:w-auto md:order-none">{headerTitle}</h2>
                 <div className="flex items-center gap-2">
-                    <div className="bg-highlight p-1 rounded-lg flex space-x-1">
-                        <button onClick={() => onSetDisplayMode('month')} className="p-1.5 rounded-md hover:bg-secondary" title="Month View"><CalendarDaysIcon className="w-5 h-5 text-text-primary" /></button>
-                        <button onClick={() => onSetDisplayMode('day')} className="p-1.5 rounded-md bg-accent" title="Day View"><ViewDayIcon className="w-5 h-5 text-text-primary" /></button>
+                    <div className="bg-app-background p-1 rounded-lg flex space-x-1">
+                        <button onClick={() => onSetDisplayMode('month')} className="p-1.5 rounded-md hover:bg-card-background" title="Month View"><CalendarDaysIcon className="w-5 h-5 text-text-primary" /></button>
+                        <button onClick={() => onSetDisplayMode('day')} className="p-1.5 rounded-md bg-accent-blue" title="Day View"><ViewDayIcon className="w-5 h-5 text-white" /></button>
                     </div>
-                    <button onClick={() => downloadImage(`daily-plan-${formatDate(selectedDate)}.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
+                    <button onClick={() => downloadImage(`daily-plan-${formatDate(selectedDate)}.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-gray-700 disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
                 </div>
             </header>
-            <div ref={downloadRef} className="flex-grow overflow-auto p-4 md:p-6 bg-primary">
+            <div ref={downloadRef} className="flex-grow overflow-auto p-4 md:p-6 bg-app-background">
                 <div className="max-w-4xl mx-auto">
                     {isLoading ? (
                         <div className="flex items-center justify-center p-8"><Spinner /></div>
@@ -245,12 +245,12 @@ const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTas
                         <div className="space-y-6">
                             {priorities.length > 0 && (
                                 <div>
-                                    <h3 className="text-xl font-semibold mb-3 text-accent">AI Priorities</h3>
+                                    <h3 className="text-xl font-semibold mb-3 text-accent-blue">AI Priorities</h3>
                                     <div className="space-y-3">
                                         {priorities.map(({ task, reason }) => (
-                                            <div key={task.id} className="bg-secondary p-3 rounded-lg">
+                                            <div key={task.id} className="bg-card-background p-3 rounded-lg">
                                                 <div className="flex items-start space-x-2.5 mb-2">
-                                                    <SparklesIcon className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+                                                    <SparklesIcon className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" />
                                                     <p className="text-sm text-text-secondary italic">"{reason}"</p>
                                                 </div>
                                                 <TaskItem task={task} level={0} onUpdate={handleUpdateTask(task.projectId)} onDelete={() => {}} onAddSubtask={() => {}} />
@@ -379,30 +379,30 @@ const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrent
         <div className="h-full flex flex-col">
             <header className="flex items-center justify-between p-4 border-b border-border-color shrink-0 flex-wrap gap-2">
                 <div className="flex items-center space-x-2">
-                    <button onClick={() => changeMonth(-1)} aria-label="Previous month" className="p-1 rounded text-text-secondary hover:bg-highlight"><ChevronLeftIcon className="w-5 h-5"/></button>
-                    <button onClick={() => setCurrentDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-highlight hover:bg-gray-700">Today</button>
-                    <button onClick={() => changeMonth(1)} aria-label="Next month" className="p-1 rounded text-text-secondary hover:bg-highlight"><ChevronRightIcon className="w-5 h-5"/></button>
+                    <button onClick={() => changeMonth(-1)} aria-label="Previous month" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button>
+                    <button onClick={() => setCurrentDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-gray-700">Today</button>
+                    <button onClick={() => changeMonth(1)} aria-label="Next month" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button>
                 </div>
                 <h2 className="text-lg md:text-xl font-bold text-center order-first w-full md:w-auto md:order-none">{headerTitle}</h2>
                 <div className="flex items-center gap-2">
-                    <div className="bg-highlight p-1 rounded-lg flex space-x-1">
-                        <button onClick={() => onSetDisplayMode('month')} className="p-1.5 rounded-md bg-accent" title="Month View"><CalendarDaysIcon className="w-5 h-5 text-text-primary" /></button>
-                        <button onClick={() => onSetDisplayMode('day')} className="p-1.5 rounded-md hover:bg-secondary" title="Day View"><ViewDayIcon className="w-5 h-5 text-text-primary" /></button>
+                    <div className="bg-app-background p-1 rounded-lg flex space-x-1">
+                        <button onClick={() => onSetDisplayMode('month')} className="p-1.5 rounded-md bg-accent-blue" title="Month View"><CalendarDaysIcon className="w-5 h-5 text-white" /></button>
+                        <button onClick={() => onSetDisplayMode('day')} className="p-1.5 rounded-md hover:bg-card-background" title="Day View"><ViewDayIcon className="w-5 h-5 text-text-primary" /></button>
                     </div>
-                     <button onClick={() => downloadImage(`global-calendar-${formatDate(currentDate).slice(0, 7)}.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
+                     <button onClick={() => downloadImage(`global-calendar-${formatDate(currentDate).slice(0, 7)}.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-gray-700 disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
                 </div>
             </header>
-            <div ref={downloadRef} className="flex-grow overflow-auto flex flex-col bg-primary">
-                <div className="grid grid-cols-7 shrink-0">{weekdays.map(day => <div key={day} className="text-center font-semibold text-sm text-text-secondary p-2 border-b border-r border-border-color bg-secondary">{day}</div>)}</div>
+            <div ref={downloadRef} className="flex-grow overflow-auto flex flex-col bg-app-background">
+                <div className="grid grid-cols-7 shrink-0">{weekdays.map(day => <div key={day} className="text-center font-semibold text-sm text-text-secondary p-2 border-b border-r border-border-color bg-card-background">{day}</div>)}</div>
                 <div className={`grid grid-cols-7 flex-grow`} style={{ gridTemplateRows: `repeat(${numWeeks}, minmax(0, 1fr))` }}>
                     {calendarGrid.map((day, index) => {
                         const tasksForDay = allTasks.filter(task => !isNaN(task.startDateObj.getTime()) && day.date >= task.startDateObj && day.date <= task.endDateObj);
                         return (
-                            <div key={index} className={`relative border-b border-r border-border-color p-1 flex flex-col group ${!day.isCurrentMonth ? 'bg-primary/50' : 'hover:bg-highlight/30'}`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, day.date)}>
+                            <div key={index} className={`relative border-b border-r border-border-color p-1 flex flex-col group ${!day.isCurrentMonth ? 'bg-app-background/50' : 'hover:bg-app-background'}`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, day.date)}>
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className={`text-sm ${day.isToday ? 'bg-accent text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>{day.date.getUTCDate()}</span>
+                                    <span className={`text-sm ${day.isToday ? 'bg-accent-blue text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>{day.date.getUTCDate()}</span>
                                     {addingTaskTo === null && (
-                                        <button onClick={() => handleStartAddTask(day.date)} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent hover:text-blue-400" aria-label={`Add task for ${day.date.toISOString().slice(0,10)}`}>
+                                        <button onClick={() => handleStartAddTask(day.date)} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue hover:text-blue-400" aria-label={`Add task for ${day.date.toISOString().slice(0,10)}`}>
                                             <PlusIcon className="w-4 h-4"/>
                                         </button>
                                     )}
@@ -423,15 +423,15 @@ const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrent
                                         );
                                     })}
                                     {addingTaskTo && areDatesEqual(addingTaskTo, day.date) && (
-                                        <form onSubmit={handleFormSubmit} className="bg-highlight p-2 rounded-lg space-y-2 relative z-10">
+                                        <form onSubmit={handleFormSubmit} className="bg-app-background p-2 rounded-lg space-y-2 relative z-10">
                                             <input ref={newTaskInputRef} type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} placeholder="New task..."
-                                                className="w-full bg-secondary border border-accent rounded p-1 text-xs focus:outline-none" />
-                                            <select value={newTaskProjectId} onChange={e => setNewTaskProjectId(e.target.value)} className="w-full bg-secondary border border-border-color rounded p-1 text-xs">
+                                                className="w-full bg-card-background border border-accent-blue rounded p-1 text-xs focus:outline-none" />
+                                            <select value={newTaskProjectId} onChange={e => setNewTaskProjectId(e.target.value)} className="w-full bg-card-background border border-border-color rounded p-1 text-xs">
                                                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                             </select>
                                             <div className="flex justify-end gap-1">
                                                 <button type="button" onClick={() => setAddingTaskTo(null)} className="px-2 py-0.5 text-xs bg-gray-600 rounded">Cancel</button>
-                                                <button type="submit" className="px-2 py-0.5 text-xs bg-accent text-white rounded">Add</button>
+                                                <button type="submit" className="px-2 py-0.5 text-xs bg-accent-blue text-white rounded">Add</button>
                                             </div>
                                         </form>
                                     )}

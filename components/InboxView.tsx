@@ -20,7 +20,7 @@ const InboxItem: React.FC<{ task: InboxTask }> = ({ task }) => {
         <div
             draggable
             onDragStart={handleDragStart}
-            className="flex items-center justify-between p-3 bg-highlight rounded-lg cursor-grab group"
+            className="flex items-center justify-between p-3 bg-app-background rounded-lg cursor-grab group"
         >
             <span className="text-text-primary">{task.name}</span>
             <button
@@ -59,14 +59,14 @@ const InboxView: React.FC = () => {
                     </div>
                     <button
                         onClick={isListening ? stopListening : startListening}
-                        className={`p-3 rounded-full transition-colors ${isListening ? 'bg-red-500 animate-pulse' : 'bg-accent hover:bg-blue-500'}`}
+                        className={`p-3 rounded-full transition-colors ${isListening ? 'bg-red-500 animate-pulse' : 'bg-accent-blue hover:opacity-90'}`}
                         title={isListening ? "Stop Listening" : "Add Tasks with Voice"}
                     >
                         <MicrophoneIcon className="w-6 h-6 text-white" />
                     </button>
                 </div>
                  {isListening && (
-                    <div className="mt-4 p-4 bg-highlight rounded-lg border border-border-color">
+                    <div className="mt-4 p-4 bg-app-background rounded-lg border border-border-color">
                         <p className="text-text-secondary text-sm mb-1">Listening... Say "next" after each task to add another.</p>
                         <p className="text-text-primary min-h-[1.5em]">{transcript || "..."}</p>
                     </div>

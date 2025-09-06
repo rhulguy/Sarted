@@ -190,18 +190,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onAddTask, onUpdateTask, on
     const numWeeks = calendarGrid.length / 7;
 
     return (
-        <div ref={downloadRef} className="h-full flex flex-col bg-secondary rounded-lg">
+        <div ref={downloadRef} className="h-full flex flex-col bg-card-background rounded-lg">
             <header className="flex items-center justify-between p-4 border-b border-border-color shrink-0 flex-wrap gap-2">
                 <div className="flex items-center space-x-2">
-                    <button onClick={() => changePeriod(-1)} aria-label="Previous period" className="p-1 rounded text-text-secondary hover:bg-highlight"><ChevronLeftIcon className="w-5 h-5"/></button>
-                    <button onClick={() => setCurrentDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-highlight hover:bg-gray-700">Today</button>
-                    <button onClick={() => changePeriod(1)} aria-label="Next period" className="p-1 rounded text-text-secondary hover:bg-highlight"><ChevronRightIcon className="w-5 h-5"/></button>
+                    <button onClick={() => changePeriod(-1)} aria-label="Previous period" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button>
+                    <button onClick={() => setCurrentDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-gray-700">Today</button>
+                    <button onClick={() => changePeriod(1)} aria-label="Next period" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button>
                 </div>
                 <h2 className="text-lg md:text-xl font-bold text-center order-first w-full md:w-auto md:order-none">{headerTitle}</h2>
                  <button 
                     onClick={() => downloadImage(`${project?.name}-calendar-view.png`)} 
                     disabled={isDownloading} 
-                    className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+                    className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
                   >
                     <DownloadIcon className="w-4 h-4" />
                     <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
@@ -223,16 +223,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onAddTask, onUpdateTask, on
                         
                         return (
                             <div key={index} 
-                                className={`relative border-b border-r border-border-color p-1 flex flex-col group ${!day.isCurrentMonth ? 'bg-primary' : 'hover:bg-highlight/50'}`}
+                                className={`relative border-b border-r border-border-color p-1 flex flex-col group ${!day.isCurrentMonth ? 'bg-app-background' : 'hover:bg-app-background'}`}
                                 onDragOver={(e) => e.preventDefault()}
                                 onDrop={(e) => handleDrop(e, day.date)}
                             >
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className={`text-sm ${day.isToday ? 'bg-accent text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>
+                                    <span className={`text-sm ${day.isToday ? 'bg-accent-blue text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>
                                         {day.date.getUTCDate()}
                                     </span>
                                     {addingTaskTo === null && (
-                                        <button onClick={() => handleStartAddTask(day.date)} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent hover:text-blue-400" aria-label={`Add task for ${day.date.toISOString().slice(0,10)}`}>
+                                        <button onClick={() => handleStartAddTask(day.date)} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue hover:text-blue-400" aria-label={`Add task for ${day.date.toISOString().slice(0,10)}`}>
                                             <PlusIcon className="w-4 h-4"/>
                                         </button>
                                     )}
@@ -241,7 +241,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onAddTask, onUpdateTask, on
                                     {tasksForDay.map(task => (
                                          <div key={task.id} title={task.name} draggable onDragStart={(e) => handleDragStart(e, task.id)}
                                             onClick={() => setFocusedTask(task)}
-                                            className={`bg-accent/80 text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center justify-between group/task ${task.completed ? 'opacity-60' : 'opacity-100'} ${draggedTaskId === task.id ? 'opacity-30' : ''}`}
+                                            className={`bg-accent-blue bg-opacity-80 text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center justify-between group/task ${task.completed ? 'opacity-60' : 'opacity-100'} ${draggedTaskId === task.id ? 'opacity-30' : ''}`}
                                         >
                                            <div className="flex items-center min-w-0">
                                                 {task.imageUrl && <img src={task.imageUrl} alt={task.name} className="w-4 h-4 rounded-sm mr-1.5 object-cover shrink-0"/>}
@@ -266,7 +266,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onAddTask, onUpdateTask, on
                                         <form onSubmit={handleFormSubmit}>
                                             <input ref={newTaskInputRef} type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} onBlur={(e) => e.currentTarget.form?.requestSubmit()}
                                                 onKeyDown={(e) => { if (e.key === 'Escape') { setAddingTaskTo(null); setNewTaskName(""); }}} placeholder="New task..."
-                                                className="w-full bg-highlight border border-accent rounded p-1 text-xs focus:outline-none relative z-10" />
+                                                className="w-full bg-app-background border border-accent-blue rounded p-1 text-xs focus:outline-none relative z-10" />
                                         </form>
                                     )}
                                 </div>
@@ -277,7 +277,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onAddTask, onUpdateTask, on
             </div>
             {focusedTask && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onClick={() => setFocusedTask(null)}>
-                    <div className="bg-secondary rounded-lg shadow-xl p-4 md:p-6 w-full max-w-2xl mx-2" onClick={e => e.stopPropagation()}>
+                    <div className="bg-card-background rounded-lg shadow-xl p-4 md:p-6 w-full max-w-2xl mx-2" onClick={e => e.stopPropagation()}>
                         <div className="max-h-[80vh] overflow-y-auto">
                             <TaskItem 
                                 task={focusedTask}

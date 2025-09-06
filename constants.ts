@@ -7,11 +7,11 @@ export const COLOR_PALETTE = [
 ];
 
 export const INITIAL_PROJECT_GROUPS: ProjectGroup[] = [
-  { id: 'group-1', name: 'Work', color: 'bg-accent-blue' },
-  { id: 'group-2', name: 'Personal', color: 'bg-brand-purple' },
-  { id: 'group-3', name: 'Learning', color: 'bg-accent-green' },
-  { id: 'group-4', name: 'Health & Fitness', color: 'bg-brand-orange' },
-  { id: 'group-5', name: 'Home & Errands', color: 'bg-yellow-500' },
+  { id: 'group-1', name: 'Work', color: 'bg-accent-blue', order: 0 },
+  { id: 'group-2', name: 'Personal', color: 'bg-brand-purple', order: 1 },
+  { id: 'group-3', name: 'Learning', color: 'bg-accent-green', order: 2 },
+  { id: 'group-4', name: 'Health & Fitness', color: 'bg-brand-orange', order: 3 },
+  { id: 'group-5', name: 'Home & Errands', color: 'bg-yellow-500', order: 4 },
 ];
 
 export const INITIAL_PROJECTS: Project[] = [

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ProjectGroup } from '../types';
 import { useProject } from '../contexts/ProjectContext';
-import { PlusIcon, TrashIcon, PencilIcon } from './IconComponents';
+import { PlusIcon, TrashIcon, PencilIcon, DragHandleIcon } from './IconComponents';
 import { COLOR_PALETTE } from '../constants';
 
 interface ProjectGroupEditorModalProps {
@@ -10,11 +10,14 @@ interface ProjectGroupEditorModalProps {
 }
 
 const ProjectGroupEditorModal: React.FC<ProjectGroupEditorModalProps> = ({ isOpen, onClose }) => {
-  const { projectGroups, addProjectGroup, updateProjectGroup, deleteProjectGroup } = useProject();
+  const { projectGroups, addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups } = useProject();
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupColor, setNewGroupColor] = useState(COLOR_PALETTE[4]);
+  
+  const dragItem = useRef<string | null>(null);
+  const dragOverItem = useRef<string | null>(null);
 
   const handleStartEditing = (group: ProjectGroup) => {
     setEditingGroupId(group.id);
@@ -42,6 +45,36 @@ const ProjectGroupEditorModal: React.FC<ProjectGroupEditorModalProps> = ({ isOpe
       }
   }
 
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, groupId: string) => {
+    dragItem.current = groupId;
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>, groupId: string) => {
+    dragOverItem.current = groupId;
+  };
+  
+  const handleDragEnd = () => {
+    if (dragItem.current === null || dragOverItem.current === null || dragItem.current === dragOverItem.current) {
+      dragItem.current = null;
+      dragOverItem.current = null;
+      return;
+    }
+    
+    const reorderedGroups = [...projectGroups];
+    const dragItemIndex = reorderedGroups.findIndex(g => g.id === dragItem.current);
+    const dragOverItemIndex = reorderedGroups.findIndex(g => g.id === dragOverItem.current);
+
+    const [draggedItem] = reorderedGroups.splice(dragItemIndex, 1);
+    reorderedGroups.splice(dragOverItemIndex, 0, draggedItem);
+    
+    reorderProjectGroups(reorderedGroups);
+
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
+
+
   if (!isOpen) return null;
 
   return (
@@ -54,7 +87,18 @@ const ProjectGroupEditorModal: React.FC<ProjectGroupEditorModalProps> = ({ isOpe
 
         <div className="space-y-3 flex-grow overflow-y-auto pr-2">
           {projectGroups.map(group => (
-            <div key={group.id} className="flex items-center space-x-3 bg-app-background p-2 rounded-lg">
+            <div 
+                key={group.id} 
+                className="flex items-center space-x-3 bg-app-background p-2 rounded-lg"
+                draggable
+                onDragStart={(e) => handleDragStart(e, group.id)}
+                onDragEnter={(e) => handleDragEnter(e, group.id)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => e.preventDefault()}
+            >
+              <div className="cursor-move text-text-secondary">
+                  <DragHandleIcon className="w-5 h-5" />
+              </div>
               <div className={`w-5 h-5 rounded-full ${group.color} shrink-0`}></div>
               {editingGroupId === group.id ? (
                 <input

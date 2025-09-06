@@ -54,46 +54,51 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const addHabit = useCallback(async (habitData: Omit<Habit, 'id'>) => {
     const newHabit: Habit = { ...habitData, id: `habit-${Date.now()}` };
-    const originalHabits = habits;
-    setHabits(prev => [...prev, newHabit]); // Optimistic update
-
-    if (user) {
-        try {
-            await db.doc(`users/${user.id}/habits/${newHabit.id}`).set(newHabit);
-        } catch (error) {
-            console.error("Failed to add habit, reverting:", error);
-            setHabits(originalHabits); // Revert
+    
+    setHabits(currentHabits => {
+        const updatedHabits = [...currentHabits, newHabit];
+        if (user) {
+            db.doc(`users/${user.id}/habits/${newHabit.id}`).set(newHabit)
+                .catch(error => {
+                    console.error("Failed to add habit, reverting:", error);
+                    setHabits(currentHabits); // Revert on failure
+                });
         }
-    }
-  }, [user, habits]);
+        return updatedHabits;
+    });
+  }, [user]);
 
   const updateHabit = useCallback(async (habit: Habit) => {
-    const originalHabits = habits;
-    setHabits(prev => prev.map(h => h.id === habit.id ? habit : h)); // Optimistic update
-    
-    if (user) {
-        try {
-            await db.doc(`users/${user.id}/habits/${habit.id}`).set(habit);
-        } catch (error) {
-            console.error("Failed to update habit, reverting:", error);
-            setHabits(originalHabits); // Revert
+    setHabits(currentHabits => {
+        const originalHabits = currentHabits;
+        const updatedHabits = currentHabits.map(h => h.id === habit.id ? habit : h);
+
+        if (user) {
+            db.doc(`users/${user.id}/habits/${habit.id}`).set(habit)
+                .catch(error => {
+                    console.error("Failed to update habit, reverting:", error);
+                    setHabits(originalHabits); // Revert on failure
+                });
         }
-    }
-  }, [user, habits]);
+        return updatedHabits;
+    });
+  }, [user]);
 
   const deleteHabit = useCallback(async (habitId: string) => {
-    const originalHabits = habits;
-    setHabits(prev => prev.filter(h => h.id !== habitId)); // Optimistic update
+    setHabits(currentHabits => {
+        const originalHabits = currentHabits;
+        const updatedHabits = currentHabits.filter(h => h.id !== habitId);
 
-    if (user) {
-        try {
-            await db.doc(`users/${user.id}/habits/${habitId}`).delete();
-        } catch (error) {
-            console.error("Failed to delete habit, reverting:", error);
-            setHabits(originalHabits); // Revert
+        if (user) {
+            db.doc(`users/${user.id}/habits/${habitId}`).delete()
+                .catch(error => {
+                    console.error("Failed to delete habit, reverting:", error);
+                    setHabits(originalHabits); // Revert on failure
+                });
         }
-    }
-  }, [user, habits]);
+        return updatedHabits;
+    });
+  }, [user]);
 
   const contextValue = useMemo(() => ({
     habits, addHabit, updateHabit, deleteHabit
