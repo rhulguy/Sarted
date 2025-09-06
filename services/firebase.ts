@@ -1,4 +1,6 @@
 
+
+
 // This file now uses the globally available `firebase` object,
 // which is loaded via script tags in `index.html`.
 
@@ -13,8 +15,7 @@ const firebaseConfig = {
   projectId: "swapmoo-e2b68",
   storageBucket: "swapmoo-e2b68.appspot.com",
   messagingSenderId: "116829841158",
-  appId: "1:116829841158:web:4afdd2b00706541c3ba087",
-  measurementId: "G-PFC0J2JT72"
+  appId: "1:116829841158:web:4afdd2b00706541c3ba087"
 };
 
 

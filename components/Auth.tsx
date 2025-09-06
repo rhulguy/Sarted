@@ -1,39 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
+import { GoogleIcon } from './IconComponents';
 
 // Inform TypeScript that `firebase` exists on the global scope.
 declare const firebase: any;
 
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: { client_id: string; callback: (response: any) => void; }) => void;
-          renderButton: (parent: HTMLElement, options: any) => void;
-          prompt: () => void;
-        };
-      };
-    };
-  }
-}
-
-const GOOGLE_CLIENT_ID = '116829841158-5k18crbts8su25dn4ushh547ncd6da0p.apps.googleusercontent.com';
-
 const Auth: React.FC = () => {
     const { user } = useAuth();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const signInButtonRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const handleCredentialResponse = async (response: any) => {
+    const handleGoogleSignIn = async () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
         try {
-            const idToken = response.credential;
-            const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
-            await auth.signInWithCredential(credential);
+            await auth.signInWithPopup(provider);
         } catch (error) {
-            console.error("Error signing in with Firebase:", error);
+            console.error("Error during Google sign-in:", error);
+            alert("Failed to sign in. Please ensure popups are enabled and try again. Check the console for more details.");
         }
     };
 
@@ -41,20 +25,6 @@ const Auth: React.FC = () => {
         auth.signOut();
         setIsDropdownOpen(false);
     };
-
-    useEffect(() => {
-        // Render the Google Sign-In button if the user is not logged in and the button exists
-        if (!user && signInButtonRef.current && window.google) {
-            window.google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID!,
-                callback: handleCredentialResponse,
-            });
-            window.google.accounts.id.renderButton(
-                signInButtonRef.current,
-                { theme: "outline", size: "large", type: "standard", shape: "pill" }
-            );
-        }
-    }, [user]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -73,14 +43,14 @@ const Auth: React.FC = () => {
                     <img src={user.picture || ''} alt={user.name || ''} className="w-8 h-8 rounded-full" />
                 </button>
                 {isDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-highlight border border-border-color rounded-md shadow-lg z-10">
+                    <div className="absolute right-0 mt-2 w-48 bg-card-background border border-border-color rounded-md shadow-lg z-10">
                         <div className="p-2 border-b border-border-color">
                             <p className="text-sm font-semibold text-text-primary">{user.name}</p>
                             <p className="text-xs text-text-secondary">{user.email}</p>
                         </div>
                         <button 
                             onClick={handleLogout} 
-                            className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-secondary"
+                            className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-app-background"
                         >
                             Sign Out
                         </button>
@@ -90,8 +60,15 @@ const Auth: React.FC = () => {
         );
     }
     
-    // The container for the Google Sign-In button
-    return <div ref={signInButtonRef} className={user === null ? '' : 'hidden'}></div>;
+    return (
+        <button
+            onClick={handleGoogleSignIn}
+            className="flex items-center justify-center gap-2 px-4 py-2 border border-border-color rounded-lg hover:bg-app-background transition-colors"
+        >
+            <GoogleIcon className="w-5 h-5" />
+            <span className="text-sm font-semibold text-text-primary">Sign in</span>
+        </button>
+    );
 };
 
 export default Auth;

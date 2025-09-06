@@ -64,6 +64,7 @@ const GlobalGanttView: React.FC = () => {
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
   const [creatingState, setCreatingState] = useState<CreatingState | null>(null);
   const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number } | null>(null);
+  const [tempTaskPositions, setTempTaskPositions] = useState<Map<string, { left: number; width: number }>>(new Map());
   const [addingTaskToProject, setAddingTaskToProject] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState('');
   const [collapsedProjects, setCollapsedProjects] = useState(new Set<string>());
@@ -165,6 +166,64 @@ const GlobalGanttView: React.FC = () => {
     return items;
   }, [visibleProjects, projectGroups, collapsedGroups, collapsedProjects, allTasksWithMeta, addingTaskToProject]);
 
+  const { chartStartDate, totalDays, months, totalWidth } = useMemo(() => {
+    if (!minDate || !maxDate) return { chartStartDate: new Date(), totalDays: 0, months: [], totalWidth: 0 };
+    const startDate = new Date(minDate);
+    const endDate = new Date(maxDate);
+    endDate.setUTCDate(endDate.getUTCDate() + 7);
+    const days = dayDiff(startDate, endDate) + 1;
+    const width = days * dayWidth;
+  
+    const monthHeaders: { name: string; year: number; days: number; }[] = [];
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const year = currentDate.getUTCFullYear();
+      const month = currentDate.getUTCMonth();
+      const daysInMonth = getDaysInMonthUTC(year, month);
+      const remainingDaysInMonth = daysInMonth - currentDate.getUTCDate() + 1;
+      const daysToShow = Math.min(dayDiff(currentDate, endDate) + 1, remainingDaysInMonth);
+  
+      monthHeaders.push({ name: currentDate.toLocaleString('default', { month: 'long', timeZone: 'UTC' }), year, days: daysToShow });
+      currentDate.setUTCDate(currentDate.getUTCDate() + daysToShow);
+    }
+  
+    return { chartStartDate: startDate, totalDays: days, months: monthHeaders, totalWidth: width };
+  }, [minDate, maxDate, dayWidth]);
+
+  const taskPositions = useMemo(() => {
+    const localTaskPositions = new Map<string, { y: number, startX: number, endX: number }>();
+    itemsToRender.forEach((item, index) => {
+        if (item.type === 'task' && item.data.startDate && item.data.endDate) {
+            const task = item.data;
+            const taskStart = parseDate(task.startDate);
+            if (isNaN(taskStart.getTime())) return;
+            const startOffset = dayDiff(chartStartDate, taskStart);
+            const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
+            localTaskPositions.set(task.id, {
+                y: index * 40, // rowHeight is 40
+                startX: startOffset * dayWidth,
+                endX: (startOffset * dayWidth) + (duration * dayWidth),
+            });
+        }
+    });
+    return localTaskPositions;
+  }, [itemsToRender, chartStartDate, dayWidth]);
+
+  useEffect(() => {
+    if (tempTaskPositions.size > 0) {
+        const newTempPositions = new Map(tempTaskPositions);
+        let changed = false;
+        for (const [taskId, tempPos] of tempTaskPositions.entries()) {
+            const currentPos = taskPositions.get(taskId);
+            if (currentPos && Math.round(currentPos.startX) === Math.round(tempPos.left) && Math.round(currentPos.endX - currentPos.startX) === Math.round(tempPos.width)) {
+                newTempPositions.delete(taskId);
+                changed = true;
+            }
+        }
+        if (changed) setTempTaskPositions(newTempPositions);
+    }
+  }, [visibleProjects, taskPositions, tempTaskPositions]);
+
   const toggleProjectCollapse = useCallback((projectId: string) => {
     setCollapsedProjects(prev => {
         const newSet = new Set(prev);
@@ -194,30 +253,6 @@ const GlobalGanttView: React.FC = () => {
     }
   }, [newTaskName, addingTaskToProject, addTask]);
 
-  const { chartStartDate, totalDays, months, totalWidth } = useMemo(() => {
-    if (!minDate || !maxDate) return { chartStartDate: new Date(), totalDays: 0, months: [], totalWidth: 0 };
-    const startDate = new Date(minDate);
-    const endDate = new Date(maxDate);
-    endDate.setUTCDate(endDate.getUTCDate() + 7);
-    const days = dayDiff(startDate, endDate) + 1;
-    const width = days * dayWidth;
-  
-    const monthHeaders: { name: string; year: number; days: number; }[] = [];
-    let currentDate = new Date(startDate);
-    while (currentDate <= endDate) {
-      const year = currentDate.getUTCFullYear();
-      const month = currentDate.getUTCMonth();
-      const daysInMonth = getDaysInMonthUTC(year, month);
-      const remainingDaysInMonth = daysInMonth - currentDate.getUTCDate() + 1;
-      const daysToShow = Math.min(dayDiff(currentDate, endDate) + 1, remainingDaysInMonth);
-  
-      monthHeaders.push({ name: currentDate.toLocaleString('default', { month: 'long', timeZone: 'UTC' }), year, days: daysToShow });
-      currentDate.setUTCDate(currentDate.getUTCDate() + daysToShow);
-    }
-  
-    return { chartStartDate: startDate, totalDays: days, months: monthHeaders, totalWidth: width };
-  }, [minDate, maxDate, dayWidth]);
-
   const handleMouseUp = useCallback(async (e: MouseEvent, currentInteraction: InteractionState) => {
     const { originalTask, startX, type, taskId } = currentInteraction;
     const taskInfo = allTasksWithMeta.find(t => t.id === taskId);
@@ -229,18 +264,13 @@ const GlobalGanttView: React.FC = () => {
     const finalOffsetPx = e.clientX - startX;
     const dayDelta = Math.round(finalOffsetPx / dayWidth);
     
-    if (dayDelta === 0) {
-        setInteraction(null);
-        return;
-    }
+    setInteraction(null);
+    if (dayDelta === 0) return;
 
     const originalStart = parseDate(originalTask.startDate);
     const originalEnd = parseDate(originalTask.endDate);
 
-    if (isNaN(originalStart.getTime()) || isNaN(originalEnd.getTime())) {
-        setInteraction(null);
-        return;
-    }
+    if (isNaN(originalStart.getTime()) || isNaN(originalEnd.getTime())) return;
 
     let newStart = new Date(originalStart);
     let newEnd = new Date(originalEnd);
@@ -282,11 +312,21 @@ const GlobalGanttView: React.FC = () => {
             collectSubtasks(originalTask.subtasks, dragDayDelta);
         }
         
+        const newTempPositions = new Map<string, { left: number; width: number }>();
+        tasksToUpdate.forEach(updatedTask => {
+            const start = parseDate(updatedTask.startDate);
+            const end = parseDate(updatedTask.endDate);
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                const startOffset = dayDiff(chartStartDate, start);
+                const duration = dayDiff(start, end) + 1;
+                newTempPositions.set(updatedTask.id, { left: startOffset * dayWidth, width: Math.max(dayWidth, duration * dayWidth) });
+            }
+        });
+        setTempTaskPositions(prev => new Map([...Array.from(prev.entries()), ...Array.from(newTempPositions.entries())]));
+        
         await updateMultipleTasks(taskInfo.projectId, tasksToUpdate);
     }
-    
-    setInteraction(null);
-  }, [dayWidth, updateMultipleTasks, allTasksWithMeta]);
+  }, [dayWidth, updateMultipleTasks, allTasksWithMeta, chartStartDate]);
   
   const handleCreateMouseUp = useCallback(async (e: MouseEvent) => {
       if (!creatingState || !scrollContainerRef.current) return;
@@ -419,6 +459,8 @@ const GlobalGanttView: React.FC = () => {
       await reparentTask(taskData.projectId, taskData.id, grandparentId);
   }, [parentMap, reparentTask]);
 
+  const today = new Date();
+  today.setUTCHours(0,0,0,0);
 
   if (visibleProjects.length === 0) return <div className="text-center text-text-secondary p-8">No projects to display.</div>;
   
@@ -454,9 +496,7 @@ const GlobalGanttView: React.FC = () => {
                     
                     {itemsToRender.map((item, index) => {
                         const rowHeight = 40;
-                        const top = index * rowHeight;
                         
-                        // FIX: Use a type guard for `item.type` to allow TypeScript to narrow the type of `item` and `item.data`
                         if (item.type === 'task') {
                             let canIndent = false;
                             if (index > 0) {
@@ -496,8 +536,9 @@ const GlobalGanttView: React.FC = () => {
                                     <div className="flex-grow h-full relative border-b border-border-color">
                                         {!item.data.id.startsWith('new-task-form') && (() => {
                                             const task = item.data;
-                                            const taskStart = parseDate(task.startDate);
-                                            if (isNaN(taskStart.getTime())) {
+                                            const taskPos = taskPositions.get(task.id);
+
+                                            if (!taskPos) {
                                                 return (
                                                     <div className="absolute inset-0 group/creator cursor-cell" onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: item, startX: e.clientX - timelineRect.left }); }}>
                                                         <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent/10 transition-colors flex items-center justify-center">
@@ -507,24 +548,26 @@ const GlobalGanttView: React.FC = () => {
                                                 );
                                             }
 
-                                            const startOffset = dayDiff(chartStartDate, taskStart);
-                                            const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
-                                            const left = startOffset * dayWidth;
-                                            const width = duration * dayWidth;
-
+                                            const isInteracting = interaction?.taskId === task.id;
+                                            const tempPos = tempTaskPositions.get(task.id);
+                                            const left = tempPos ? tempPos.left : taskPos.startX;
+                                            const width = tempPos ? tempPos.width : (taskPos.endX - taskPos.startX);
+                                            const endDate = parseDate(task.endDate);
+                                            const isOverdue = endDate && endDate < today && !task.completed;
+                                            
                                             return (
                                                 <div 
                                                     ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }}
                                                     data-task-id={task.id} 
                                                     className="absolute h-7 top-1/2 -translate-y-1/2 group" 
-                                                    style={{ left: `${left}px`, width: `${width}px`, zIndex: interaction?.taskId === task.id ? 20 : 1 }}
-                                                    onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }}>
-                                                    <div title={`${task.name}\n${task.startDate} to ${task.endDate}`} className={`h-full w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${task.completed ? 'bg-gray-600' : task.projectColor} ${task.completed ? 'opacity-50' : ''}`}>
+                                                    style={{ left: `${left}px`, width: `${width}px`, zIndex: isInteracting ? 20 : 1, transition: isInteracting ? 'none' : 'left 0.2s, width 0.2s' }}
+                                                    onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }}>
+                                                    <div title={`${task.name}\n${task.startDate} to ${task.endDate}`} className={`h-full w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : task.completed ? 'bg-gray-600' : task.projectColor} ${task.completed ? 'opacity-50' : ''}`}>
                                                         {task.imageUrl && (<img src={task.imageUrl} alt={task.name} className="w-5 h-5 rounded-full object-cover mr-2 shrink-0"/>)}
                                                         <span className="truncate pointer-events-none">{task.name}</span>
                                                     </div>
-                                                    <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }} className="absolute -left-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                                    <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: left, originalWidth: width }); }} className="absolute -right-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                                    <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -left-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                                    <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -right-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
                                                 </div>
                                             );
                                         })()}

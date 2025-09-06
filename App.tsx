@@ -280,16 +280,10 @@ const ProjectsDashboardView = () => {
         return projectGroups
             .map(group => ({
                 ...group,
-                projects: visibleProjects.filter(p => p.groupId === group.id).sort((a,b) => a.name.localeCompare(b.name)),
+                projects: visibleProjects.filter(p => p.groupId === group.id).sort((a, b) => a.name.localeCompare(b.name)),
             }))
-            .filter(group => group.projects.length > 0)
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [projectGroups, visibleProjects]);
-
-    if (visibleProjects.length === 0) {
-        // This should get a "Create Your First Project" modal trigger
-        return <WelcomePlaceholder onNewProject={() => {}} />;
-    }
 
     return (
         <div className="h-full flex flex-col p-4 md:p-6">
@@ -304,18 +298,24 @@ const ProjectsDashboardView = () => {
                             <span className={`w-4 h-4 rounded-full ${group.color} mr-3`}></span>
                             {group.name}
                         </h2>
-                        <div className={`grid gap-4 md:gap-6 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
-                            {group.projects.map(project => 
-                                <ProjectCard 
-                                    key={project.id} 
-                                    project={project} 
-                                    onClick={() => selectProject(project.id)}
-                                    onArchive={() => archiveProject(project.id)}
-                                    onDelete={() => deleteProject(project.id)}
-                                    onUpdate={updateProject}
-                                />
-                            )}
-                        </div>
+                        {group.projects.length > 0 ? (
+                            <div className={`grid gap-4 md:gap-6 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+                                {group.projects.map(project => 
+                                    <ProjectCard 
+                                        key={project.id} 
+                                        project={project} 
+                                        onClick={() => selectProject(project.id)}
+                                        onArchive={() => archiveProject(project.id)}
+                                        onDelete={() => deleteProject(project.id)}
+                                        onUpdate={updateProject}
+                                    />
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-sm text-text-secondary p-4 bg-app-background rounded-lg border border-dashed border-border-color">
+                                No projects in this group yet.
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
@@ -389,7 +389,7 @@ const ProjectCard: React.FC<{ project: Project, onClick: () => void, onArchive: 
 type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources';
 
 export default function App() {
-  const { selectedProject, selectedProjectId, selectProject } = useProject();
+  const { projects, selectedProject, selectedProjectId, selectProject } = useProject();
   const { shouldShowReview, setReviewShown } = useWeeklyReview();
   const { loading: authLoading } = useAuth();
   
@@ -467,6 +467,9 @@ export default function App() {
       default:
         if (selectedProject) {
           return <TaskList key={selectedProject.id} />;
+        }
+        if (projects.length === 0) {
+            return <WelcomePlaceholder onNewProject={() => setIsProjectModalOpen(true)} />;
         }
         return <ProjectsDashboardView />;
     }

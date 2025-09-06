@@ -207,32 +207,47 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [updateProject]);
 
   const addProjectGroup = useCallback(async (groupData: Omit<ProjectGroup, 'id'>) => {
-    if (!user) return;
-    try {
-      const newGroup = { ...groupData, id: `group-${Date.now()}` };
-      await db.doc(`users/${user.id}/projectGroups/${newGroup.id}`).set(newGroup);
-    } catch (error) {
-        console.error("Failed to add project group:", error);
+    const newGroup = { ...groupData, id: `group-${Date.now()}` };
+    const originalGroups = projectGroups;
+    setProjectGroups(prev => [...prev, newGroup]); // Optimistic update
+
+    if (user) {
+      try {
+        await db.doc(`users/${user.id}/projectGroups/${newGroup.id}`).set(newGroup);
+      } catch (error) {
+        console.error("Failed to add project group, reverting:", error);
+        setProjectGroups(originalGroups);
+      }
     }
-  }, [user]);
+  }, [user, projectGroups]);
 
   const updateProjectGroup = useCallback(async (group: ProjectGroup) => {
-    if (!user) return;
-    try {
-      await db.doc(`users/${user.id}/projectGroups/${group.id}`).update(group);
-    } catch (error) {
-        console.error("Failed to update project group:", error);
+    const originalGroups = projectGroups;
+    setProjectGroups(prev => prev.map(g => g.id === group.id ? group : g)); // Optimistic update
+
+    if (user) {
+      try {
+        await db.doc(`users/${user.id}/projectGroups/${group.id}`).update(group);
+      } catch (error) {
+        console.error("Failed to update project group, reverting:", error);
+        setProjectGroups(originalGroups);
+      }
     }
-  }, [user]);
+  }, [user, projectGroups]);
 
   const deleteProjectGroup = useCallback(async (groupId: string) => {
-      if (!user) return;
+    const originalGroups = projectGroups;
+    setProjectGroups(prev => prev.filter(g => g.id !== groupId)); // Optimistic update
+
+    if (user) {
       try {
         await db.doc(`users/${user.id}/projectGroups/${groupId}`).delete();
       } catch (error) {
-          console.error("Failed to delete project group:", error);
+        console.error("Failed to delete project group, reverting:", error);
+        setProjectGroups(originalGroups);
       }
-  }, [user]);
+    }
+  }, [user, projectGroups]);
 
   const addTask = useCallback(async (projectId: string, task: Task) => {
     const project = projects.find(p => p.id === projectId);
