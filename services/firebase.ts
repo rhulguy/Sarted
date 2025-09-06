@@ -1,6 +1,8 @@
 
 
 
+
+
 // This file now uses the globally available `firebase` object,
 // which is loaded via script tags in `index.html`.
 
@@ -10,7 +12,7 @@ declare const firebase: any;
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAXsEQK4GEtFCKZfsEVFihlQedivNWGzbc",
-  authDomain: "swapmoo-e2b68.firebaseapp.com",
+  authDomain: "sarted.com",
   projectId: "swapmoo-e2b68",
   messagingSenderId: "116829841158",
   appId: "1:116829841158:web:4afdd2b00706541c3ba087"
