@@ -36,6 +36,13 @@ const CustomCheckbox: React.FC<{ checked: boolean; onChange: () => void; colorCl
   );
 };
 
+// Use a consistent, timezone-safe date formatter
+const formatDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, onAddSubtask, projects, currentProjectId, onMoveProject }) => {
     const { projectGroups } = useProject();
@@ -60,18 +67,23 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
     }, [task]);
 
     const handleToggleComplete = () => {
-        const toggleChildren = (tasks: Task[], completed: boolean): Task[] => {
+        const newCompletedStatus = !task.completed;
+        const completionDate = newCompletedStatus ? formatDate(new Date()) : undefined;
+
+        const toggleChildren = (tasks: Task[], completed: boolean, date?: string): Task[] => {
             return tasks.map(t => ({
                 ...t,
                 completed,
-                subtasks: t.subtasks ? toggleChildren(t.subtasks, completed) : []
+                completionDate: date,
+                subtasks: t.subtasks ? toggleChildren(t.subtasks, completed, date) : []
             }));
         };
-        const newCompletedStatus = !task.completed;
+        
         onUpdate({ 
             ...task, 
             completed: newCompletedStatus,
-            subtasks: toggleChildren(task.subtasks, newCompletedStatus)
+            completionDate,
+            subtasks: toggleChildren(task.subtasks, newCompletedStatus, completionDate)
         });
     };
 

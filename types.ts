@@ -3,6 +3,7 @@ export interface Task {
   name: string;
   description: string;
   completed: boolean;
+  completionDate?: string; // YYYY-MM-DD
   subtasks: Task[];
   startDate?: string; // YYYY-MM-DD
   endDate?: string;   // YYYY-MM-DD
