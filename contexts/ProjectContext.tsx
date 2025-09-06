@@ -77,7 +77,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       // --- End Seeding Logic ---
 
       const projectsQuery = db.collection(`users/${user.id}/projects`);
-      const groupsQuery = db.collection(`users/${user.id}/projectGroups`).orderBy('order');
+      const groupsQuery = db.collection(`users/${user.id}/projectGroups`).orderBy('name');
 
       const unsubProjects = projectsQuery.onSnapshot((snapshot) => {
         const userProjects = snapshot.docs.map(d => {
@@ -287,7 +287,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const addTask = useCallback(async (projectId: string, task: Task) => {
     const project = projects.find(p => p.id === projectId);
     if (!project) return;
-    const newTasks = [...project.tasks, task];
+    const newTasks = [...(project.tasks || []), task];
     await updateProject(projectId, { tasks: newTasks });
   }, [projects, updateProject]);
 

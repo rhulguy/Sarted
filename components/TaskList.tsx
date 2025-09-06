@@ -7,12 +7,14 @@ import CalendarView from './CalendarView';
 import { useProject } from '../contexts/ProjectContext';
 import { calculateProgress } from '../utils/taskUtils';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { Task } from '../types';
+import { Task, ProjectView } from '../types';
 
-type View = 'list' | 'gantt' | 'mindmap' | 'calendar';
+interface TaskListProps {
+  projectView: ProjectView;
+  setProjectView: (view: ProjectView) => void;
+}
 
-const TaskList: React.FC = () => {
-  const [currentView, setCurrentView] = useState<View>('list');
+const TaskList: React.FC<TaskListProps> = ({ projectView, setProjectView }) => {
   const { selectedProject, addTask, updateTask, deleteTask, addSubtask } = useProject();
   const isMobile = useIsMobile();
 
@@ -64,31 +66,16 @@ const TaskList: React.FC = () => {
       onDeleteTask: handleDeleteTask, 
       onAddSubtask: handleAddSubtask 
   };
-  
-  const allViewButtons = useMemo(() => [
-    { id: 'list', name: 'List', icon: ListIcon },
-    { id: 'gantt', name: 'Gantt', icon: GanttIcon },
-    { id: 'mindmap', name: 'Mind Map', icon: MindMapIcon },
-    { id: 'calendar', name: 'Calendar', icon: CalendarIcon },
-  ], []);
-
-  const viewButtons = useMemo(() => {
-    const mobileViews = ['list', 'calendar'];
-    if (isMobile) {
-        return allViewButtons.filter(b => mobileViews.includes(b.id));
-    }
-    return allViewButtons;
-  }, [isMobile, allViewButtons]);
     
   // Effect to switch to a mobile-friendly view if the current one is not supported
   useEffect(() => {
     if (isMobile) {
-      const isCurrentViewMobileFriendly = viewButtons.some(b => b.id === currentView);
-      if (!isCurrentViewMobileFriendly) {
-        setCurrentView('list');
+      const mobileFriendlyViews: ProjectView[] = ['list', 'calendar'];
+      if (!mobileFriendlyViews.includes(projectView)) {
+        setProjectView('list');
       }
     }
-  }, [isMobile, currentView, viewButtons]);
+  }, [isMobile, projectView, setProjectView]);
 
   return (
     <div className="h-full flex flex-col p-4 md:p-6">
@@ -101,22 +88,6 @@ const TaskList: React.FC = () => {
                 <p className="text-text-secondary text-sm">Doing something amazing.</p>
              </div>
           </div>
-          <div className="bg-card-background border border-border-color p-1 rounded-full flex space-x-1">
-            {viewButtons.map(button => (
-                <button
-                    key={button.id}
-                    onClick={() => setCurrentView(button.id as View)}
-                    className={`flex items-center space-x-2 py-1.5 px-3 text-sm font-medium rounded-full transition-colors shrink-0 ${
-                        currentView === button.id
-                        ? 'bg-accent-blue text-white'
-                        : 'text-text-secondary hover:text-text-primary hover:bg-app-background'
-                    }`}
-                >
-                    <button.icon className="w-5 h-5" />
-                    <span className="hidden md:inline">{button.name}</span>
-                </button>
-            ))}
-        </div>
         </div>
         <div className="mt-4 flex items-center space-x-4">
             <div className="w-full bg-border-color rounded-full h-2"><div className="bg-accent-blue h-2 rounded-full" style={{ width: `${progress}%` }}></div></div>
@@ -125,10 +96,10 @@ const TaskList: React.FC = () => {
       </header>
       
       <div className="flex-grow overflow-hidden mt-4">
-        {currentView === 'list' && <ListView {...viewProps} />}
-        {currentView === 'gantt' && <GanttChartView />}
-        {currentView === 'mindmap' && <MindMapView {...viewProps} />}
-        {currentView === 'calendar' && <CalendarView {...viewProps} />}
+        {projectView === 'list' && <ListView {...viewProps} />}
+        {projectView === 'gantt' && <GanttChartView />}
+        {projectView === 'mindmap' && <MindMapView {...viewProps} />}
+        {projectView === 'calendar' && <CalendarView {...viewProps} />}
       </div>
     </div>
   );

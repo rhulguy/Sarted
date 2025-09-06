@@ -23,7 +23,7 @@ import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 // MyAccountView will be inlined in this file
 // import MyAccountView from './components/MyAccountView';
-import { Resource, Project, ProjectGroup } from './types';
+import { Resource, Project, ProjectGroup, ProjectView } from './types';
 // FIX: Import EditIcon for the inlined MyAccountView component.
 import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
@@ -513,6 +513,7 @@ export default function App() {
   const [isAddResourceModalOpen, setIsAddResourceModalOpen] = useState<boolean>(false);
 
   const [mainView, setMainView] = useState<MainView>('projects');
+  const [projectView, setProjectView] = useState<ProjectView>('list');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
 
@@ -550,6 +551,8 @@ export default function App() {
       if (isMobile) {
         setIsSidebarOpen(false);
       }
+    } else {
+      setProjectView('list');
     }
   }, [selectedProjectId, isMobile]);
   
@@ -580,7 +583,7 @@ export default function App() {
       case 'projects':
       default:
         if (selectedProject) {
-          return <TaskList key={selectedProject.id} />;
+          return <TaskList key={selectedProject.id} projectView={projectView} setProjectView={setProjectView} />;
         }
         if (projects.length === 0) {
             return <WelcomePlaceholder onNewProject={() => setIsProjectModalOpen(true)} />;
@@ -600,6 +603,9 @@ export default function App() {
         onNewProject={() => setIsProjectModalOpen(true)}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         isMobile={isMobile}
+        selectedProject={selectedProject}
+        projectView={projectView}
+        setProjectView={setProjectView}
       />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar 

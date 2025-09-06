@@ -33,7 +33,7 @@ const IconPicker: React.FC<{ selectedIcon: string; onSelect: (icon: string) => v
                 {selectedIcon}
             </button>
             {isOpen && (
-                <div className="absolute bottom-full mb-2 w-64 bg-card-background border border-border-color rounded-lg p-2 grid grid-cols-6 gap-2 z-10 shadow-soft">
+                <div className="absolute top-full mt-2 w-64 bg-card-background border border-border-color rounded-lg p-2 grid grid-cols-6 gap-2 z-20 shadow-soft">
                     {EMOJI_OPTIONS.map(emoji => (
                         <button
                             key={emoji}

@@ -79,3 +79,6 @@ export interface LaidoutMindMapNode extends BaseMindMapNode {
     angle?: number; 
     depth?: number;
 }
+
+// --- View Types ---
+export type ProjectView = 'list' | 'gantt' | 'mindmap' | 'calendar';
