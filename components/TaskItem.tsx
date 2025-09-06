@@ -20,6 +20,8 @@ interface TaskItemProps {
 const CustomCheckbox: React.FC<{ checked: boolean; onChange: () => void; colorClass: string }> = ({ checked, onChange, colorClass }) => {
   return (
     <button
+      role="checkbox"
+      aria-checked={checked}
       onClick={onChange}
       className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-colors ${
         checked ? `${colorClass} border-transparent` : 'bg-card-background border-border-color'
@@ -113,13 +115,14 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                         <ChevronRightIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                     </button>
                     <CustomCheckbox checked={task.completed} onChange={handleToggleComplete} colorClass={colorClass} />
-                    <span 
-                        onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-                        className={`text-base cursor-pointer truncate ${task.completed ? 'line-through text-text-secondary' : 'text-text-primary'}`}>
+                    <span className={`text-base truncate ${task.completed ? 'line-through text-text-secondary' : 'text-text-primary'}`}>
                         {task.name}
                     </span>
                 </div>
                 <div className="flex items-center space-x-2 md:space-x-1">
+                    <button onClick={() => setIsDetailsExpanded(o => !o)} className="p-2 text-text-secondary hover:text-accent-blue" title="Edit details">
+                        <EditIcon className="w-5 h-5" />
+                    </button>
                     <button onClick={() => setIsAddingSubtask(true)} className="p-2 text-text-secondary hover:text-accent-blue" title="Add sub-task">
                         <CornerDownRightIcon className="w-5 h-5" />
                     </button>
@@ -198,7 +201,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                       </div>
                       <div className="flex justify-end gap-2">
                           <button type="button" onClick={() => setIsAddingSubtask(false)} className="px-3 py-1 text-sm rounded-md bg-app-background hover:bg-border-color">Cancel</button>
-                          <button type="submit" className="px-3 py-1 text-sm rounded-md text-white bg-accent-blue hover:opacity-90">Add</button>
+                          <button type="submit" className="px-3 py-1 text-sm rounded-md text-white bg-accent-blue hover:opacity-90">Add Sub-task</button>
                       </div>
                   </form>
                 </div>

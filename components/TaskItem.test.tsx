@@ -226,8 +226,8 @@ describe('TaskItem component', () => {
             />
           );
           
-        const taskNameSpan = screen.getByText(mockTask.name);
-        fireEvent.click(taskNameSpan);
+        const editButton = screen.getByTitle('Edit details');
+        fireEvent.click(editButton);
     
         const startDateInput = screen.getByLabelText('Start Date');
         const endDateInput = screen.getByLabelText('End Date');
@@ -322,8 +322,8 @@ describe('TaskItem component', () => {
         );
     
         // The main container div for the task item
-        const taskItemContainer = screen.getByText(mockTask.name).closest('div.flex.items-center');
-        expect(taskItemContainer).toHaveStyle('padding-left: 5rem'); // 3 * 1.5rem + 0.5rem
+        const taskItemContainer = screen.getByText(mockTask.name).closest('div')?.parentElement;
+        expect(taskItemContainer).toHaveStyle('padding-left: 4.5rem');
     });
   });
 });

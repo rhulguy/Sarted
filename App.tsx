@@ -25,9 +25,10 @@ import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 // import MyAccountView from './components/MyAccountView';
 import { Resource, Project, ProjectGroup, ProjectView } from './types';
 // FIX: Import EditIcon for the inlined MyAccountView component.
-import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon } from './components/IconComponents';
+import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
+import { useDownloadImage } from './hooks/useDownloadImage';
 
 
 // --- NEW RESOURCE COMPONENTS (Inlined due to file system constraints) ---
@@ -115,16 +116,24 @@ const ProjectMultiSelect: React.FC<{
 
 
 // AddResourceModal Component
-const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void; initialContext?: { projectId?: string; groupId?: string } }> = ({ isOpen, onClose, initialContext }) => {
     const { addResource } = useResource();
     const { projects, projectGroups } = useProject();
     const [url, setUrl] = useState('');
     const [metadata, setMetadata] = useState<{ title: string; thumbnailUrl: string } | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [projectGroupId, setProjectGroupId] = useState(projectGroups[0]?.id || '');
+    const [projectGroupId, setProjectGroupId] = useState('');
     const [projectIds, setProjectIds] = useState<string[]>([]);
     const debounceTimeout = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            setProjectGroupId(initialContext?.groupId || (projectGroups.length > 0 ? projectGroups[0].id : ''));
+            setProjectIds(initialContext?.projectId ? [initialContext.projectId] : []);
+        }
+    }, [isOpen, initialContext, projectGroups]);
+
 
     useEffect(() => {
         if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
@@ -146,7 +155,8 @@ const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ 
     }, [url]);
 
     const handleAddResource = () => {
-        if (!metadata || !url || !projectGroupId) return;
+        if (!metadata || !url) return;
+        if (projectGroups.length > 0 && !projectGroupId) return; // Prevent adding if group not selected
         addResource({
             url, title: metadata.title, thumbnailUrl: metadata.thumbnailUrl, notes: '',
             projectGroupId, projectIds, isPinned: false, createdAt: Date.now(),
@@ -156,8 +166,7 @@ const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ 
 
     const handleClose = () => {
         if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
-        setUrl(''); setMetadata(null); setError(''); setIsLoading(false); setProjectIds([]);
-        if(projectGroups.length > 0) setProjectGroupId(projectGroups[0].id);
+        setUrl(''); setMetadata(null); setError(''); setIsLoading(false);
         onClose();
     };
 
@@ -190,11 +199,42 @@ const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ 
                         </div>
                     )}
                 </div>
-                <div className="mt-6 flex justify-end gap-2"><button onClick={handleClose} className="px-4 py-2 bg-app-background rounded-lg hover:bg-border-color">Cancel</button><button onClick={handleAddResource} disabled={!metadata || isLoading || !projectGroupId} className="px-4 py-2 bg-accent-blue text-white rounded-lg disabled:opacity-50">Add Resource</button></div>
+                <div className="mt-6 flex justify-end gap-2"><button onClick={handleClose} className="px-4 py-2 bg-app-background rounded-lg hover:bg-border-color">Cancel</button><button onClick={handleAddResource} disabled={!metadata || isLoading || (projectGroups.length > 0 && !projectGroupId)} className="px-4 py-2 bg-accent-blue text-white rounded-lg disabled:opacity-50">Add Resource</button></div>
             </div>
         </div>
     );
 };
+
+const ExportDropdown: React.FC<{
+    onExportImage: () => void;
+    onExportCsv: () => void;
+    onExportDoc: () => void;
+}> = ({ onExportImage, onExportCsv, onExportDoc }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    useClickOutside(wrapperRef, () => setIsOpen(false));
+
+    return (
+        <div className="relative" ref={wrapperRef}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color transition-colors"
+            >
+                <DownloadIcon className="w-4 h-4" />
+                <span>Export</span>
+                <ChevronDownIcon className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isOpen && (
+                <div className="absolute top-full right-0 mt-2 w-48 bg-card-background border border-border-color rounded-xl shadow-soft z-20 p-1">
+                    <button onClick={() => { onExportImage(); setIsOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-app-background rounded-lg"><ImageIcon className="w-4 h-4"/>As Image (.png)</button>
+                    <button onClick={() => { onExportCsv(); setIsOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-app-background rounded-lg"><ViewGridIcon className="w-4 h-4"/>As CSV (Excel)</button>
+                    <button onClick={() => { onExportDoc(); setIsOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-app-background rounded-lg"><DocumentTextIcon className="w-4 h-4"/>As Word (.doc)</button>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 // ResourceView Component
 const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }) => {
@@ -202,6 +242,7 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
     const { projects, projectGroups } = useProject();
     const [filterGroupId, setFilterGroupId] = useState('all');
     const [filterProjectId, setFilterProjectId] = useState('all');
+    const { ref: downloadRef, downloadImage } = useDownloadImage<HTMLDivElement>();
 
     const filteredResources = useMemo(() => {
         return resources.filter(res => {
@@ -211,6 +252,53 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
         });
     }, [resources, filterGroupId, filterProjectId]);
 
+    const exportAsCsv = () => {
+        const headers = ["Title", "URL", "Notes", "Project Group", "Projects"];
+        const rows = filteredResources.map(res => {
+            const group = projectGroups.find(g => g.id === res.projectGroupId);
+            const linkedProjects = res.projectIds.map(id => projects.find(p => p.id === id)?.name).filter(Boolean);
+            return [
+                `"${res.title.replace(/"/g, '""')}"`,
+                `"${res.url}"`,
+                `"${res.notes.replace(/"/g, '""')}"`,
+                `"${group?.name || ''}"`,
+                `"${linkedProjects.join('; ')}"`
+            ].join(',');
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "resources.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const exportAsDoc = () => {
+        let content = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Resources</title></head><body>`;
+        content += "<h1>Resources</h1><table border='1'><thead><tr><th>Title</th><th>URL</th><th>Notes</th><th>Group</th><th>Projects</th></tr></thead><tbody>";
+
+        filteredResources.forEach(res => {
+            const group = projectGroups.find(g => g.id === res.projectGroupId);
+            const linkedProjects = res.projectIds.map(id => projects.find(p => p.id === id)?.name).filter(Boolean);
+            content += `<tr><td>${res.title}</td><td><a href="${res.url}">${res.url}</a></td><td>${res.notes}</td><td>${group?.name || ''}</td><td>${linkedProjects.join(', ')}</td></tr>`;
+        });
+        
+        content += "</tbody></table></body></html>";
+        
+        const blob = new Blob(['\ufeff', content], { type: 'application/msword' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "resources.doc";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+
     return (
         <div className="h-full flex flex-col p-4 md:p-6">
             <header className="flex-wrap items-center justify-between pb-6 gap-4 flex">
@@ -218,9 +306,10 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
                 <div className="flex items-center gap-2 flex-wrap">
                      <select value={filterGroupId} onChange={e => setFilterGroupId(e.target.value)} className="bg-card-background border border-border-color rounded-full px-4 py-2 text-sm"><option value="all">All Groups</option>{projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
                      <select value={filterProjectId} onChange={e => setFilterProjectId(e.target.value)} className="bg-card-background border border-border-color rounded-full px-4 py-2 text-sm"><option value="all">All Projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                     <ExportDropdown onExportImage={() => downloadImage('resources.png')} onExportCsv={exportAsCsv} onExportDoc={exportAsDoc} />
                 </div>
             </header>
-            <div className="flex-grow overflow-y-auto">
+            <div ref={downloadRef} className="flex-grow overflow-y-auto p-2 -m-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                      {loading ? (
                         Array.from({length: 4}).map((_, i) => <div key={i} className="h-64 bg-card-background rounded-2xl shadow-card animate-pulse"></div>)
@@ -236,7 +325,7 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
                             <ResourceCard key={res.id} resource={res} onUpdate={updateResource} onDelete={deleteResource} projects={projects} projectGroups={projectGroups} />
                         ))
                     )}
-                    <button onClick={onAddResource} className="border-2 border-dashed border-border-color rounded-2xl flex flex-col items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors">
+                    <button onClick={onAddResource} className="border-2 border-dashed border-border-color rounded-2xl flex flex-col items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors min-h-[16rem]">
                         <PlusIcon className="w-8 h-8 mb-2" />
                         <span className="font-semibold">Add Resource</span>
                     </button>
@@ -511,6 +600,7 @@ export default function App() {
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
   const [isGroupEditorOpen, setIsGroupEditorOpen] = useState<boolean>(false);
   const [isAddResourceModalOpen, setIsAddResourceModalOpen] = useState<boolean>(false);
+  const [resourceModalContext, setResourceModalContext] = useState<{ projectId?: string; groupId?: string } | null>(null);
 
   const [mainView, setMainView] = useState<MainView>('projects');
   const [projectView, setProjectView] = useState<ProjectView>('list');
@@ -564,6 +654,11 @@ export default function App() {
     if (isMobile) setIsSidebarOpen(false);
   }
 
+  const handleOpenAddResourceModal = (context?: { projectId?: string; groupId?: string }) => {
+    setResourceModalContext(context || null);
+    setIsAddResourceModalOpen(true);
+  };
+
   const renderMainContent = () => {
     switch (mainView) {
       case 'inbox':
@@ -577,13 +672,13 @@ export default function App() {
       case 'habits':
         return <HabitTracker onNewHabit={() => setIsHabitModalOpen(true)} />;
       case 'resources':
-        return <ResourceView onAddResource={() => setIsAddResourceModalOpen(true)} />;
+        return <ResourceView onAddResource={() => handleOpenAddResourceModal()} />;
       case 'my-account':
         return <MyAccountView />;
       case 'projects':
       default:
         if (selectedProject) {
-          return <TaskList key={selectedProject.id} projectView={projectView} setProjectView={setProjectView} />;
+          return <TaskList key={selectedProject.id} projectView={projectView} setProjectView={setProjectView} onAddResource={handleOpenAddResourceModal} />;
         }
         if (projects.length === 0) {
             return <WelcomePlaceholder onNewProject={() => setIsProjectModalOpen(true)} />;
@@ -646,6 +741,7 @@ export default function App() {
         <AddResourceModal
           isOpen={isAddResourceModalOpen}
           onClose={() => setIsAddResourceModalOpen(false)}
+          initialContext={resourceModalContext || undefined}
         />
       )}
       {isGroupEditorOpen && (

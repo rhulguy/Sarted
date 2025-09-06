@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
 import { collection, doc, getDocs, query, limit, writeBatch, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { INITIAL_HABITS } from '../constants';
+import useLocalStorage from '../hooks/useLocalStorage';
 
 interface HabitContextType {
   habits: Habit[];
@@ -16,11 +17,15 @@ export const HabitContext = createContext<HabitContextType | undefined>(undefine
 
 export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
-  const [habits, setHabits] = useState<Habit[]>([]);
+  const [localHabits, setLocalHabits] = useLocalStorage<Habit[]>('sarted-anonymous-habits', INITIAL_HABITS);
+  const [firebaseHabits, setFirebaseHabits] = useState<Habit[]>([]);
+
+  const habits = useMemo(() => user ? firebaseHabits : localHabits, [user, firebaseHabits, localHabits]);
+  const setHabits = useMemo(() => user ? setFirebaseHabits : setLocalHabits, [user]);
 
   useEffect(() => {
     if (authLoading) {
-      setHabits([]);
+      setFirebaseHabits([]);
       return;
     }
     if (user) {
@@ -40,18 +45,16 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const habitsQuery = collection(db, `users/${user.id}/habits`);
       const unsubscribe = onSnapshot(habitsQuery, (snapshot) => {
         const userHabits = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Habit));
-        setHabits(userHabits);
+        setFirebaseHabits(userHabits);
       }, (error) => console.error("Error fetching habits:", error));
       
       return () => unsubscribe();
-    } else {
-      setHabits(INITIAL_HABITS);
     }
   }, [user, authLoading]);
 
   const addHabit = useCallback(async (habitData: Omit<Habit, 'id'>) => {
     const newHabit: Habit = { ...habitData, id: `habit-${Date.now()}` };
-    const originalHabits = habits;
+    
     setHabits(prev => [...prev, newHabit]);
 
     if (user) {
@@ -59,10 +62,10 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         await setDoc(doc(db, `users/${user.id}/habits/${newHabit.id}`), newHabit);
       } catch (error) {
         console.error("Failed to add habit, reverting:", error);
-        setHabits(originalHabits);
+        setHabits(prev => prev.filter(h => h.id !== newHabit.id));
       }
     }
-  }, [user, habits]);
+  }, [user, setHabits]);
 
   const updateHabit = useCallback(async (habit: Habit) => {
     const originalHabits = habits;
@@ -76,7 +79,7 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setHabits(originalHabits);
       }
     }
-  }, [user, habits]);
+  }, [user, habits, setHabits]);
 
   const deleteHabit = useCallback(async (habitId: string) => {
     const originalHabits = habits;
@@ -90,7 +93,7 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setHabits(originalHabits);
       }
     }
-  }, [user, habits]);
+  }, [user, habits, setHabits]);
 
   const contextValue = useMemo(() => ({
     habits, addHabit, updateHabit, deleteHabit

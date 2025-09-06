@@ -36,6 +36,8 @@ export interface Habit {
   color: string;
   completions: { [date: string]: boolean }; // e.g., { "2024-07-28": true }
   createdAt: string; // YYYY-MM-DD
+  projectId?: string;
+  projectGroupId?: string;
 }
 
 export interface InboxTask {
@@ -81,4 +83,4 @@ export interface LaidoutMindMapNode extends BaseMindMapNode {
 }
 
 // --- View Types ---
-export type ProjectView = 'list' | 'gantt' | 'mindmap' | 'calendar';
+export type ProjectView = 'list' | 'gantt' | 'mindmap' | 'calendar' | 'resources';

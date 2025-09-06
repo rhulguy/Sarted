@@ -6,6 +6,13 @@ import { generateImageForTask } from '../services/geminiService';
 import Spinner from './Spinner';
 import { useDownloadImage } from '../hooks/useDownloadImage';
 
+interface GanttChartViewProps {
+  onAddTask: (taskName: string, startDate?: string, endDate?: string) => Promise<void>;
+  onUpdateTask: (updatedTask: Task) => Promise<void>;
+  onDeleteTask: (taskId: string) => Promise<void>;
+  onAddSubtask: (parentId: string, subtaskName: string, startDate?: string, endDate?: string) => Promise<void>;
+}
+
 interface InteractionState {
     type: 'drag' | 'resize-start' | 'resize-end';
     taskId: string;
@@ -53,7 +60,7 @@ const getMondayOfWeek = (d: Date): Date => {
 
 
 // --- Component ---
-const GanttChartView: React.FC = () => {
+const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask: onUpdateTaskProp, onDeleteTask, onAddSubtask }) => {
   const { selectedProject, updateTask, updateMultipleTasks, reparentTask } = useProject();
   const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
   const project = selectedProject!; // Assert non-null
@@ -63,9 +70,10 @@ const GanttChartView: React.FC = () => {
   const [creatingState, setCreatingState] = useState<CreatingState | null>(null);
   const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number } | null>(null);
   const [tempTaskPositions, setTempTaskPositions] = useState<Map<string, { left: number; width: number }>>(new Map());
-  const [generatingImageFor, setGeneratingImageFor] = useState<string|null>(null);
+  const [isAddingTask, setIsAddingTask] = useState(false);
+  const [newTaskName, setNewTaskName] = useState('');
 
-  const ganttContainerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const taskBarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   
   const { allTasks, minDate, maxDate, taskMap, parentMap } = useMemo(() => {
@@ -133,13 +141,13 @@ const GanttChartView: React.FC = () => {
   }, [minDate, maxDate, dayWidth]);
 
   const taskPositions = useMemo(() => {
-    const localTaskPositions = new Map<string, { y: number, startX: number, endX: number }>();
-    allTasks.forEach((task, index) => {
+    const localTaskPositions = new Map<string, { startX: number, endX: number }>();
+    allTasks.forEach((task) => {
         const taskStart = parseDate(task.startDate);
         if (isNaN(taskStart.getTime())) return;
         const startOffset = dayDiff(chartStartDate, taskStart);
         const duration = dayDiff(taskStart, parseDate(task.endDate)) + 1;
-        localTaskPositions.set(task.id, { y: index * 40 + 20, startX: startOffset * dayWidth, endX: (startOffset * dayWidth) + (duration * dayWidth) });
+        localTaskPositions.set(task.id, { startX: startOffset * dayWidth, endX: (startOffset * dayWidth) + (duration * dayWidth) });
     });
     return localTaskPositions;
   }, [allTasks, chartStartDate, dayWidth]);
@@ -160,9 +168,9 @@ const GanttChartView: React.FC = () => {
   }, [project.tasks, taskPositions, tempTaskPositions]);
 
   const handleCreateMouseUp = useCallback(async (e: MouseEvent) => {
-      if (!creatingState || !ganttContainerRef.current) return;
+      if (!creatingState || !scrollContainerRef.current) return;
       const { task, startX } = creatingState;
-      const timelineRect = ganttContainerRef.current.querySelector('.timeline-body')?.getBoundingClientRect();
+      const timelineRect = scrollContainerRef.current.querySelector('.timeline-body')?.getBoundingClientRect();
       if (!timelineRect) return;
 
       const endX = e.clientX - timelineRect.left;
@@ -177,7 +185,6 @@ const GanttChartView: React.FC = () => {
 
       const taskToUpdate = task;
       if (taskToUpdate) {
-          // FIX: The `updateTask` function requires the project ID as the first argument.
           await updateTask(project.id, { ...taskToUpdate, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) });
       }
       
@@ -188,8 +195,8 @@ const GanttChartView: React.FC = () => {
   useEffect(() => {
     if (!creatingState) return;
     const handleMouseMove = (e: MouseEvent) => {
-      if (!ganttContainerRef.current) return;
-      const timelineRect = ganttContainerRef.current.querySelector('.timeline-body')?.getBoundingClientRect();
+      if (!scrollContainerRef.current) return;
+      const timelineRect = scrollContainerRef.current.querySelector('.timeline-body')?.getBoundingClientRect();
       if (!timelineRect) return;
 
       const currentX = e.clientX - timelineRect.left;
@@ -341,10 +348,19 @@ const GanttChartView: React.FC = () => {
     await reparentTask(project.id, task.id, grandparentId);
   };
 
+  const handleNewTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newTaskName.trim()) {
+        await onAddTask(newTaskName.trim());
+        setNewTaskName('');
+        setIsAddingTask(false);
+    }
+  };
+
+
   const today = new Date();
   today.setUTCHours(0,0,0,0);
-
-  if (!minDate || !maxDate) return <div className="text-center text-text-secondary p-8">No tasks with valid dates.</div>;
+  const rowHeight = 40;
   
   return (
     <div ref={downloadRef} className="flex flex-col h-full bg-card-background rounded-xl border border-border-color">
@@ -362,42 +378,66 @@ const GanttChartView: React.FC = () => {
                 <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
             </button>
         </div>
-        <div className="flex-grow flex overflow-hidden">
-            <div className="w-64 shrink-0 border-r border-border-color bg-card-background z-10 overflow-y-hidden flex flex-col">
-                <div className="h-16 flex items-center p-2 border-b border-border-color shrink-0"><h3 className="font-semibold">Task Name</h3></div>
-                <div className="overflow-y-auto">
-                    {allTasks.map((task, index) => (
-                        <div key={task.id} className="h-10 flex items-center border-b border-border-color text-sm truncate group" style={{ paddingLeft: `${10 + task.level * 20}px` }}>
-                            <span className="flex-grow truncate">{task.name}</span>
-                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
-                                <button onClick={() => handleIndent(task, index)} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongRightIcon className="w-5 h-5" /></button>
-                                <button onClick={() => handleOutdent(task)} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongLeftIcon className="w-5 h-5" /></button>
-                            </div>
-                        </div>
-                    ))}
+        <div ref={scrollContainerRef} className="flex-grow overflow-auto">
+            <div className="relative" style={{ width: totalWidth + 256, minWidth: '100%' }}>
+                {/* Sticky Header */}
+                <div className="sticky top-0 z-20 h-16 flex">
+                    <div className="w-64 shrink-0 sticky left-0 z-10 bg-card-background border-r border-b border-border-color flex items-center justify-between p-2">
+                        <h3 className="font-semibold">Task Name</h3>
+                        <button onClick={() => setIsAddingTask(true)} title="Add New Task" className="p-1 text-text-secondary hover:text-accent-blue"><PlusIcon className="w-5 h-5"/></button>
+                    </div>
+                    <div className="flex-grow relative border-b border-border-color bg-card-background">
+                        <div className="absolute top-0 left-0 w-full h-8 flex">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div>
+                        <div className="absolute bottom-0 left-0 w-full h-8 flex">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div>
+                    </div>
                 </div>
-            </div>
-            <div className="flex-grow overflow-auto">
-                <div ref={ganttContainerRef} style={{ width: totalWidth, height: allTasks.length * 40 + 64 }}>
-                    <div className="sticky top-0 z-10 bg-card-background"><div className="h-16 relative"><div className="flex absolute top-0 left-0 w-full h-8 border-b border-border-color">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div><div className="flex absolute bottom-0 left-0 w-full h-8 border-b border-border-color">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div></div></div>
-                    <div className="relative timeline-body" style={{ height: allTasks.length * 40 }}>
-                        {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
-                        {allTasks.map((_, index) => (<div key={index} className="absolute w-full h-10 border-b border-border-color" style={{ top: index * 40 }}></div>))}
-                        
-                        {(() => {
-                            const todayOffset = dayDiff(chartStartDate, new Date()) * dayWidth;
-                            if (todayOffset >= 0 && todayOffset <= totalWidth) {
-                                return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500/80 z-20" title="Today" style={{ left: todayOffset }}></div>;
-                            }
-                            return null;
-                        })()}
 
-                        {allTasks.map((task, index) => {
+                {/* Body Content */}
+                <div className="relative" style={{ height: Math.max(400, (allTasks.length + (isAddingTask ? 1 : 0)) * rowHeight) }}>
+                     {/* Vertical Grid Lines & Weekends */}
+                    <div className="absolute top-0 h-full" style={{ left: 256, width: totalWidth }}>
+                      {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
+                    </div>
+                     {/* Today Marker */}
+                    {(() => { const todayOffset = dayDiff(chartStartDate, new Date()) * dayWidth; if (todayOffset >= 0 && todayOffset <= totalWidth) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500/80 z-20" title="Today" style={{ left: 256 + todayOffset }}></div>; } return null; })()}
+
+                    {/* Task Rows */}
+                    <div className="relative">
+                        {allTasks.map((task, index) => (
+                           <div key={task.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                <div className="w-64 shrink-0 sticky left-0 z-10 flex items-center p-2 border-r border-b border-border-color bg-card-background group" style={{ paddingLeft: `${10 + task.level * 20}px` }}>
+                                    <span className="flex-grow truncate text-sm">{task.name}</span>
+                                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+                                        <button onClick={() => handleIndent(task, index)} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongRightIcon className="w-5 h-5" /></button>
+                                        <button onClick={() => handleOutdent(task)} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongLeftIcon className="w-5 h-5" /></button>
+                                    </div>
+                                </div>
+                           </div>
+                        ))}
+                         {isAddingTask && (
+                            <div className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                <div className="w-64 shrink-0 sticky left-0 z-10 flex items-center p-1 border-r border-b border-border-color bg-card-background" style={{ paddingLeft: `${10}px` }}>
+                                   <form onSubmit={handleNewTaskSubmit} className="w-full h-full">
+                                        <input
+                                            type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
+                                            onBlur={() => { if (!newTaskName.trim()) setIsAddingTask(false); }}
+                                            onKeyDown={e => { if (e.key === 'Escape') setIsAddingTask(false); }}
+                                            placeholder="New task name..."
+                                            className="w-full h-full bg-app-background border border-accent-blue rounded px-2 text-sm" autoFocus
+                                        />
+                                    </form>
+                                </div>
+                            </div>
+                         )}
+                    </div>
+                     {/* Task Bars */}
+                    <div className="absolute top-0 left-64 w-full h-full timeline-body">
+                         {allTasks.map((task, index) => {
                             const taskPos = taskPositions.get(task.id);
                             if (!taskPos) {
-                                // Render row for unscheduled tasks
                                 return (
-                                    <div key={`unscheduled-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: index * 40 }} onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: task, startX: e.clientX - timelineRect.left }); }}>
+                                    <div key={`creator-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: index * rowHeight }} 
+                                        onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: task, startX: e.clientX - timelineRect.left }); }}>
                                         <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent-blue/10 transition-colors flex items-center justify-center">
                                             <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
                                         </div>
@@ -408,23 +448,24 @@ const GanttChartView: React.FC = () => {
                             const tempPos = tempTaskPositions.get(task.id);
                             const left = tempPos ? tempPos.left : taskPos.startX;
                             const width = tempPos ? tempPos.width : (taskPos.endX - taskPos.startX);
-                            const barStyles: React.CSSProperties = { top: `${index * 40 + 6}px`, left: `${left}px`, width: `${width}px`, transition: isInteracting ? 'none' : 'left 0.2s, width 0.2s', zIndex: isInteracting ? 10 : 1 };
                             const endDate = parseDate(task.endDate);
                             const isOverdue = endDate && endDate < today && !task.completed;
 
                             return (
-                                <div key={task.id} ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }} data-task-id={task.id} className="absolute group" style={barStyles}>
+                                <div key={task.id} ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }} data-task-id={task.id} className="absolute group" 
+                                style={{ top: `${index * rowHeight + 6}px`, left: `${left}px`, width: `${width}px`, transition: isInteracting ? 'none' : 'left 0.2s, width 0.2s', zIndex: isInteracting ? 10 : 1 }}>
                                     <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 rounded-md flex items-center justify-between px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : 'bg-accent-blue'}`}
-                                        onMouseDown={(e) => { e.preventDefault(); const pos = taskPositions.get(task.id); if (!pos) return; setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: pos.startX, originalWidth: pos.endX - pos.startX }); }}>
+                                        onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }}>
                                         <span className="truncate pointer-events-none">{task.name}</span>
                                     </div>
-                                    <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const pos = taskPositions.get(task.id); if (!pos) return; setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: pos.startX, originalWidth: pos.endX - pos.startX }); }} className="absolute -left-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                    <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const pos = taskPositions.get(task.id); if (!pos) return; setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: pos.startX, originalWidth: pos.endX - pos.startX }); }} className="absolute -right-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                    <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -left-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                    <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -right-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
                                 </div>
                             )
                         })}
                          {creatingState && tempCreatingBar && (
-                            <div className="absolute h-7 top-1/2 -translate-y-1/2 pointer-events-none bg-accent-blue/50 rounded-md" style={{ ...tempCreatingBar, top: `${allTasks.findIndex(t => t.id === creatingState.task.id) * 40 + 6}px` }}></div>
+                            <div className="absolute h-7 pointer-events-none bg-accent-blue/50 rounded-md" 
+                            style={{ ...tempCreatingBar, top: `${allTasks.findIndex(t => t.id === creatingState.task.id) * rowHeight + 6}px` }}></div>
                         )}
                     </div>
                 </div>

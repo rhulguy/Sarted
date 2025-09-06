@@ -62,7 +62,7 @@ export const useDownloadImage = <T extends HTMLElement>() => {
       // Temporarily change background for capture if it's transparent, like in Mind Maps
       const originalBg = element.style.backgroundColor;
       if (!originalBg || originalBg === 'transparent') {
-          element.style.backgroundColor = '#0D1117'; // primary bg color
+          element.style.backgroundColor = '#F9F8F6'; // app-background color
       }
 
       const canvas = await window.html2canvas(element, {
@@ -72,7 +72,7 @@ export const useDownloadImage = <T extends HTMLElement>() => {
           scrollY: -window.scrollY,
           windowWidth: element.scrollWidth,
           windowHeight: element.scrollHeight,
-          backgroundColor: '#0D1117' // Ensure background is not transparent
+          backgroundColor: '#F9F8F6' // Ensure background is not transparent
       });
       
       // Restore original background color

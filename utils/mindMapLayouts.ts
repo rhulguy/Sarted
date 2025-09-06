@@ -8,15 +8,16 @@ const TREE_NODE_HEIGHT = 80;
  * @param node The root node of the tree/subtree to lay out.
  * @param level The current depth of the node in the tree.
  * @param yOffset The starting Y position for this subtree.
+ * @param direction The direction of expansion (-1 for left, 1 for right).
  * @returns An object containing the laid-out node and the total height of the subtree.
  */
-export const layoutTree = (node: BaseMindMapNode, level: number, yOffset: number): { laidOutNode: LaidoutMindMapNode, height: number } => {
+export const layoutTree = (node: BaseMindMapNode, level: number, yOffset: number, direction: 1 | -1 = 1): { laidOutNode: LaidoutMindMapNode, height: number } => {
     let childY = yOffset;
     const laidOutChildren: LaidoutMindMapNode[] = [];
     let childrenHeight = 0;
 
     node.children.forEach(child => {
-        const { laidOutNode: laidOutChild, height: childHeight } = layoutTree(child, level + 1, childY);
+        const { laidOutNode: laidOutChild, height: childHeight } = layoutTree(child, level + 1, childY, direction);
         laidOutChildren.push(laidOutChild);
         childY += childHeight;
         childrenHeight += childHeight;
@@ -36,7 +37,7 @@ export const layoutTree = (node: BaseMindMapNode, level: number, yOffset: number
     const laidOutNode: LaidoutMindMapNode = {
         ...node,
         children: laidOutChildren,
-        x: level * (TREE_NODE_WIDTH + 40),
+        x: direction * level * (TREE_NODE_WIDTH + 40),
         y: yPos,
         depth: level,
     };
@@ -85,7 +86,8 @@ export const layoutRadial = (root: BaseMindMapNode): LaidoutMindMapNode => {
 };
 
 /**
- * A specialized layout for the global view that arranges projects radially.
+ * A specialized layout for the global view that arranges projects radially
+ * and ensures their subtrees expand outwards to prevent overlapping.
  * @param root The 'All Projects' root node.
  * @returns The laid-out global tree.
  */
@@ -96,15 +98,19 @@ export const layoutGlobalTree = (root: BaseMindMapNode): LaidoutMindMapNode => {
 
     laidOutRoot.children = root.children.map((projectNode, i) => {
         const angle = i * angleStep;
-        // FIX: Increased radius to prevent project trees from overlapping
-        const radius = RADIUS_STEP * 2.5; 
+        const radius = RADIUS_STEP * 2.5;
         const projectX = radius * Math.cos(angle - Math.PI / 2);
         const projectY = radius * Math.sin(angle - Math.PI / 2);
 
-        // Now layout the tasks for this project using the standard tree layout
-        const { laidOutNode: laidOutProject } = layoutTree(projectNode, 1, 0);
+        // Determine layout direction based on angle.
+        // Projects on the left hemisphere of the circle (PI to 2*PI) expand left (-1).
+        // Others (right hemisphere) expand right (1).
+        const direction = (angle >= Math.PI) ? -1 : 1;
 
-        // We need to translate the entire project tree to its radial position
+        // Layout the project's task tree with the correct direction, starting at level 0 for the project node.
+        const { laidOutNode: laidOutProject } = layoutTree(projectNode, 0, 0, direction);
+
+        // This helper translates the entire generated subtree.
         const translateTree = (node: LaidoutMindMapNode, dx: number, dy: number): LaidoutMindMapNode => ({
             ...node,
             x: node.x + dx,
@@ -112,8 +118,9 @@ export const layoutGlobalTree = (root: BaseMindMapNode): LaidoutMindMapNode => {
             children: node.children.map(child => translateTree(child, dx, dy))
         });
         
-        // The tree layout starts at x=TREE_NODE_WIDTH + 40 for level 1. We offset it.
-        return translateTree(laidOutProject, projectX - (TREE_NODE_WIDTH + 40), projectY - laidOutProject.y);
+        // The layout returns a tree with the project node at x=0 and a calculated y.
+        // We translate the tree so the project node's final position is (projectX, projectY).
+        return translateTree(laidOutProject, projectX, projectY - laidOutProject.y);
     });
 
     return laidOutRoot;

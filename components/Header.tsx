@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { PlusIcon, MenuIcon, GitHubIcon, SartedLogoIcon, ListIcon, GanttIcon, MindMapIcon, CalendarIcon } from './IconComponents';
+import { PlusIcon, MenuIcon, GitHubIcon, SartedLogoIcon, ListIcon, GanttIcon, MindMapIcon, CalendarIcon, BookmarkSquareIcon } from './IconComponents';
 import Auth from './Auth';
 import { Project, ProjectView } from '../types';
 
@@ -20,10 +20,11 @@ const Header: React.FC<HeaderProps> = ({ onNewProject, onToggleSidebar, isMobile
     { id: 'gantt', name: 'Gantt', icon: GanttIcon },
     { id: 'mindmap', name: 'Mind Map', icon: MindMapIcon },
     { id: 'calendar', name: 'Calendar', icon: CalendarIcon },
+    { id: 'resources', name: 'Resources', icon: BookmarkSquareIcon },
   ], []);
 
   const viewButtons = useMemo(() => {
-    const mobileViews: ProjectView[] = ['list', 'calendar'];
+    const mobileViews: ProjectView[] = ['list', 'calendar', 'resources'];
     if (isMobile) {
         return allViewButtons.filter(b => mobileViews.includes(b.id as ProjectView));
     }

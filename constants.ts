@@ -3,15 +3,28 @@ import { ProjectGroup, Project, Habit, Resource } from './types';
 export const COLOR_PALETTE = [
   'bg-brand-teal', 'bg-brand-orange', 'bg-brand-purple',
   'bg-brand-pink', 'bg-accent-blue', 'bg-accent-green',
-  'bg-yellow-500', 'bg-red-500', 'bg-indigo-500',
+  'bg-accent-yellow', 'bg-accent-red', 'bg-indigo-500',
 ];
+
+export const COLOR_MAP: { [key: string]: string } = {
+  'bg-brand-teal': '#14B8A6',
+  'bg-brand-orange': '#F97316',
+  'bg-brand-purple': '#8B5CF6',
+  'bg-brand-pink': '#EC4899',
+  'bg-accent-blue': '#3B82F6',
+  'bg-accent-green': '#10B981',
+  'bg-accent-yellow': '#FBBF24',
+  'bg-accent-red': '#EF4444',
+  'bg-indigo-500': '#6366F1',
+};
+
 
 export const INITIAL_PROJECT_GROUPS: ProjectGroup[] = [
   { id: 'group-1', name: 'Work', color: 'bg-accent-blue', order: 0 },
   { id: 'group-2', name: 'Personal', color: 'bg-brand-purple', order: 1 },
   { id: 'group-3', name: 'Learning', color: 'bg-accent-green', order: 2 },
   { id: 'group-4', name: 'Health & Fitness', color: 'bg-brand-orange', order: 3 },
-  { id: 'group-5', name: 'Home & Errands', color: 'bg-yellow-500', order: 4 },
+  { id: 'group-5', name: 'Home & Errands', color: 'bg-accent-yellow', order: 4 },
 ];
 
 export const INITIAL_PROJECTS: Project[] = [
@@ -63,18 +76,22 @@ export const INITIAL_HABITS: Habit[] = [
     id: 'habit-1',
     name: 'Read for 15 minutes',
     frequency: 'daily',
-    color: 'brand-teal',
+    color: 'bg-brand-teal',
     completions: { '2024-07-25': true, '2024-07-26': true, '2024-07-27': false },
     createdAt: '2024-07-01',
+    projectId: 'proj-5',
+    projectGroupId: undefined,
   },
   {
     id: 'habit-2',
     name: 'Go for a run',
     frequency: 'weekly',
     daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
-    color: 'brand-orange',
+    color: 'bg-brand-orange',
     completions: { '2024-07-26': true },
     createdAt: '2024-07-01',
+    projectId: undefined,
+    projectGroupId: 'group-4',
   }
 ];
 

@@ -93,19 +93,57 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
     
     useEffect(() => {
         if (svgRef.current && nodes.length > 0) {
-            const { width, height } = svgRef.current.getBoundingClientRect();
-            if (width > 0 && height > 0) {
-                 if (layout === 'tree') {
-                    const rootNode = nodes[0];
-                    setViewBox({ w: width, h: height, x: rootNode.x - width / 4, y: rootNode.y - height / 2 });
-                } else {
-                    setViewBox({ w: width * 1.5, h: height * 1.5, x: -width * 0.75, y: -height * 0.75 });
-                }
+            const { width: containerWidth, height: containerHeight } = svgRef.current.getBoundingClientRect();
+            if (containerWidth === 0 || containerHeight === 0) return;
+
+            // Calculate the bounding box of all nodes
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            nodes.forEach(node => {
+                minX = Math.min(minX, node.x - NODE_WIDTH / 2);
+                maxX = Math.max(maxX, node.x + NODE_WIDTH / 2);
+                minY = Math.min(minY, node.y - NODE_HEIGHT / 2);
+                maxY = Math.max(maxY, node.y + NODE_HEIGHT / 2);
+            });
+            
+            // Handle case with single node
+            if (nodes.length === 1) {
+                const node = nodes[0];
+                minX = node.x - NODE_WIDTH / 2;
+                maxX = node.x + NODE_WIDTH / 2;
+                minY = node.y - NODE_HEIGHT / 2;
+                maxY = node.y + NODE_HEIGHT / 2;
             }
+
+            const treeWidth = maxX - minX;
+            const treeHeight = maxY - minY;
+            const PADDING = 100;
+
+            const contentWidthWithPadding = treeWidth + PADDING * 2;
+            const contentHeightWithPadding = treeHeight + PADDING * 2;
+            
+            // Determine the scale to fit the content within the container
+            const scaleX = containerWidth / contentWidthWithPadding;
+            const scaleY = containerHeight / contentHeightWithPadding;
+            const scale = Math.min(scaleX, scaleY);
+
+            // The new viewBox dimensions are the container size scaled up
+            const newViewBoxWidth = containerWidth / scale;
+            const newViewBoxHeight = containerHeight / scale;
+
+            // Center the viewBox on the content
+            const treeCenterX = minX + treeWidth / 2;
+            const treeCenterY = minY + treeHeight / 2;
+
+            setViewBox({
+                w: newViewBoxWidth,
+                h: newViewBoxHeight,
+                x: treeCenterX - newViewBoxWidth / 2,
+                y: treeCenterY - newViewBoxHeight / 2,
+            });
         }
         setAddingToNode(null);
         setEditingNode(null);
-    }, [project.id, layout]);
+    }, [project.id, layout, nodes]);
 
 
     const handleCreateSubNode = (e: React.MouseEvent, node: LaidoutMindMapNode) => {
