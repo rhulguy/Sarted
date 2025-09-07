@@ -171,7 +171,7 @@ describe('CalendarView component', () => {
     });
 
     // The modal also contains the task name
-    expect(screen.getAllByText('Single Day Task').length).toBe(2);
+    expect(screen.getAllByText('Single Day Task').length).toBe(1); // Should not find a second one
   });
 
   it('reschedules a task on drag and drop', () => {

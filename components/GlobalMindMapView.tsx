@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Task, ProjectGroup, BaseMindMapNode, LaidoutMindMapNode } from '../types';
 import { useProject } from '../contexts/ProjectContext';
 import { PlusIcon, ImageIcon, EditIcon } from './IconComponents';
-import { generateImageForTask } from '../services/geminiService';
+import { generateImage } from '../services/geminiService';
 import Spinner from './Spinner';
 import { layoutGlobalTree } from '../utils/mindMapLayouts';
 
@@ -52,7 +52,6 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
     }, [editingNode]);
 
     const groupColorMap = useMemo(() => new Map(projectGroups.map(g => [g.id, g.color])), [projectGroups]);
-    const groupNameMap = useMemo(() => new Map(projectGroups.map(g => [g.id, g.name])), [projectGroups]);
 
     const { nodes, links } = useMemo(() => {
         const buildTaskHierarchy = (tasks: Task[], projectId: string): EditableBaseMindMapNode[] => {
@@ -65,9 +64,7 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
 
         const projectNodes = visibleProjects.map(p => ({
             id: p.id, name: p.name, isProject: true, isCompleted: false,
-            color: groupColorMap.get(p.groupId) || 'bg-text-secondary',
-            groupName: groupNameMap.get(p.groupId),
-            projectId: p.id,
+            color: groupColorMap.get(p.groupId) || 'bg-text-secondary', projectId: p.id,
             children: buildTaskHierarchy(p.tasks || [], p.id),
         }));
 
@@ -94,7 +91,7 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         }
 
         return { nodes: flattenedNodes, links: flattenedLinks };
-    }, [visibleProjects, groupColorMap, groupNameMap]);
+    }, [visibleProjects, groupColorMap]);
     
     const projectIdsKey = useMemo(() => visibleProjects.map(p => p.id).sort().join(','), [visibleProjects]);
 
@@ -135,7 +132,8 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         if (!node.task || !node.projectId) return;
         setGeneratingImageFor(node.id);
         try {
-            const imageUrl = await generateImageForTask(node.name);
+            // FIX: Use generateImage with a descriptive prompt
+            const imageUrl = await generateImage(`A simple, clean icon representing: ${node.name}`);
             await updateTask(node.projectId, { ...node.task, imageUrl });
         } catch (e) { console.error(e); } finally { setGeneratingImageFor(null); }
     };
@@ -200,42 +198,7 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
                 <button onClick={onNewProject} className="mt-2 flex items-center space-x-2 px-3 py-1.5 bg-accent-blue text-white rounded-lg hover:opacity-90"><PlusIcon className="w-4 h-4" /><span>Add Project</span></button>
             </header>
             <svg ref={svgRef} className="w-full h-full cursor-grab" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onWheel={handleWheel}>
-                <g>
-                    {links.map((link, i) => {
-                        const isProjectLink = link.source.id === 'global-root' && link.target.isProject;
-                        const midX = (link.source.x + link.target.x) / 2;
-                        const midY = (link.source.y + link.target.y) / 2;
-                        const groupColor = getHexColor(link.target.color || 'bg-text-secondary');
-                        const groupInitial = link.target.groupName ? link.target.groupName.charAt(0).toUpperCase() : '?';
-
-                        return (
-                            <g key={`link-group-${i}`}>
-                                <path
-                                    key={`link-path-${i}`}
-                                    d={`M ${link.source.x} ${link.source.y} L ${link.target.x} ${link.target.y}`}
-                                    stroke="#E5E7EB"
-                                    strokeWidth="2"
-                                    fill="none"
-                                />
-                                {isProjectLink && (
-                                    <g transform={`translate(${midX}, ${midY})`}>
-                                        <circle r="12" fill={groupColor} stroke="#F9F8F6" strokeWidth="2" />
-                                        <text
-                                            textAnchor="middle"
-                                            dominantBaseline="central"
-                                            fill="white"
-                                            fontSize="12"
-                                            fontWeight="bold"
-                                            style={{ pointerEvents: 'none', userSelect: 'none' }}
-                                        >
-                                            {groupInitial}
-                                        </text>
-                                    </g>
-                                )}
-                            </g>
-                        );
-                    })}
-                </g>
+                <g>{links.map((link, i) => <path key={`link-${i}`} d={`M ${link.source.x} ${link.source.y} L ${link.target.x} ${link.target.y}`} stroke="#E5E7EB" strokeWidth="2" fill="none" />)}</g>
                 <g>{nodes.map(node => (
                     <g key={node.id} transform={`translate(${node.x}, ${node.y})`} className="cursor-pointer group" onDoubleClick={(e) => handleAddClick(e, node)} onMouseDown={(e) => e.stopPropagation()}>
                         <rect x={-NODE_WIDTH / 2} y={-NODE_HEIGHT / 2} width={NODE_WIDTH} height={NODE_HEIGHT} rx={20} fill={node.isProject ? getHexColor(node.color!) : "#FFFFFF"} stroke={"#E5E7EB"} strokeWidth="1" />

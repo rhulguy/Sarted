@@ -16,13 +16,6 @@ export interface AIProjectPlan {
     tasks: AIGeneratedTask[];
 }
 
-export interface AIFocusPlan {
-    priorities: {
-        taskId: string;
-        reason: string;
-    }[];
-}
-
 export interface AIScheduledTask {
     id: string;
     startDate: string;
@@ -89,16 +82,6 @@ export const generateProjectPlan = async (goal: string): Promise<AIGeneratedTask
     }
 };
 
-export const generateFocusPlan = async (projects: Project[], habits: Habit[]): Promise<AIFocusPlan> => {
-    try {
-        const result: AIFocusPlan = await callApiProxy('generateFocusPlan', { projects, habits });
-        if (result?.priorities) return result;
-        throw new Error("API response did not match focus plan structure.");
-    } catch (error) {
-        throw new Error(`Failed to generate today's focus plan. ${error instanceof Error ? error.message : ''}`);
-    }
-};
-
 export const generateNewSchedule = async (tasks: Task[], delayedTaskId: string): Promise<AIScheduledTask[]> => {
     try {
         const result = await callApiProxy('generateNewSchedule', { tasks, delayedTaskId });
@@ -119,9 +102,9 @@ export const generateWeeklySummary = async (completedTasks: Task[], completedHab
     }
 };
 
-export const generateImageForTask = async (prompt: string): Promise<string> => {
+export const generateImage = async (prompt: string): Promise<string> => {
     try {
-        const result = await callApiProxy('generateImageForTask', { prompt });
+        const result = await callApiProxy('generateImage', { prompt });
         if (result?.imageUrl) return result.imageUrl;
         throw new Error("No image URL was returned by the API.");
     } catch (error) {

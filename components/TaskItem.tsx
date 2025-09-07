@@ -1,7 +1,6 @@
 import React, { useState, useEffect, memo, useRef } from 'react';
 import { Task, Project } from '../types';
 import { TrashIcon, ChevronRightIcon, CornerDownRightIcon, EditIcon, ImageIcon, UploadIcon } from './IconComponents';
-import { generateImageForTask } from '../services/geminiService';
 import Spinner from './Spinner';
 import { useProject } from '../contexts/ProjectContext';
 
@@ -51,21 +50,28 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
     const colorClass = group ? group.color.replace('bg-', 'bg-brand-') : 'bg-accent-blue';
 
     const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
-    const [description, setDescription] = useState(task.description);
-    const [startDate, setStartDate] = useState(task.startDate || '');
-    const [endDate, setEndDate] = useState(task.endDate || '');
     const [isExpanded, setIsExpanded] = useState(true);
     const [isAddingSubtask, setIsAddingSubtask] = useState(false);
     const [newSubtaskName, setNewSubtaskName] = useState('');
     const [newSubtaskStartDate, setNewSubtaskStartDate] = useState('');
     const [newSubtaskEndDate, setNewSubtaskEndDate] = useState('');
     
-    useEffect(() => {
-        setDescription(task.description);
-        setStartDate(task.startDate || '');
-        setEndDate(task.endDate || '');
-    }, [task]);
+    const [showSaved, setShowSaved] = useState(false);
+    const saveTimeoutRef = useRef<number | null>(null);
 
+    const triggerSaveAnimation = () => {
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        setShowSaved(true);
+        saveTimeoutRef.current = window.setTimeout(() => {
+            setShowSaved(false);
+        }, 2000);
+    };
+    
+    const handleUpdate = (updates: Partial<Task>) => {
+        onUpdate({ ...task, ...updates });
+        triggerSaveAnimation();
+    };
+    
     const handleToggleComplete = () => {
         const newCompletedStatus = !task.completed;
         const completionDate = newCompletedStatus ? formatDate(new Date()) : undefined;
@@ -85,22 +91,6 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
             completionDate,
             subtasks: toggleChildren(task.subtasks, newCompletedStatus, completionDate)
         });
-    };
-
-    const handleDescriptionBlur = () => {
-        if (description !== task.description) {
-            onUpdate({ ...task, description });
-        }
-    };
-
-    const handleDateChange = (type: 'start' | 'end', value: string) => {
-        if (type === 'start') {
-            setStartDate(value);
-            onUpdate({ ...task, startDate: value || undefined });
-        } else {
-            setEndDate(value);
-            onUpdate({ ...task, endDate: value || undefined });
-        }
     };
 
     const handleSubtaskFormSubmit = (e: React.FormEvent) => {
@@ -132,7 +122,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                     </span>
                 </div>
                 <div className="flex items-center space-x-2 md:space-x-1">
-                    <button onClick={() => setIsDetailsExpanded(o => !o)} className="p-2 text-text-secondary hover:text-accent-blue" title="Edit details">
+                    <button onClick={() => setIsDetailsExpanded(prev => !prev)} className="p-2 text-text-secondary hover:text-accent-blue" title="Edit details">
                         <EditIcon className="w-5 h-5" />
                     </button>
                     <button onClick={() => setIsAddingSubtask(true)} className="p-2 text-text-secondary hover:text-accent-blue" title="Add sub-task">
@@ -145,13 +135,22 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
             </div>
 
             {isDetailsExpanded && (
-                <div className="py-2 px-4 space-y-3 bg-card-background rounded-b-xl mb-2" style={{ marginLeft: `3.5rem` }}>
+                <div className="py-2 px-4 space-y-3 bg-card-background rounded-b-xl mb-2 relative" style={{ marginLeft: `3.5rem` }}>
+                     {showSaved && (
+                        <div className="absolute top-3 right-3 text-xs text-accent-green bg-green-100/50 px-2 py-0.5 rounded-full animate-fade-in-out z-10">
+                            Saved
+                        </div>
+                    )}
                     <div>
                         <label className="block text-xs font-medium text-text-secondary mb-1">Description</label>
                         <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            onBlur={handleDescriptionBlur}
+                            key={`${task.id}-desc`}
+                            defaultValue={task.description}
+                            onBlur={(e) => {
+                                if (e.target.value !== task.description) {
+                                    handleUpdate({ description: e.target.value });
+                                }
+                            }}
                             placeholder="Add a description..."
                             className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             rows={3}
@@ -161,20 +160,29 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                         <div className="flex-1">
                             <label className="block text-xs font-medium text-text-secondary mb-1">Start Date</label>
                             <input
+                                key={`${task.id}-start`}
                                 type="date"
-                                value={startDate}
-                                onChange={(e) => handleDateChange('start', e.target.value)}
-                                max={endDate || undefined}
+                                defaultValue={task.startDate || ''}
+                                onBlur={(e) => {
+                                    if(e.target.value !== (task.startDate || '')) {
+                                        handleUpdate({ startDate: e.target.value || undefined });
+                                    }
+                                }}
                                 className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             />
                         </div>
                         <div className="flex-1">
                             <label className="block text-xs font-medium text-text-secondary mb-1">End Date</label>
                             <input
+                                key={`${task.id}-end`}
                                 type="date"
-                                value={endDate}
-                                onChange={(e) => handleDateChange('end', e.target.value)}
-                                min={startDate || undefined}
+                                defaultValue={task.endDate || ''}
+                                onBlur={(e) => {
+                                    if(e.target.value !== (task.endDate || '')) {
+                                        handleUpdate({ endDate: e.target.value || undefined });
+                                    }
+                                }}
+                                min={task.startDate || undefined}
                                 className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             />
                         </div>
@@ -183,7 +191,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                         <div>
                             <label className="block text-xs font-medium text-text-secondary mb-1">Move to Project</label>
                             <select
-                                value={currentProjectId}
+                                defaultValue={currentProjectId}
                                 onChange={(e) => onMoveProject(e.target.value)}
                                 className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             >
