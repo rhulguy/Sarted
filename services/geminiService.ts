@@ -129,18 +129,6 @@ export const generateImage = async (prompt: string): Promise<string> => {
     }
 };
 
-export const searchImages = async (prompt: string): Promise<{ imageUrls: string[] }> => {
-    try {
-        const result = await callApiProxy('searchImages', { prompt });
-        if (result?.imageUrls && Array.isArray(result.imageUrls)) {
-            return result;
-        }
-        throw new Error("API response did not match expected structure for image search.");
-    } catch (error) {
-        throw new Error(`Failed to search for images. ${error instanceof Error ? error.message : 'Please check the console for details.'}`);
-    }
-};
-
 export const fetchResourceMetadata = async (url: string): Promise<ResourceMetadata> => {
     try {
         const result = await callApiProxy('getResourceMetadata', { url });
