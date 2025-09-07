@@ -32,40 +32,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      try {
-        if (firebaseUser) {
+      setLoading(true);
+      if (firebaseUser) {
+        try {
           const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
           const userDoc = await getDoc(userRef);
 
-          if (!userDoc.exists()) {
-            // First time sign-in, create a profile document
+          if (userDoc.exists()) {
+            const profileData = userDoc.data() as User;
+            setUser({
+              ...profileData,
+              email: firebaseUser.email,
+              picture: firebaseUser.photoURL,
+            });
+          } else {
             const newUser: User = {
               id: firebaseUser.uid,
               name: firebaseUser.displayName || 'New User',
               email: firebaseUser.email,
               picture: firebaseUser.photoURL,
-              plan: 'free'
+              plan: 'free',
             };
             await setDoc(userRef, newUser);
             setUser(newUser);
-          } else {
-            // Existing user, merge auth data with profile data
-            const profileData = userDoc.data() as User;
-            setUser({
-              ...profileData,
-              // Keep auth provider data fresh
-              email: firebaseUser.email,
-              picture: firebaseUser.photoURL,
-            });
           }
-        } else {
-          setUser(null);
+        } catch (error) {
+          console.error("Firestore error getting/creating user profile. Using fallback data from auth provider.", error);
+          // Fallback to auth data if Firestore fails, ensures user stays logged in visually
+          setUser({
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || 'User',
+            email: firebaseUser.email,
+            picture: firebaseUser.photoURL,
+            plan: 'free',
+          });
+        } finally {
+            setLoading(false);
         }
-      } catch (error) {
-          console.error("Error during authentication state change:", error);
-          setUser(null);
-      } finally {
-          setLoading(false);
+      } else {
+        setUser(null);
+        setLoading(false);
       }
     });
 
