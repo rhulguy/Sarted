@@ -1,7 +1,6 @@
 import React, { useState, useEffect, memo, useRef } from 'react';
 import { Task, Project } from '../types';
 import { TrashIcon, ChevronRightIcon, CornerDownRightIcon, EditIcon, ImageIcon, UploadIcon } from './IconComponents';
-// FIX: Removed unused import for generateImageForTask
 import Spinner from './Spinner';
 import { useProject } from '../contexts/ProjectContext';
 

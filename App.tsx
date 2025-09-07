@@ -29,7 +29,7 @@ import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilI
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
 import { useDownloadImage } from './hooks/useDownloadImage';
-import { generateImage } from './services/geminiService';
+import { searchImages } from './services/geminiService';
 
 
 // --- NEW RESOURCE COMPONENTS (Inlined due to file system constraints) ---
@@ -630,39 +630,103 @@ const SlideshowModal: React.FC<{
     );
 };
 
+const ImageSearchModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSelectImage: (url: string) => void;
+    initialPrompt: string;
+}> = ({ isOpen, onClose, onSelectImage, initialPrompt }) => {
+    const [prompt, setPrompt] = useState('');
+    const [imageUrls, setImageUrls] = useState<string[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    useClickOutside(modalRef, onClose);
+
+    useEffect(() => {
+        if (isOpen) {
+            setPrompt(initialPrompt);
+            setImageUrls([]);
+            setError('');
+            setIsLoading(false);
+        }
+    }, [isOpen, initialPrompt]);
+
+    const handleSearch = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!prompt) return;
+        setIsLoading(true);
+        setError('');
+        try {
+            const result = await searchImages(prompt);
+            setImageUrls(result.imageUrls);
+        } catch (err: any) {
+            setError(err.message || 'An unknown error occurred.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+    
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div ref={modalRef} className="bg-card-background rounded-2xl shadow-soft p-6 w-full max-w-2xl flex flex-col">
+                <h2 className="text-xl font-bold mb-4">Find an Image</h2>
+                <form onSubmit={handleSearch} className="flex gap-2 mb-4">
+                    <input type="text" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe the image you want..." className="flex-grow bg-app-background border border-border-color rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                    <button type="submit" disabled={isLoading} className="px-3 py-2 bg-accent-blue text-white rounded-lg text-sm flex items-center gap-1 disabled:opacity-50"><SparklesIcon className="w-4 h-4" /> {isLoading ? 'Searching...' : 'Search'}</button>
+                </form>
+                <div className="flex-grow min-h-[200px]">
+                    {isLoading ? <div className="flex items-center justify-center h-full"><Spinner /></div> : 
+                     error ? <p className="text-accent-red text-sm">{error}</p> : 
+                     imageUrls.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-4">
+                            {imageUrls.map((url, i) => (
+                                <button key={i} onClick={() => onSelectImage(url)} className="aspect-video bg-app-background rounded-lg border border-border-color overflow-hidden hover:ring-2 hover:ring-accent-blue">
+                                    <img src={url} alt={`Search result ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                </button>
+                            ))}
+                        </div>
+                     ) : <p className="text-text-secondary text-center pt-10">Search for images to get started.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 const DreamBoardView: React.FC = () => {
     const { visibleProjects, projectGroups, updateProject } = useProject();
-    const [prompts, setPrompts] = useState<{ [key: string]: string }>({});
-    const [loadingImage, setLoadingImage] = useState<{ projectId: string; index: number } | null>(null);
     const [isSlideshowOpen, setIsSlideshowOpen] = useState(false);
-    
+    const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+    const [searchModalContext, setSearchModalContext] = useState<{ project: Project; index: number } | null>(null);
+
     const groupMap = useMemo(() => new Map(projectGroups.map(g => [g.id, g])), [projectGroups]);
     
     const allImages = useMemo(() => 
         visibleProjects.flatMap(p => p.dreamBoardImages || []).filter(Boolean),
     [visibleProjects]);
 
-    const handlePromptChange = (projectId: string, value: string) => {
-        setPrompts(prev => ({ ...prev, [projectId]: value }));
+    const handleOpenSearchModal = (project: Project, index: number) => {
+        setSearchModalContext({ project, index });
+        setIsSearchModalOpen(true);
     };
 
-    const handleGenerateImage = async (project: Project, index: number) => {
-        const prompt = prompts[project.id] || project.name;
-        if (!prompt) return;
+    const handleSelectImage = async (imageUrl: string) => {
+        if (!searchModalContext) return;
+        const { project, index } = searchModalContext;
+        
+        const newImages = [...(project.dreamBoardImages || Array(4).fill(null))];
+        newImages[index] = imageUrl;
+        await updateProject(project.id, { dreamBoardImages: newImages });
 
-        setLoadingImage({ projectId: project.id, index });
-        try {
-            const imageUrl = await generateImage(prompt);
-            const newImages = [...(project.dreamBoardImages || Array(4).fill(null))];
-            newImages[index] = imageUrl;
-            await updateProject(project.id, { dreamBoardImages: newImages });
-        } catch (error) {
-            console.error(error);
-            alert("Failed to generate image. Please check the console.");
-        } finally {
-            setLoadingImage(null);
-        }
+        setIsSearchModalOpen(false);
+        setSearchModalContext(null);
     };
+
 
     return (
         <div className="h-full flex flex-col">
@@ -684,31 +748,25 @@ const DreamBoardView: React.FC = () => {
                     const group = groupMap.get(project.groupId);
                     return (
                         <div key={project.id} className="border-b border-border-color p-4 md:p-6">
-                            <div className="flex items-center gap-2 mb-3">
+                            <div className="flex items-center gap-2 mb-4">
                                 {group && <div className={`w-3 h-3 rounded-full ${group.color} shrink-0`}></div>}
                                 <h2 className="text-xl font-semibold">{project.name}</h2>
                                 <span className="text-sm text-text-secondary">{group?.name}</span>
                             </div>
-                            <form onSubmit={(e) => { e.preventDefault(); handleGenerateImage(project, 0); }} className="flex gap-2 mb-4">
-                                <input 
-                                    type="text"
-                                    placeholder="Enter prompt to generate image..."
-                                    value={prompts[project.id] || ''}
-                                    onChange={(e) => handlePromptChange(project.id, e.target.value)}
-                                    className="flex-grow bg-app-background border border-border-color rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                                />
-                                <button type="submit" className="px-3 py-2 bg-accent-blue text-white rounded-lg text-sm flex items-center gap-1"><SparklesIcon className="w-4 h-4" /> Generate</button>
-                            </form>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {Array.from({ length: 4 }).map((_, index) => {
                                     const image = project.dreamBoardImages?.[index];
-                                    const isLoading = loadingImage?.projectId === project.id && loadingImage?.index === index;
                                     return (
-                                        <div key={index} className="aspect-video bg-app-background rounded-lg border border-border-color flex items-center justify-center relative overflow-hidden">
-                                            {isLoading ? <Spinner /> : image ? (
-                                                <img src={image} alt={`Dream board for ${project.name} #${index + 1}`} className="w-full h-full object-cover" />
+                                        <div key={index} className="aspect-video bg-app-background rounded-lg border border-border-color flex items-center justify-center relative overflow-hidden group">
+                                            {image ? (
+                                                <>
+                                                    <img src={image} alt={`Dream board for ${project.name} #${index + 1}`} className="w-full h-full object-cover" />
+                                                    <button onClick={() => handleOpenSearchModal(project, index)} className="absolute inset-0 bg-black/50 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <PencilIcon className="w-8 h-8"/>
+                                                    </button>
+                                                </>
                                             ) : (
-                                                <button onClick={() => handleGenerateImage(project, index)} className="text-text-secondary hover:text-accent-blue">
+                                                <button onClick={() => handleOpenSearchModal(project, index)} className="text-text-secondary hover:text-accent-blue">
                                                     <PlusIcon className="w-8 h-8"/>
                                                 </button>
                                             )}
@@ -721,6 +779,12 @@ const DreamBoardView: React.FC = () => {
                 })}
             </div>
             <SlideshowModal images={allImages} isOpen={isSlideshowOpen} onClose={() => setIsSlideshowOpen(false)} />
+            <ImageSearchModal 
+                isOpen={isSearchModalOpen}
+                onClose={() => setIsSearchModalOpen(false)}
+                onSelectImage={handleSelectImage}
+                initialPrompt={searchModalContext?.project.name || ''}
+            />
         </div>
     );
 };

@@ -5,7 +5,6 @@ import TaskItem from './TaskItem';
 import Spinner from './Spinner';
 import { useProject } from '../contexts/ProjectContext';
 import { useHabit } from '../contexts/HabitContext';
-// FIX: Removed unused import for generateImageForTask
 import { generateFocusPlan, AIFocusPlan } from '../services/geminiService';
 import { useDownloadImage } from '../hooks/useDownloadImage';
 
@@ -248,7 +247,7 @@ const AchievementsExportModal: React.FC<{isOpen: boolean; onClose: () => void; s
     );
 };
 
-// --- Day View Sub-Component ---
+// --- Day Planner View Sub-Component ---
 interface DayViewProps {
     selectedDate: Date;
     setSelectedDate: (date: Date) => void;
@@ -257,19 +256,19 @@ interface DayViewProps {
     onSetDisplayMode: (mode: CalendarDisplayMode) => void;
     onExport: (range: {start: Date, end: Date}) => void;
 }
-
-const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTasks, onSetDisplayMode, onExport }) => {
+const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTasks, setFocusedTask, onSetDisplayMode, onExport }) => {
     const { visibleProjects, updateTask } = useProject();
     const { habits } = useHabit();
     const [priorities, setPriorities] = useState<PrioritizedTask[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingPriorities, setIsLoadingPriorities] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const timelineRef = useRef<HTMLDivElement>(null);
 
     const allTasksMap = useMemo(() => new Map(allTasks.map(t => [t.id, t])), [allTasks]);
 
     useEffect(() => {
         const getFocusPlan = async () => {
-            setIsLoading(true); setError(null);
+            setIsLoadingPriorities(true); setError(null);
             try {
                 if (visibleProjects.length === 0 && habits.length === 0) { setPriorities([]); return; }
                 const plan = await generateFocusPlan(visibleProjects, habits);
@@ -279,7 +278,7 @@ const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTas
                 }).filter((p): p is PrioritizedTask => p !== null && !p.task.completed);
                 setPriorities(resolvedPriorities);
             } catch (err: any) { setError(err.message || 'Could not load focus plan.');
-            } finally { setIsLoading(false); }
+            } finally { setIsLoadingPriorities(false); }
         };
         getFocusPlan();
     }, [visibleProjects, habits, allTasksMap]);
@@ -292,40 +291,160 @@ const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTas
 
     const headerTitle = useMemo(() => selectedDate.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }), [selectedDate]);
 
-    const otherTasksForDay = useMemo(() => {
-        const priorityIds = new Set(priorities.map(p => p.task.id));
-        return allTasks.filter(task => {
-            const isScheduled = !isNaN(task.startDateObj.getTime()) && selectedDate >= task.startDateObj && selectedDate <= task.endDateObj;
-            return isScheduled && !priorityIds.has(task.id);
-        });
-    }, [allTasks, selectedDate, priorities]);
+    const tasksForDay = useMemo(() => allTasks.filter(task => areDatesEqual(task.startDateObj, selectedDate)), [allTasks, selectedDate]);
+    const scheduledTasks = useMemo(() => tasksForDay.filter(t => t.startTime), [tasksForDay]);
+    const unscheduledTasks = useMemo(() => tasksForDay.filter(t => !t.startTime), [tasksForDay]);
     
-    const handleUpdateTask = (projectId: string) => (updatedTask: Task) => updateTask(projectId, updatedTask);
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData('taskId');
+        const task = allTasks.find(t => t.id === taskId);
+        if (!task || !timelineRef.current) return;
 
+        const rect = timelineRef.current.getBoundingClientRect();
+        const dropY = e.clientY - rect.top;
+        const totalMinutes = (dropY / rect.height) * (23 - 6) * 60;
+        const hour = Math.floor(totalMinutes / 60) + 6;
+        const minute = Math.round((totalMinutes % 60) / 30) * 30;
+
+        const newStartTime = `${String(hour).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+        const newDuration = task.duration || 60;
+
+        updateTask(task.projectId, { ...task, startTime: newStartTime, duration: newDuration });
+    };
+
+    const handleTaskUpdateOnTimeline = (taskId: string, updates: { startTime?: string, duration?: number }) => {
+        const task = allTasks.find(t => t.id === taskId);
+        if (task) {
+            updateTask(task.projectId, { ...task, ...updates });
+        }
+    };
+    
     return (
         <div className="h-full flex flex-col">
              <header className="flex items-center justify-between p-4 border-b border-border-color shrink-0 flex-wrap gap-2">
-                <div className="flex items-center space-x-2"><button onClick={() => changeDay(-1)} aria-label="Previous day" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button><button onClick={() => setSelectedDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-gray-700">Today</button><button onClick={() => changeDay(1)} aria-label="Next day" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button></div>
+                <div className="flex items-center space-x-2"><button onClick={() => changeDay(-1)} aria-label="Previous day" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button><button onClick={() => setSelectedDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-border-color">Today</button><button onClick={() => changeDay(1)} aria-label="Next day" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button></div>
                 <h2 className="text-lg md:text-xl font-bold text-center order-first w-full md:w-auto md:order-none">{headerTitle}</h2>
                 <div className="flex items-center gap-2">
                     <div className="bg-app-background p-1 rounded-lg flex space-x-1"><button onClick={() => onSetDisplayMode('month')} className="p-1.5 rounded-md hover:bg-card-background" title="Month View"><CalendarDaysIcon className="w-5 h-5 text-text-primary" /></button><button onClick={() => onSetDisplayMode('week')} className="p-1.5 rounded-md hover:bg-card-background" title="Week View"><ViewWeekIcon className="w-5 h-5 text-text-primary" /></button><button onClick={() => onSetDisplayMode('day')} className="p-1.5 rounded-md bg-accent-blue" title="Day View"><ViewDayIcon className="w-5 h-5 text-white" /></button></div>
-                    <button onClick={() => onExport({start: selectedDate, end: selectedDate})} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-gray-700"><DownloadIcon className="w-4 h-4" /><span>Export Achievements</span></button>
+                    <button onClick={() => onExport({start: selectedDate, end: selectedDate})} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color"><DownloadIcon className="w-4 h-4" /><span>Export Achievements</span></button>
                 </div>
             </header>
-            <div className="flex-grow overflow-auto p-4 md:p-6 bg-app-background">
-                <div className="max-w-4xl mx-auto">
-                    {isLoading ? <div className="flex items-center justify-center p-8"><Spinner /></div> : error ? <div className="text-center text-red-400 p-8">{error}</div> : (
-                        <div className="space-y-6">
-                            {priorities.length > 0 && (<div><h3 className="text-xl font-semibold mb-3 text-accent-blue">AI Priorities</h3><div className="space-y-3">{priorities.map(({ task, reason }) => (<div key={task.id} className="bg-card-background p-3 rounded-lg"><div className="flex items-start space-x-2.5 mb-2"><SparklesIcon className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" /><p className="text-sm text-text-secondary italic">"{reason}"</p></div><TaskItem task={task} level={0} onUpdate={handleUpdateTask(task.projectId)} onDelete={() => {}} onAddSubtask={() => {}} /></div>))}</div></div>)}
-                            {otherTasksForDay.length > 0 && (<div><h3 className="text-xl font-semibold mb-3 text-text-primary">Other Tasks for Today</h3><div className="space-y-2">{otherTasksForDay.map(task => (<TaskItem key={task.id} task={task} level={0} onUpdate={handleUpdateTask(task.projectId)} onDelete={() => {}} onAddSubtask={() => {}} />))}</div></div>)}
-                            {priorities.length === 0 && otherTasksForDay.length === 0 && ( <div className="text-center text-text-secondary py-16">No tasks scheduled for today.</div>)}
+            <div className="flex-grow overflow-auto grid grid-cols-1 md:grid-cols-4 bg-app-background">
+                <div className="md:col-span-3 flex">
+                    <div className="w-16 shrink-0 text-right pr-2 text-xs text-text-secondary py-2">{Array.from({length: 18}).map((_, i) => <div key={i} className="h-16 flex items-start justify-end">{i+6}:00</div>)}</div>
+                    <div ref={timelineRef} onDragOver={(e) => e.preventDefault()} onDrop={handleDrop} className="flex-grow relative bg-card-background border-l border-border-color">{Array.from({length: 34}).map((_, i) => <div key={i} className="h-8 border-b border-border-color"></div>)}
+                    {scheduledTasks.map(task => <ScheduledTaskItem key={task.id} task={task} onUpdate={handleTaskUpdateOnTimeline} onClick={() => setFocusedTask(task)} />)}
+                    </div>
+                </div>
+                <div className="md:col-span-1 p-4 space-y-4 border-l border-border-color">
+                    <div><h3 className="font-semibold mb-2">Unscheduled</h3>
+                        <div className="space-y-2">{unscheduledTasks.map(task => <UnscheduledTaskItem key={task.id} task={task} onClick={() => setFocusedTask(task)} />)}
+                            {unscheduledTasks.length === 0 && <p className="text-xs text-text-secondary">No unscheduled tasks for today.</p>}
                         </div>
-                    )}
+                    </div>
+                    <div><h3 className="font-semibold mb-2 text-accent-blue flex items-center gap-2"><SparklesIcon className="w-4 h-4"/>AI Priorities</h3>
+                        {isLoadingPriorities ? <Spinner/> : error ? <p className="text-xs text-accent-red">{error}</p> :
+                        <div className="space-y-2">{priorities.map(p => <UnscheduledTaskItem key={p.task.id} task={p.task} onClick={() => setFocusedTask(p.task)} reason={p.reason}/>)}
+                            {priorities.length === 0 && <p className="text-xs text-text-secondary">No AI suggestions for today.</p>}
+                        </div>}
+                    </div>
                 </div>
             </div>
         </div>
     );
-}
+};
+
+const UnscheduledTaskItem: React.FC<{task: GlobalCalendarTask, onClick: () => void, reason?: string}> = ({ task, onClick, reason }) => {
+    const handleDragStart = (e: React.DragEvent) => {
+        e.dataTransfer.setData('taskId', task.id);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+    return (
+        <div draggable onDragStart={handleDragStart} onClick={onClick} className={`p-2 rounded-lg cursor-pointer bg-card-background border border-border-color shadow-sm ${reason ? 'border-accent-blue/50' : ''}`}>
+            <p className="text-sm font-medium">{task.name}</p>
+            {reason && <p className="text-xs text-text-secondary italic mt-1">"{reason}"</p>}
+        </div>
+    );
+};
+
+const ScheduledTaskItem: React.FC<{task: GlobalCalendarTask, onUpdate: (id: string, updates: { startTime?: string, duration?: number }) => void, onClick: () => void}> = ({ task, onUpdate, onClick }) => {
+    const [isResizing, setIsResizing] = useState(false);
+    const elementRef = useRef<HTMLDivElement>(null);
+    const resizeStartRef = useRef({ y: 0, height: 0 });
+
+    const [top, height] = useMemo(() => {
+        // Robustness check: Ensure startTime is a valid HH:mm string
+        if (!task.startTime || !/^\d{2}:\d{2}$/.test(task.startTime)) {
+            return [null, null]; 
+        }
+
+        const [hour, minute] = task.startTime.split(':').map(Number);
+
+        // Robustness check: Ensure parsing worked
+        if (isNaN(hour) || isNaN(minute)) {
+            return [null, null];
+        }
+
+        const startMinutes = (hour - 6) * 60 + minute;
+        const duration = task.duration || 60;
+        const topPercent = (startMinutes / ((23 - 6) * 60)) * 100;
+        const heightPercent = (duration / ((23 - 6) * 60)) * 100;
+        
+        // Ensure values are within reasonable bounds to prevent style errors
+        if (topPercent < 0 || topPercent > 100) return [null, null];
+
+        return [topPercent, heightPercent];
+    }, [task.startTime, task.duration]);
+    
+    const handleResizeMouseDown = (e: React.MouseEvent) => {
+        e.preventDefault(); e.stopPropagation();
+        setIsResizing(true);
+        resizeStartRef.current = { y: e.clientY, height: elementRef.current?.offsetHeight || 0 };
+    };
+    
+    useEffect(() => {
+        if (!isResizing) return;
+        const handleMouseMove = (e: MouseEvent) => {
+            const dy = e.clientY - resizeStartRef.current.y;
+            const timelineHeight = elementRef.current?.parentElement?.offsetHeight || 1;
+            const minutesPerPixel = ((23-6)*60) / timelineHeight;
+            const minuteChange = dy * minutesPerPixel;
+            
+            let newDuration = Math.round(((task.duration || 60) + minuteChange) / 15) * 15;
+            newDuration = Math.max(15, newDuration);
+            onUpdate(task.id, { duration: newDuration });
+        };
+        const handleMouseUp = () => setIsResizing(false);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        }
+    }, [isResizing, task.id, task.duration, onUpdate]);
+
+    // If data is invalid, don't render the item on the timeline to prevent crashes
+    if (top === null || height === null) {
+        return null;
+    }
+
+    return (
+        <div ref={elementRef} style={{ top: `${top}%`, height: `${height}%` }} className="absolute w-full px-1">
+            <div onClick={onClick} className={`h-full bg-accent-blue text-white rounded-lg p-1 text-xs overflow-hidden relative flex flex-col cursor-pointer ${task.completed ? 'opacity-60' : ''}`}>
+                <strong className="truncate">{task.name}</strong>
+                <p className="truncate">{task.startTime} - {(() => { 
+                    const [h,m] = task.startTime.split(':').map(Number); 
+                    const d = task.duration||60; 
+                    const endM = (h*60+m+d); 
+                    return `${String(Math.floor(endM/60) % 24).padStart(2,'0')}:${String(endM%60).padStart(2,'0')}`
+                })()}</p>
+                <div onMouseDown={handleResizeMouseDown} className="absolute bottom-0 left-0 w-full h-2 cursor-ns-resize" />
+            </div>
+        </div>
+    );
+};
+
 
 // --- Week View Sub-Component ---
 const WeekView: React.FC<Omit<MonthViewProps, 'onSetDisplayMode'> & { onSetDisplayMode: (mode: CalendarDisplayMode) => void }> = ({ allTasks, currentDate, setCurrentDate, setFocusedTask, onSetDisplayMode, onExport }) => {
@@ -367,11 +486,11 @@ const WeekView: React.FC<Omit<MonthViewProps, 'onSetDisplayMode'> & { onSetDispl
     return (
         <div className="h-full flex flex-col">
             <header className="flex items-center justify-between p-4 border-b border-border-color shrink-0 flex-wrap gap-2">
-                <div className="flex items-center space-x-2"><button onClick={() => changeWeek(-1)} aria-label="Previous week" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button><button onClick={() => setCurrentDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-gray-700">Today</button><button onClick={() => changeWeek(1)} aria-label="Next week" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button></div>
+                <div className="flex items-center space-x-2"><button onClick={() => changeWeek(-1)} aria-label="Previous week" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button><button onClick={() => setCurrentDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-border-color">Today</button><button onClick={() => changeWeek(1)} aria-label="Next week" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button></div>
                 <h2 className="text-lg md:text-xl font-bold text-center order-first w-full md:w-auto md:order-none">{headerTitle}</h2>
                 <div className="flex items-center gap-2">
                     <div className="bg-app-background p-1 rounded-lg flex space-x-1"><button onClick={() => onSetDisplayMode('month')} className="p-1.5 rounded-md hover:bg-card-background" title="Month View"><CalendarDaysIcon className="w-5 h-5 text-text-primary" /></button><button onClick={() => onSetDisplayMode('week')} className="p-1.5 rounded-md bg-accent-blue" title="Week View"><ViewWeekIcon className="w-5 h-5 text-white" /></button><button onClick={() => onSetDisplayMode('day')} className="p-1.5 rounded-md hover:bg-card-background" title="Day View"><ViewDayIcon className="w-5 h-5 text-text-primary" /></button></div>
-                    <button onClick={() => onExport({start: weekStartDate, end: weekEndDate})} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-gray-700"><DownloadIcon className="w-4 h-4" /><span>Export Achievements</span></button>
+                    <button onClick={() => onExport({start: weekStartDate, end: weekEndDate})} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color"><DownloadIcon className="w-4 h-4" /><span>Export Achievements</span></button>
                 </div>
             </header>
             <div className="flex-grow overflow-auto flex flex-col bg-app-background">
@@ -385,8 +504,7 @@ const WeekView: React.FC<Omit<MonthViewProps, 'onSetDisplayMode'> & { onSetDispl
                                 <div className="flex-grow space-y-1.5 overflow-y-auto mt-1">{tasksForDay.map(task => {
                                     const project = projects.find(p => p.id === task.projectId);
                                     const group = project ? projectGroups.find(g => g.id === project.groupId) : undefined;
-                                    const taskColor = group?.color?.replace('bg-', '')?.split('-')[0] || 'gray';
-                                    return (<div key={task.id} title={task.name} draggable onDragStart={(e) => setDraggedTaskId(task.id)} onClick={() => setFocusedTask(task)} className={`text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center ${task.completed ? 'opacity-50 bg-gray-600' : ''} ${draggedTaskId === task.id ? 'opacity-30' : ''}`} style={{ backgroundColor: task.completed ? undefined : `var(--tw-color-${taskColor}-500)` }}><div className="flex items-center min-w-0"><span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.name}</span></div></div>);
+                                    return (<div key={task.id} title={task.name} draggable onDragStart={(e) => {e.dataTransfer.setData('text/plain', task.id); setDraggedTaskId(task.id)}} onClick={() => setFocusedTask(task)} className={`text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center ${task.completed ? 'opacity-50 bg-gray-600' : ''} ${draggedTaskId === task.id ? 'opacity-30' : ''} ${group?.color || 'bg-gray-500'}`}><div className="flex items-center min-w-0"><span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.name}</span></div></div>);
                                 })}</div>
                             </div>
                         );
@@ -464,11 +582,11 @@ const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrent
     return (
         <div className="h-full flex flex-col">
             <header className="flex items-center justify-between p-4 border-b border-border-color shrink-0 flex-wrap gap-2">
-                <div className="flex items-center space-x-2"><button onClick={() => changeMonth(-1)} aria-label="Previous month" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button><button onClick={() => setCurrentDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-gray-700">Today</button><button onClick={() => changeMonth(1)} aria-label="Next month" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button></div>
+                <div className="flex items-center space-x-2"><button onClick={() => changeMonth(-1)} aria-label="Previous month" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronLeftIcon className="w-5 h-5"/></button><button onClick={() => setCurrentDate(normalizeDate(new Date()))} className="px-3 py-1 text-sm rounded bg-app-background hover:bg-border-color">Today</button><button onClick={() => changeMonth(1)} aria-label="Next month" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button></div>
                 <h2 className="text-lg md:text-xl font-bold text-center order-first w-full md:w-auto md:order-none">{headerTitle}</h2>
                 <div className="flex items-center gap-2">
                     <div className="bg-app-background p-1 rounded-lg flex space-x-1"><button onClick={() => onSetDisplayMode('month')} className="p-1.5 rounded-md bg-accent-blue" title="Month View"><CalendarDaysIcon className="w-5 h-5 text-white" /></button><button onClick={() => onSetDisplayMode('week')} className="p-1.5 rounded-md hover:bg-card-background" title="Week View"><ViewWeekIcon className="w-5 h-5 text-text-primary" /></button><button onClick={() => onSetDisplayMode('day')} className="p-1.5 rounded-md hover:bg-card-background" title="Day View"><ViewDayIcon className="w-5 h-5 text-text-primary" /></button></div>
-                    <button onClick={() => onExport({start: calendarGrid[0].date, end: calendarGrid[calendarGrid.length-1].date})} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-gray-700"><DownloadIcon className="w-4 h-4" /><span>Export Achievements</span></button>
+                    <button onClick={() => onExport({start: calendarGrid[0].date, end: calendarGrid[calendarGrid.length-1].date})} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color"><DownloadIcon className="w-4 h-4" /><span>Export Achievements</span></button>
                 </div>
             </header>
             <div className="flex-grow overflow-auto flex flex-col bg-app-background">
@@ -484,8 +602,7 @@ const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrent
                                 </div>
                                 <div className="flex-grow space-y-1 overflow-y-auto mt-1">{tasksForDay.map(task => {
                                     const project = projects.find(p => p.id === task.projectId); const group = project ? projectGroups.find(g => g.id === project.groupId) : undefined;
-                                    const taskColor = group?.color?.replace('bg-', '')?.split('-')[0] || 'gray';
-                                    return (<div key={task.id} title={`${task.name}\nProject: ${project?.name || 'N/A'}`} draggable onDragStart={(e) => setDraggedTaskId(task.id)} onClick={() => setFocusedTask(task)} className={`text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center ${task.completed ? 'opacity-50 bg-gray-600' : ''} ${draggedTaskId === task.id ? 'opacity-30' : ''}`} style={{ backgroundColor: task.completed ? undefined : `var(--tw-color-${taskColor}-500)` }}><div className="flex items-center min-w-0"><span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.name}</span></div></div>);
+                                    return (<div key={task.id} title={`${task.name}\nProject: ${project?.name || 'N/A'}`} draggable onDragStart={(e) => { e.dataTransfer.setData('text/plain', task.id); setDraggedTaskId(task.id)}} onClick={() => setFocusedTask(task)} className={`text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center ${task.completed ? 'opacity-50 bg-gray-600' : ''} ${draggedTaskId === task.id ? 'opacity-30' : ''} ${group?.color || 'bg-gray-500'}`}><div className="flex items-center min-w-0"><span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.name}</span></div></div>);
                                 })}
                                 {addingTaskTo && areDatesEqual(addingTaskTo, day.date) && (
                                     <form onSubmit={handleFormSubmit} className="bg-app-background p-2 rounded-lg space-y-2 relative z-10">

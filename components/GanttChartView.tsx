@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Task } from '../types';
 import { PlusIcon, MinusIcon, ImageIcon, DownloadIcon, ArrowLongRightIcon, ArrowLongLeftIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
-// FIX: Removed unused import for generateImageForTask
 import Spinner from './Spinner';
 import { useDownloadImage } from '../hooks/useDownloadImage';
 
