@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 // --- Type Definitions for Web Speech API ---
 // These are added to provide type safety for the browser-specific APIs.
 
-// FIX: Define missing related types for the Web Speech API to ensure SpeechRecognitionEvent is valid.
 interface SpeechRecognitionAlternative {
     readonly transcript: string;
     readonly confidence: number;
@@ -41,7 +40,6 @@ type SpeechRecognitionErrorCode =
   | 'language-not-supported';
 
 
-// FIX: Define the SpeechRecognition instance type to be used in the component.
 interface SpeechRecognition {
     continuous: boolean;
     interimResults: boolean;
@@ -53,14 +51,12 @@ interface SpeechRecognition {
     stop: () => void;
 }
 
-// FIX: Define the SpeechRecognition constructor type.
 interface SpeechRecognitionStatic {
     new (): SpeechRecognition;
 }
 
 declare global {
   interface Window {
-    // FIX: Use the constructor type to correctly type the window properties and break the circular reference error.
     SpeechRecognition: SpeechRecognitionStatic;
     webkitSpeechRecognition: SpeechRecognitionStatic;
   }

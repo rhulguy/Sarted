@@ -1,16 +1,13 @@
-// FIX: Update imports for @google/genai SDK. `GoogleGenerativeAI` is deprecated and `Type` is exported from `@google/genai`.
 import { GoogleGenAI, Type } from "@google/genai";
 import { Buffer } from 'buffer';
 
 // This function is a Vercel Serverless Function, which runs on the server.
 // It is safe to use environment variables here.
 // The API key MUST be set in your Vercel project settings.
-// FIX: Correctly reference process.env.API_KEY as per guidelines.
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set.");
 }
 
-// FIX: Update to the new GoogleGenAI constructor with a named `apiKey` parameter.
 const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
 
 // Define schemas for validation/parsing, similar to the original geminiService
@@ -75,7 +72,6 @@ const handleGenerateProjectPlan = async (payload: any) => {
     const today = new Date().toISOString().split('T')[0];
     const prompt = `You are a world-class project management assistant. Break down the user's high-level goal into a concrete, actionable project plan. Generate a hierarchical list of tasks with sub-tasks. For each task, provide a name, description, and estimated start/end dates in YYYY-MM-DD format. Assume today is ${today}. Ensure parent task dates encompass their sub-tasks. Return at least 3-4 top-level tasks. Goal: "${goal}"`;
     
-    // FIX: Updated to use the new `ai.models.generateContent` method and correct response handling.
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: prompt,
@@ -90,7 +86,6 @@ const handleGenerateFocusPlan = async (payload: any) => {
     const today = new Date().toISOString().split('T')[0];
     const prompt = `You are a friendly productivity coach. Analyze the user's projects and habits to identify the top 3-5 most important priorities for today, ${today}. Consider upcoming deadlines, incomplete tasks, and daily habits. Return a JSON object with the task IDs and a brief, encouraging reason for each priority. Data: ${JSON.stringify({ projects, habits })}`;
     
-    // FIX: Updated to use the new `ai.models.generateContent` method and correct response handling.
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: prompt,
@@ -105,7 +100,6 @@ const handleGenerateNewSchedule = async (payload: any) => {
     const today = new Date().toISOString().split('T')[0];
     const prompt = `You are a project scheduling expert. The task with ID '${delayedTaskId}' is overdue. Reschedule it and all its dependent tasks to create a new, realistic plan. The delayed task must start no earlier than today, ${today}. Maintain all dependency links. Return a list of all tasks that need date changes with their new start and end dates. Project Data: ${JSON.stringify(tasks)}`;
     
-    // FIX: Updated to use the new `ai.models.generateContent` method and correct response handling.
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: prompt,
@@ -119,7 +113,6 @@ const handleGenerateWeeklySummary = async (payload: any) => {
     const { completedTasks, completedHabits } = payload;
     const prompt = `You are an encouraging productivity coach. Here is my activity from the last week: I completed ${completedTasks.length} tasks and performed these habits: ${JSON.stringify(completedHabits)}. Write a brief, positive, and motivational summary of my accomplishments (2-3 sentences). Focus on celebrating the progress.`;
     
-    // FIX: Updated to use the new `ai.models.generateContent` method and correct response handling.
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: prompt,
@@ -131,7 +124,6 @@ const handleGenerateWeeklySummary = async (payload: any) => {
 const handleGenerateImageForTask = async (payload: any) => {
     const { prompt } = payload;
 
-    // FIX: Updated to use the new `ai.models.generateImages` method for image models.
     const response = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: `A simple, clean icon representing the concept of: "${prompt}". Minimalist, on a white background.`,
@@ -141,7 +133,6 @@ const handleGenerateImageForTask = async (payload: any) => {
         },
     });
 
-    // FIX: Updated to use the correct response structure for image generation.
     if (response.generatedImages && response.generatedImages.length > 0) {
         const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
         return { imageUrl: `data:image/png;base64,${base64ImageBytes}` };

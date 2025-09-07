@@ -17,14 +17,12 @@ import WeeklyReviewModal from './components/WeeklyReviewModal';
 import { useWeeklyReview } from './contexts/WeeklyReviewContext';
 import GlobalCalendar from './components/GlobalCalendar';
 import GlobalMindMapView from './components/GlobalMindMapView';
-// FIX: Import User type for the inlined MyAccountView component.
 import { useAuth, User } from './contexts/AuthContext';
 import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 // MyAccountView will be inlined in this file
 // import MyAccountView from './components/MyAccountView';
 import { Resource, Project, ProjectGroup, ProjectView } from './types';
-// FIX: Import EditIcon for the inlined MyAccountView component.
 import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
@@ -477,7 +475,6 @@ const ProjectCard: React.FC<{ project: Project, onClick: () => void, onArchive: 
     );
 };
 
-// FIX: Inlined MyAccountView to avoid creating a new file, respecting constraints.
 const MyAccountView: React.FC = () => {
     const { user, updateUserProfile, deleteUserAccount, loading } = useAuth();
     const [isEditingName, setIsEditingName] = useState(false);

@@ -27,7 +27,6 @@ const mockHabits: Habit[] = [
 ];
 
 describe('HabitTracker component', () => {
-  // Fix: The context now uses specific functions instead of a generic dispatch.
   const mockAddHabit = vi.fn();
   const mockUpdateHabit = vi.fn();
   const mockDeleteHabit = vi.fn();
@@ -75,7 +74,6 @@ describe('HabitTracker component', () => {
     const dailyHabitCheckbox = screen.getByLabelText('Mark Daily Meditation as complete for 2024-07-30');
     fireEvent.click(dailyHabitCheckbox);
 
-    // Fix: Assert that updateHabit was called with the correct payload.
     expect(mockUpdateHabit).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'habit-1',
@@ -122,7 +120,6 @@ describe('HabitTracker component', () => {
     // Note: The delete button is only visible on hover, but fireEvent works without simulating hover
     const deleteButton = screen.getByTitle('Delete habit: Daily Meditation');
     fireEvent.click(deleteButton);
-    // Fix: Assert that deleteHabit was called with the correct habit ID.
     expect(mockDeleteHabit).toHaveBeenCalledWith('habit-1');
   });
 });
