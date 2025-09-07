@@ -125,7 +125,7 @@ const handleGenerateImage = async (payload: any) => {
     const { prompt } = payload;
     const geminiResponse = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
-        prompt: `A photorealistic, inspiring image for a dream board, representing the concept of: "${prompt}". High resolution, vibrant colors.`,
+        prompt: `An inspiring, photorealistic image for a dream board about: "${prompt}".`,
         config: { numberOfImages: 1, outputMimeType: 'image/png', aspectRatio: '16:9' },
     });
 

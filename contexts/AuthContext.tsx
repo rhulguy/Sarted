@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
+// FIX: Import firebase v8 compat library and remove modular auth imports to fix missing member errors.
+import firebase from 'firebase/compat/app';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { Project, Habit, Resource, InboxTask, ProjectGroup } from '../types';
@@ -31,7 +32,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    // FIX: Use v8 compat syntax for onAuthStateChanged and User type.
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: firebase.User | null) => {
       if (firebaseUser) {
         const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
         const userDoc = await getDoc(userRef);
@@ -105,7 +107,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ]);
 
           await deleteDoc(doc(db, `users/${user.id}/profile/main`));
-          await signOut(auth);
+          // FIX: Use v8 compat syntax for signOut.
+          await auth.signOut();
           setUser(null);
 
       } catch (error) {
