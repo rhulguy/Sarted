@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
+import React, { createContext, useState, useContext, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
@@ -32,42 +32,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
-        const userDoc = await getDoc(userRef);
+      try {
+        if (firebaseUser) {
+          const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
+          const userDoc = await getDoc(userRef);
 
-        if (!userDoc.exists()) {
-          // First time sign-in, create a profile document
-          const newUser: User = {
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || 'New User',
-            email: firebaseUser.email,
-            picture: firebaseUser.photoURL,
-            plan: 'free'
-          };
-          await setDoc(userRef, newUser);
-          setUser(newUser);
+          if (!userDoc.exists()) {
+            // First time sign-in, create a profile document
+            const newUser: User = {
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName || 'New User',
+              email: firebaseUser.email,
+              picture: firebaseUser.photoURL,
+              plan: 'free'
+            };
+            await setDoc(userRef, newUser);
+            setUser(newUser);
+          } else {
+            // Existing user, merge auth data with profile data
+            const profileData = userDoc.data() as User;
+            setUser({
+              ...profileData,
+              // Keep auth provider data fresh
+              email: firebaseUser.email,
+              picture: firebaseUser.photoURL,
+            });
+          }
         } else {
-          // Existing user, merge auth data with profile data
-          const profileData = userDoc.data() as User;
-          setUser({
-            ...profileData,
-            // Keep auth provider data fresh
-            email: firebaseUser.email,
-            picture: firebaseUser.photoURL,
-          });
+          setUser(null);
         }
-
-      } else {
-        setUser(null);
+      } catch (error) {
+          console.error("Error during authentication state change:", error);
+          setUser(null);
+      } finally {
+          setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const updateUserProfile = async (updates: Partial<User>) => {
+  const updateUserProfile = useCallback(async (updates: Partial<User>) => {
       if (!user) return;
       
       const updatedUser = { ...user, ...updates };
@@ -81,9 +86,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(user); // Revert on failure
           alert("Could not save changes. Please try again.");
       }
-  };
+  }, [user]);
 
-  const deleteUserAccount = async () => {
+  const deleteUserAccount = useCallback(async () => {
       if (!user) return;
       
       const deleteCollection = async (collectionPath: string) => {
@@ -112,11 +117,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           console.error("Error deleting user account data:", error);
           throw error;
       }
-  };
+  }, [user]);
+
+  const value = useMemo(() => ({
+    user,
+    loading,
+    updateUserProfile,
+    deleteUserAccount
+  }), [user, loading, updateUserProfile, deleteUserAccount]);
 
 
   return (
-    <AuthContext.Provider value={{ user, loading, updateUserProfile, deleteUserAccount }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
