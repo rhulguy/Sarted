@@ -255,6 +255,7 @@ const GlobalGanttView: React.FC = () => {
       setNewTaskName('');
       setNewTaskStartDate('');
       setNewTaskEndDate('');
+      setAddingTaskToProject(null);
     }
   }, [newTaskName, addingTaskToProject, addTask, newTaskStartDate, newTaskEndDate]);
 
@@ -516,17 +517,28 @@ const GlobalGanttView: React.FC = () => {
                                 <div key={item.type + '-' + item.data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
                                     <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-card-background">
                                         {item.data.id.startsWith('new-task-form') ? (
-                                            <form onSubmit={handleNewTaskSubmit} className="w-full flex items-center gap-1" style={{ paddingLeft: '1.5rem' }}>
+                                            <form onSubmit={handleNewTaskSubmit} className="w-full flex items-center gap-2" style={{ paddingLeft: '1.5rem' }}>
                                                 <input
                                                     type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
                                                     onBlur={() => { if (newTaskName.trim() === '') setAddingTaskToProject(null); }}
                                                     onKeyDown={e => { if (e.key === 'Escape') { setNewTaskName(''); setAddingTaskToProject(null); } }}
                                                     placeholder="New task..." autoFocus
-                                                    className="w-full bg-app-background border border-accent-blue rounded p-1 text-sm"
+                                                    className="flex-grow bg-app-background border border-accent-blue rounded-md px-3 py-1.5 text-sm focus:outline-none"
                                                 />
-                                                <input type="date" value={newTaskStartDate} onChange={e => setNewTaskStartDate(e.target.value)} className="bg-app-background border rounded p-1 text-xs" />
-                                                <input type="date" value={newTaskEndDate} onChange={e => setNewTaskEndDate(e.target.value)} className="bg-app-background border rounded p-1 text-xs" />
-
+                                                <input 
+                                                    type="date" 
+                                                    value={newTaskStartDate} 
+                                                    onChange={e => setNewTaskStartDate(e.target.value)} 
+                                                    aria-label="Start Date"
+                                                    className="bg-app-background border border-border-color rounded-md p-1.5 text-sm text-text-secondary" 
+                                                />
+                                                <input 
+                                                    type="date" 
+                                                    value={newTaskEndDate} 
+                                                    onChange={e => setNewTaskEndDate(e.target.value)} 
+                                                    aria-label="End Date"
+                                                    className="bg-app-background border border-border-color rounded-md p-1.5 text-sm text-text-secondary"
+                                                />
                                             </form>
                                         ) : (
                                             <div className="flex items-center group w-full" style={{ paddingLeft: '1.5rem' }}>

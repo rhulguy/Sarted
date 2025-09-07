@@ -44,6 +44,15 @@ const formatDate = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+
+
 const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, onAddSubtask, projects, currentProjectId, onMoveProject }) => {
     const { projectGroups } = useProject();
     const project = projects?.find(p => p.id === currentProjectId);
@@ -59,6 +68,8 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
     const [newSubtaskName, setNewSubtaskName] = useState('');
     const [newSubtaskStartDate, setNewSubtaskStartDate] = useState('');
     const [newSubtaskEndDate, setNewSubtaskEndDate] = useState('');
+    const [generatingImage, setGeneratingImage] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     useEffect(() => {
         setDescription(task.description);
@@ -114,6 +125,36 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
             setIsExpanded(true);
         }
     };
+
+    const handleGenerateImage = async () => {
+        setGeneratingImage(true);
+        try {
+            const imageUrl = await generateImageForTask(task.name);
+            onUpdate({ ...task, imageUrl });
+        } catch (error) {
+            console.error("Failed to generate image for task:", error);
+            alert("Could not generate image. Please check the console for details.");
+        } finally {
+            setGeneratingImage(false);
+        }
+    };
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        try {
+          const base64 = await fileToBase64(file);
+          onUpdate({ ...task, imageUrl: base64 });
+        } catch (error) {
+          console.error("Error converting file to base64", error);
+          alert("Could not upload image. Please try another file.");
+        }
+      }
+    };
+
+    const handleRemoveImage = () => {
+      onUpdate({ ...task, imageUrl: undefined });
+    };
     
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
 
@@ -156,6 +197,35 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                             className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             rows={3}
                         />
+                    </div>
+                     <div>
+                        <label className="block text-xs font-medium text-text-secondary mb-1">Image</label>
+                        <div className="mt-1 flex items-center gap-4">
+                            {task.imageUrl ? (
+                                <div className="relative group">
+                                    <img src={task.imageUrl} alt="Task visual" className="h-24 w-24 rounded-lg object-cover" />
+                                    <button 
+                                    onClick={handleRemoveImage}
+                                    title="Remove Image"
+                                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                    <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                            <div className="flex gap-2">
+                                <button onClick={handleGenerateImage} disabled={generatingImage} className="flex items-center gap-2 px-3 py-2 text-sm bg-app-background rounded-lg hover:bg-border-color disabled:opacity-50">
+                                    {generatingImage ? <Spinner /> : <ImageIcon className="w-5 h-5" />}
+                                    <span>{generatingImage ? 'Generating...' : 'Generate AI'}</span>
+                                </button>
+                                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 text-sm bg-app-background rounded-lg hover:bg-border-color">
+                                    <UploadIcon className="w-5 h-5" />
+                                    <span>Upload</span>
+                                </button>
+                                <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+                            </div>
+                            )}
+                        </div>
                     </div>
                     <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
                         <div className="flex-1">
