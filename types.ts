@@ -26,6 +26,7 @@ export interface ProjectGroup {
   name: string;
   color: string;
   order: number;
+  icon?: string;
 }
 
 export interface Habit {
@@ -72,6 +73,7 @@ export interface BaseMindMapNode {
     groupName?: string;
     imageUrl?: string;
     task?: Task;
+    icon?: string;
 }
 
 // Node structure after layout algorithm has been applied

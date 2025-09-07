@@ -168,7 +168,7 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
                               <p className="font-semibold text-text-primary">{habit.name}</p>
                               {(project || group) && (
                                 <div className="flex items-center gap-1.5 text-xs text-text-secondary mt-1">
-                                    {project ? <FolderIcon className="w-3 h-3"/> : <div className={`w-2 h-2 rounded-full ${group?.color}`}/>}
+                                    <span className="text-base">{project ? project.icon : group?.icon || '📁'}</span>
                                     <span>{project?.name || group?.name}</span>
                                 </div>
                               )}

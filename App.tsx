@@ -337,22 +337,63 @@ const ResourceCard: React.FC<{ resource: Resource, onUpdate: (r: Resource) => vo
     const group = projectGroups.find(g => g.id === resource.projectGroupId);
     const linkedProjects = useMemo(() => resource.projectIds.map(id => projects.find(p => p.id === id)).filter(Boolean), [resource.projectIds, projects]);
     
+    const [isEditing, setIsEditing] = useState(false);
+    const [notes, setNotes] = useState(resource.notes);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (isEditing) {
+            textareaRef.current?.focus();
+            textareaRef.current?.select();
+        }
+    }, [isEditing]);
+
+    const handleSave = () => {
+        if (notes.trim() !== resource.notes) {
+            onUpdate({ ...resource, notes: notes.trim() });
+        }
+        setIsEditing(false);
+    };
+
     return (
-        <div className="bg-card-background rounded-2xl shadow-card p-5 flex flex-col gap-4">
-            <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                    <img src={resource.thumbnailUrl} alt={resource.title} className="w-12 h-12 rounded-full border-2 border-border-color p-1 object-contain" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
-                    <div className="min-w-0">
-                        <h3 className="font-semibold truncate">{resource.title}</h3>
-                        <p className="text-sm text-text-secondary truncate">{resource.notes || "No notes yet."}</p>
+        <div className="bg-card-background rounded-2xl shadow-card p-5 flex flex-col justify-between">
+            <div>
+                <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <img src={resource.thumbnailUrl} alt={resource.title} className="w-12 h-12 rounded-full border-2 border-border-color p-1 object-contain shrink-0" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
+                        <div className="min-w-0">
+                            <h3 className="font-semibold truncate">{resource.title}</h3>
+                             {isEditing ? (
+                                <textarea
+                                    ref={textareaRef}
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    onBlur={handleSave}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave(); }
+                                        if (e.key === 'Escape') { setNotes(resource.notes); setIsEditing(false); }
+                                    }}
+                                    placeholder="Add notes..."
+                                    className="text-sm w-full bg-app-background border border-accent-blue rounded-md p-1 mt-1 focus:outline-none resize-none"
+                                    rows={3}
+                                />
+                            ) : (
+                                <p
+                                    onClick={() => setIsEditing(true)}
+                                    className="text-sm text-text-secondary truncate cursor-pointer hover:text-text-primary"
+                                >
+                                    {resource.notes || "Add notes..."}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                     <div className="flex items-center gap-2 shrink-0">
+                        <a href={resource.url} target="_blank" rel="noopener noreferrer" title={resource.url} className="p-2 rounded-full hover:bg-app-background text-text-secondary"><LinkIcon className="w-5 h-5"/></a>
+                        <button onClick={() => { if(window.confirm('Delete this resource?')) onDelete(resource.id); }} title="Delete" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><TrashIcon className="w-5 h-5"/></button>
                     </div>
                 </div>
-                 <div className="flex items-center gap-2">
-                    <a href={resource.url} target="_blank" rel="noopener noreferrer" title={resource.url} className="p-2 rounded-full hover:bg-app-background text-text-secondary"><LinkIcon className="w-5 h-5"/></a>
-                    <button onClick={() => { if(window.confirm('Delete this resource?')) onDelete(resource.id); }} title="Delete" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><TrashIcon className="w-5 h-5"/></button>
-                </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap mt-2">
                 {group && <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${group.color}`}>{group.name}</span>}
                 {linkedProjects.map(p => p && <span key={p.id} className="px-3 py-1 rounded-full text-xs font-medium bg-app-background text-text-secondary">{p.name}</span>)}
             </div>
@@ -386,7 +427,7 @@ const ProjectsDashboardView = () => {
                 {groupedProjects.map(group => (
                     <div key={group.id}>
                          <h2 className="flex items-center text-xl font-semibold text-text-primary mb-3">
-                            <span className={`w-4 h-4 rounded-full ${group.color} mr-3`}></span>
+                            <span className="text-2xl mr-3">{group.icon || '📁'}</span>
                             {group.name}
                         </h2>
                         {group.projects.length > 0 ? (

@@ -3,7 +3,7 @@ import { Project, ProjectGroup, Task, Resource } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
 import { collection, doc, getDocs, query, limit, writeBatch, onSnapshot, orderBy, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { INITIAL_PROJECT_GROUPS, INITIAL_PROJECTS, INITIAL_RESOURCES } from '../constants';
+import { INITIAL_PROJECT_GROUPS, INITIAL_PROJECTS, INITIAL_RESOURCES, COLOR_PALETTE } from '../constants';
 import { updateTaskInTree, deleteTaskFromTree, addSubtaskToTree, updateTasksInTree, findAndRemoveTask } from '../utils/taskUtils';
 
 // --- PROJECT CONTEXT ---
@@ -22,7 +22,7 @@ interface ProjectContextType {
   deleteProject: (id: string) => Promise<void>;
   archiveProject: (id: string) => Promise<void>;
   unarchiveProject: (id: string) => Promise<void>;
-  addProjectGroup: (group: Omit<ProjectGroup, 'id' | 'order'>) => Promise<void>;
+  addProjectGroup: (group: Omit<ProjectGroup, 'id' | 'order' | 'color'>) => Promise<void>;
   updateProjectGroup: (group: ProjectGroup) => Promise<void>;
   deleteProjectGroup: (groupId: string) => Promise<void>;
   reorderProjectGroups: (groups: ProjectGroup[]) => Promise<void>;
@@ -76,7 +76,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       });
 
       const projectsQuery = collection(db, `users/${user.id}/projects`);
-      const groupsQuery = query(collection(db, `users/${user.id}/projectGroups`), orderBy('name'));
+      const groupsQuery = query(collection(db, `users/${user.id}/projectGroups`), orderBy('order'));
 
       const unsubProjects = onSnapshot(projectsQuery, (snapshot) => {
         const userProjects = snapshot.docs.map(d => {
@@ -192,8 +192,9 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       await updateProject(projectId, { isArchived: false });
   }, [updateProject]);
 
-  const addProjectGroup = useCallback(async (groupData: Omit<ProjectGroup, 'id' | 'order'>) => {
-    const newGroup = { ...groupData, id: `group-${Date.now()}`, order: projectGroups.length };
+  const addProjectGroup = useCallback(async (groupData: Omit<ProjectGroup, 'id' | 'order' | 'color'>) => {
+    const color = COLOR_PALETTE[projectGroups.length % COLOR_PALETTE.length];
+    const newGroup = { ...groupData, id: `group-${Date.now()}`, order: projectGroups.length, color };
     const originalGroups = projectGroups;
     setProjectGroups(prev => [...prev, newGroup]);
     if (user) {
@@ -297,7 +298,12 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       await updateProject(projectId, { tasks: finalTasks });
   }, [projects, updateProject]);
   
-  const visibleProjects = useMemo(() => projects.filter(p => !p.isArchived), [projects]);
+  const visibleProjects = useMemo(() => projects.filter(p => !p.isArchived).sort((a, b) => {
+    const groupA = projectGroups.find(g => g.id === a.groupId)?.order ?? 99;
+    const groupB = projectGroups.find(g => g.id === b.groupId)?.order ?? 99;
+    if (groupA !== groupB) return groupA - groupB;
+    return a.name.localeCompare(b.name);
+  }), [projects, projectGroups]);
   const archivedProjects = useMemo(() => projects.filter(p => p.isArchived), [projects]);
   const selectedProject = useMemo(() => projects.find(p => p.id === selectedProjectId) ?? null, [projects, selectedProjectId]);
 

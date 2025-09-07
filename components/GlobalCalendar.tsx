@@ -246,12 +246,15 @@ interface DayViewProps {
     onExport: (range: {start: Date, end: Date}) => void;
 }
 
-const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTasks, onSetDisplayMode, onExport }) => {
-    const { visibleProjects, updateTask } = useProject();
+const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTasks, setFocusedTask, onSetDisplayMode, onExport }) => {
+    const { visibleProjects, updateTask, addTask } = useProject();
     const { habits } = useHabit();
     const [priorities, setPriorities] = useState<PrioritizedTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isAddingTask, setIsAddingTask] = useState(false);
+    const [newTaskName, setNewTaskName] = useState('');
+    const [newTaskProjectId, setNewTaskProjectId] = useState(visibleProjects[0]?.id || "");
 
     const allTasksMap = useMemo(() => new Map(allTasks.map(t => [t.id, t])), [allTasks]);
 
@@ -272,6 +275,17 @@ const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTas
         getFocusPlan();
     }, [visibleProjects, habits, allTasksMap]);
 
+    const handleAddTask = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newTaskName.trim() && newTaskProjectId) {
+            const dateStr = formatDate(selectedDate);
+            const newTask: Task = { id: `task-${Date.now()}`, name: newTaskName.trim(), completed: false, description: '', subtasks: [], startDate: dateStr, endDate: dateStr };
+            await addTask(newTaskProjectId, newTask);
+            setIsAddingTask(false);
+            setNewTaskName('');
+        }
+    };
+    
     const changeDay = (amount: number) => {
         const newDate = new Date(selectedDate);
         newDate.setUTCDate(newDate.getUTCDate() + amount);
@@ -306,6 +320,28 @@ const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTas
                         <div className="space-y-6">
                             {priorities.length > 0 && (<div><h3 className="text-xl font-semibold mb-3 text-accent-blue">AI Priorities</h3><div className="space-y-3">{priorities.map(({ task, reason }) => (<div key={task.id} className="bg-card-background p-3 rounded-lg"><div className="flex items-start space-x-2.5 mb-2"><SparklesIcon className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" /><p className="text-sm text-text-secondary italic">"{reason}"</p></div><TaskItem task={task} level={0} onUpdate={handleUpdateTask(task.projectId)} onDelete={() => {}} onAddSubtask={() => {}} /></div>))}</div></div>)}
                             {otherTasksForDay.length > 0 && (<div><h3 className="text-xl font-semibold mb-3 text-text-primary">Other Tasks for Today</h3><div className="space-y-2">{otherTasksForDay.map(task => (<TaskItem key={task.id} task={task} level={0} onUpdate={handleUpdateTask(task.projectId)} onDelete={() => {}} onAddSubtask={() => {}} />))}</div></div>)}
+                            
+                            <div className="mt-6">
+                                {isAddingTask ? (
+                                    <form onSubmit={handleAddTask} className="bg-card-background p-4 rounded-xl border border-border-color space-y-3">
+                                        <h4 className="font-semibold">Add New Task for This Day</h4>
+                                        <input type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)} placeholder="What needs to be done?" className="w-full bg-app-background border border-border-color rounded-lg px-3 py-2" autoFocus />
+                                        <select value={newTaskProjectId} onChange={e => setNewTaskProjectId(e.target.value)} className="w-full bg-app-background border border-border-color rounded-lg px-3 py-2">
+                                            {visibleProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                        </select>
+                                        <div className="flex justify-end gap-2">
+                                            <button type="button" onClick={() => setIsAddingTask(false)} className="px-3 py-1.5 bg-app-background rounded-lg hover:bg-border-color">Cancel</button>
+                                            <button type="submit" className="px-3 py-1.5 bg-accent-blue text-white rounded-lg disabled:opacity-50" disabled={!newTaskName.trim()}>Add Task</button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <button onClick={() => setIsAddingTask(true)} className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-border-color rounded-xl text-text-secondary hover:border-accent-blue hover:text-accent-blue transition-colors">
+                                        <PlusIcon className="w-5 h-5" />
+                                        Add a task for today
+                                    </button>
+                                )}
+                            </div>
+                            
                             {priorities.length === 0 && otherTasksForDay.length === 0 && ( <div className="text-center text-text-secondary py-16">No tasks scheduled for today.</div>)}
                         </div>
                     )}
@@ -319,6 +355,12 @@ const DayView: React.FC<DayViewProps> = ({ selectedDate, setSelectedDate, allTas
 const WeekView: React.FC<Omit<MonthViewProps, 'onSetDisplayMode'> & { onSetDisplayMode: (mode: CalendarDisplayMode) => void }> = ({ allTasks, currentDate, setCurrentDate, setFocusedTask, onSetDisplayMode, onExport }) => {
     const { projects, projectGroups, updateTask, addTask } = useProject();
     const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+    const [addingTaskTo, setAddingTaskTo] = useState<Date | null>(null);
+    const [newTaskName, setNewTaskName] = useState("");
+    const [newTaskProjectId, setNewTaskProjectId] = useState(projects[0]?.id || "");
+    const newTaskInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => { if(addingTaskTo && newTaskInputRef.current) newTaskInputRef.current.focus(); }, [addingTaskTo]);
 
     const { weekDates, weekStartDate, weekEndDate } = useMemo(() => {
         const d = new Date(currentDate);
@@ -333,6 +375,21 @@ const WeekView: React.FC<Omit<MonthViewProps, 'onSetDisplayMode'> & { onSetDispl
         const newDate = new Date(currentDate);
         newDate.setUTCDate(newDate.getUTCDate() + (amount * 7));
         setCurrentDate(newDate);
+    };
+
+    const handleStartAddTask = (date: Date) => {
+        setAddingTaskTo(date); setNewTaskName("");
+        if(projects.length > 0) setNewTaskProjectId(projects[0].id);
+    };
+
+    const handleFormSubmit = async (e: React.FormEvent) => {
+        e.preventDefault(); const taskName = newTaskName.trim(); const taskDate = addingTaskTo;
+        if (taskDate && taskName && newTaskProjectId) {
+            const dateStr = formatDate(taskDate);
+            const newTask: Task = { id: `task-${Date.now()}`, name: taskName, completed: false, description: '', subtasks: [], startDate: dateStr, endDate: dateStr };
+            await addTask(newTaskProjectId, newTask);
+        }
+        setAddingTaskTo(null); setNewTaskName("");
     };
 
     const handleDrop = async (e: React.DragEvent, dropDate: Date) => {
@@ -369,13 +426,25 @@ const WeekView: React.FC<Omit<MonthViewProps, 'onSetDisplayMode'> & { onSetDispl
                         const isToday = areDatesEqual(day, normalizeDate(new Date()));
                         return (
                             <div key={index} className={`relative border-r border-border-color p-2 flex flex-col group`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, day)}>
-                                <div className="flex justify-between items-center mb-2"><span className={`text-sm font-semibold ${isToday ? 'bg-accent-blue text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>{day.getUTCDate()}</span><span className="text-sm font-semibold text-text-secondary">{day.toLocaleDateString('default', { weekday: 'short', timeZone: 'UTC' })}</span></div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className={`text-sm font-semibold ${isToday ? 'bg-accent-blue text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>{day.getUTCDate()}</span>
+                                    <span className="text-sm font-semibold text-text-secondary">{day.toLocaleDateString('default', { weekday: 'short', timeZone: 'UTC' })}</span>
+                                    {addingTaskTo === null && (<button onClick={() => handleStartAddTask(day)} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue hover:text-blue-400" aria-label={`Add task for ${formatDate(day)}`}><PlusIcon className="w-4 h-4"/></button>)}
+                                </div>
                                 <div className="flex-grow space-y-1.5 overflow-y-auto mt-1">{tasksForDay.map(task => {
                                     const project = projects.find(p => p.id === task.projectId);
                                     const group = project ? projectGroups.find(g => g.id === project.groupId) : undefined;
                                     const taskColor = group?.color?.replace('bg-', '')?.split('-')[0] || 'gray';
                                     return (<div key={task.id} title={task.name} draggable onDragStart={(e) => setDraggedTaskId(task.id)} onClick={() => setFocusedTask(task)} className={`text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center ${task.completed ? 'opacity-50 bg-gray-600' : ''} ${draggedTaskId === task.id ? 'opacity-30' : ''}`} style={{ backgroundColor: task.completed ? undefined : `var(--tw-color-${taskColor}-500)` }}><div className="flex items-center min-w-0"><span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.name}</span></div></div>);
-                                })}</div>
+                                })}
+                                {addingTaskTo && areDatesEqual(addingTaskTo, day) && (
+                                    <form onSubmit={handleFormSubmit} className="bg-card-background p-2 rounded-lg space-y-2 relative z-10 mt-1 shadow-lg">
+                                        <input ref={newTaskInputRef} type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} placeholder="New task..." className="w-full bg-app-background border border-accent-blue rounded p-1 text-xs focus:outline-none" />
+                                        <select value={newTaskProjectId} onChange={e => setNewTaskProjectId(e.target.value)} className="w-full bg-app-background border border-border-color rounded p-1 text-xs">{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        <div className="flex justify-end gap-1"><button type="button" onClick={() => setAddingTaskTo(null)} className="px-2 py-0.5 text-xs bg-border-color rounded">Cancel</button><button type="submit" className="px-2 py-0.5 text-xs bg-accent-blue text-white rounded">Add</button></div>
+                                    </form>
+                                )}
+                                </div>
                             </div>
                         );
                     })}

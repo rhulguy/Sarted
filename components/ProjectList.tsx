@@ -37,6 +37,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
     }
   };
 
+  const sortedGroups = [...projectGroups].sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
+
   return (
     <nav className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto">
@@ -47,14 +49,14 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 </div>
             </div>
 
-            {projectGroups.map(group => {
+            {sortedGroups.map(group => {
                 const groupProjects = visibleProjects.filter(p => p.groupId === group.id);
                 if (groupProjects.length === 0) return null;
 
                 return (
                 <div key={group.id} className="mb-4">
                     <h3 className="flex items-center text-sm font-semibold text-text-secondary mb-2 px-2">
-                        <span className={`w-3 h-3 rounded-full ${group.color} mr-2`}></span>
+                        <span className="text-lg mr-2">{group.icon || '📁'}</span>
                         {group.name}
                     </h3>
                     <ul>

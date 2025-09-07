@@ -18,13 +18,15 @@ export const COLOR_MAP: { [key: string]: string } = {
   'bg-indigo-500': '#6366F1',
 };
 
+export const GROUP_ICON_OPTIONS = ['💼', '👥', '💡', '💰', '📈', '🏠', '❤️', '💊', '🗺️', '🏋️', '🧘', '🌐', '📚', '🎨', '🚀'];
+
 
 export const INITIAL_PROJECT_GROUPS: ProjectGroup[] = [
-  { id: 'group-1', name: 'Work', color: 'bg-accent-blue', order: 0 },
-  { id: 'group-2', name: 'Personal', color: 'bg-brand-purple', order: 1 },
-  { id: 'group-3', name: 'Learning', color: 'bg-accent-green', order: 2 },
-  { id: 'group-4', name: 'Health & Fitness', color: 'bg-brand-orange', order: 3 },
-  { id: 'group-5', name: 'Home & Errands', color: 'bg-accent-yellow', order: 4 },
+  { id: 'group-1', name: 'Work', color: 'bg-accent-blue', order: 0, icon: '💼' },
+  { id: 'group-2', name: 'Personal', color: 'bg-brand-purple', order: 1, icon: '👥' },
+  { id: 'group-3', name: 'Learning', color: 'bg-accent-green', order: 2, icon: '📚' },
+  { id: 'group-4', name: 'Health & Fitness', color: 'bg-brand-orange', order: 3, icon: '❤️' },
+  { id: 'group-5', name: 'Home & Errands', color: 'bg-accent-yellow', order: 4, icon: '🏠' },
 ];
 
 export const INITIAL_PROJECTS: Project[] = [

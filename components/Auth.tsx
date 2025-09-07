@@ -13,9 +13,13 @@ const Auth: React.FC = () => {
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-        } catch (error) {
+        } catch (error: any) { // Type as any to access 'code' property
             console.error("Error during Google sign-in:", error);
-            alert("Failed to sign in. Please ensure popups are enabled and try again. Check the console for more details.");
+            if (error.code === 'auth/unauthorized-domain') {
+                alert("This domain is not authorized for sign-in. Please add 'sarted.com' to the list of authorized domains in your Firebase project's authentication settings.");
+            } else {
+                alert("Failed to sign in. Please ensure popups are enabled and try again. Check the console for more details.");
+            }
         }
     };
 
