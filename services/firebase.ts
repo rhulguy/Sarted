@@ -11,16 +11,18 @@ const firebaseConfig = {
   appId: "1:116829841158:web:4afdd2b00706541c3ba087"
 };
 
-// Initialize the Firebase app and get the instance. This is a more robust
-// pattern for hybrid v8/v9 usage as it avoids relying on the implicit "default" app.
-const app = firebase.apps.length 
-  ? firebase.app() 
-  : firebase.initializeApp(firebaseConfig);
+// Initialize using the v8 compat API.
+// This creates the default app instance that both v8 compat services (like auth)
+// and v9 modular services (like getFirestore) can automatically discover.
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
+// Get the v9 Firestore service. It automatically uses the default app initialized above.
+export const db = getFirestore();
 
-// Initialize and export services from the explicit app instance
-export const db = getFirestore(app);
-export const auth = app.auth();
+// Get the v8 Auth service. It also automatically uses the default app.
+export const auth = firebase.auth();
 
 // Set auth persistence to 'local' for better cross-origin/incognito support
 // This helps ensure the sign-in state is remembered after the Google sign-in popup.
