@@ -3,7 +3,7 @@ import { Task, BaseMindMapNode, LaidoutMindMapNode } from '../types';
 import { useProject } from '../contexts/ProjectContext';
 import { PlusIcon, ImageIcon, DownloadIcon, MindMapIcon, RadialMindMapIcon, EditIcon } from './IconComponents';
 import Spinner from './Spinner';
-import { generateImage } from '../services/geminiService';
+import { generateImageForTask } from '../services/geminiService';
 import { useDownloadImage } from '../hooks/useDownloadImage';
 import { layoutTree, layoutRadial } from '../utils/mindMapLayouts';
 
@@ -175,7 +175,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
         if (!node.task) return;
         setGeneratingImageFor(node.id);
         try {
-            const imageUrl = await generateImage(`A simple, clean icon representing: ${node.name}`);
+            const imageUrl = await generateImageForTask(node.name);
             await onUpdateTask({ ...node.task, imageUrl });
         } catch (error) {
             console.error("Failed to generate image for task:", error);

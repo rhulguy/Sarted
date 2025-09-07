@@ -119,9 +119,9 @@ export const generateWeeklySummary = async (completedTasks: Task[], completedHab
     }
 };
 
-export const generateImage = async (prompt: string): Promise<string> => {
+export const generateImageForTask = async (prompt: string): Promise<string> => {
     try {
-        const result = await callApiProxy('generateImage', { prompt });
+        const result = await callApiProxy('generateImageForTask', { prompt });
         if (result?.imageUrl) return result.imageUrl;
         throw new Error("No image URL was returned by the API.");
     } catch (error) {

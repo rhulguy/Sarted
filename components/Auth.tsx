@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-// FIX: Import firebase v8 compat library and remove modular auth imports to fix missing member errors.
-import firebase from 'firebase/compat/app';
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { GoogleIcon } from './IconComponents';
@@ -11,11 +10,9 @@ const Auth: React.FC = () => {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const handleGoogleSignIn = async () => {
-        // FIX: Use v8 compat syntax for GoogleAuthProvider.
-        const provider = new firebase.auth.GoogleAuthProvider();
+        const provider = new GoogleAuthProvider();
         try {
-            // FIX: Use v8 compat syntax for signInWithPopup.
-            await auth.signInWithPopup(provider);
+            await signInWithPopup(auth, provider);
         } catch (error) {
             console.error("Error during Google sign-in:", error);
             alert("Failed to sign in. Please ensure popups are enabled and try again. Check the console for more details.");
@@ -23,8 +20,7 @@ const Auth: React.FC = () => {
     };
 
     const handleLogout = () => {
-        // FIX: Use v8 compat syntax for signOut.
-        auth.signOut();
+        signOut(auth);
         setIsDropdownOpen(false);
     };
 
