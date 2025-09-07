@@ -25,7 +25,7 @@ import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 // import MyAccountView from './components/MyAccountView';
 import { Resource, Project, ProjectGroup, ProjectView } from './types';
 // FIX: Import EditIcon for the inlined MyAccountView component.
-import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon, SparklesIcon, UploadIcon } from './components/IconComponents';
+import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
 import { useDownloadImage } from './hooks/useDownloadImage';
@@ -586,157 +586,8 @@ const MyAccountView: React.FC = () => {
 };
 
 
-// --- Dream Board Components ---
-
-const SlideshowModal: React.FC<{
-    images: string[];
-    isOpen: boolean;
-    onClose: () => void;
-}> = ({ images, isOpen, onClose }) => {
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [speed, setSpeed] = useState(500); // ms
-
-    useEffect(() => {
-        if (!isOpen || images.length === 0) return;
-        const timer = setTimeout(() => {
-            setCurrentIndex(prev => (prev + 1) % images.length);
-        }, speed);
-        return () => clearTimeout(timer);
-    }, [isOpen, currentIndex, speed, images.length]);
-
-    if (!isOpen || images.length === 0) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center z-50 p-4" onClick={onClose}>
-            <img src={images[currentIndex]} alt="Slideshow" className="max-w-full max-h-[80vh] object-contain rounded-lg"/>
-            <div className="absolute bottom-5 w-full max-w-md p-2 bg-black/50 rounded-lg">
-                <label className="flex items-center justify-center gap-3 text-white">
-                    <span>Slow</span>
-                    <input
-                        type="range"
-                        min="100" // 0.1s
-                        max="1000" // 1s
-                        step="100"
-                        value={speed}
-                        onChange={(e) => setSpeed(Number(e.target.value))}
-                        className="w-full"
-                    />
-                    <span>Fast</span>
-                </label>
-            </div>
-            <button onClick={onClose} className="absolute top-4 right-4 text-white text-4xl">&times;</button>
-        </div>
-    );
-};
-
-const DreamBoardView: React.FC = () => {
-    const { visibleProjects, projectGroups, updateProject } = useProject();
-    const [isSlideshowOpen, setIsSlideshowOpen] = useState(false);
-    const [uploadContext, setUploadContext] = useState<{ project: Project; index: number } | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const groupMap = useMemo(() => new Map(projectGroups.map(g => [g.id, g])), [projectGroups]);
-    
-    const allImages = useMemo(() => 
-        visibleProjects.flatMap(p => p.dreamBoardImages || []).filter(Boolean),
-    [visibleProjects]);
-
-    const handleImageUploadClick = (project: Project, index: number) => {
-        setUploadContext({ project, index });
-        fileInputRef.current?.click();
-    };
-
-    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (!event.target.files || event.target.files.length === 0 || !uploadContext) {
-            return;
-        }
-        const file = event.target.files[0];
-        const reader = new FileReader();
-        reader.onload = async (loadEvent) => {
-            const imageUrl = loadEvent.target?.result as string;
-            if (imageUrl) {
-                const { project, index } = uploadContext;
-                const newImages = [...(project.dreamBoardImages || Array(4).fill(null))];
-                newImages[index] = imageUrl;
-                await updateProject(project.id, { dreamBoardImages: newImages });
-            }
-            setUploadContext(null);
-        };
-        reader.onerror = () => {
-            alert("Failed to read the image file.");
-            setUploadContext(null);
-        }
-        reader.readAsDataURL(file);
-        // Reset file input to allow uploading the same file again
-        event.target.value = '';
-    };
-
-
-    return (
-        <div className="h-full flex flex-col">
-            <header className="p-4 md:p-6 border-b border-border-color shrink-0 flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold">Dream Board</h1>
-                    <p className="text-text-secondary">Visualize your project goals.</p>
-                </div>
-                <button 
-                    onClick={() => setIsSlideshowOpen(true)}
-                    disabled={allImages.length === 0}
-                    className="px-4 py-2 bg-brand-purple text-white rounded-lg hover:opacity-90 disabled:opacity-50"
-                >
-                    Slideshow
-                </button>
-            </header>
-            <div className="flex-grow overflow-y-auto">
-                 <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept="image/png, image/jpeg, image/webp"
-                    style={{ display: 'none' }}
-                />
-                {visibleProjects.map(project => {
-                    const group = groupMap.get(project.groupId);
-                    return (
-                        <div key={project.id} className="border-b border-border-color p-4 md:p-6">
-                            <div className="flex items-center gap-2 mb-4">
-                                {group && <div className={`w-3 h-3 rounded-full ${group.color} shrink-0`}></div>}
-                                <h2 className="text-xl font-semibold">{project.name}</h2>
-                                <span className="text-sm text-text-secondary">{group?.name}</span>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {Array.from({ length: 4 }).map((_, index) => {
-                                    const image = project.dreamBoardImages?.[index];
-                                    return (
-                                        <div key={index} className="aspect-video bg-app-background rounded-lg border border-border-color flex items-center justify-center relative overflow-hidden group">
-                                            {image ? (
-                                                <>
-                                                    <img src={image} alt={`Dream board for ${project.name} #${index + 1}`} className="w-full h-full object-cover" />
-                                                    <button onClick={() => handleImageUploadClick(project, index)} className="absolute inset-0 bg-black/50 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity" title="Change image">
-                                                        <PencilIcon className="w-8 h-8"/>
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <button onClick={() => handleImageUploadClick(project, index)} className="text-text-secondary hover:text-accent-blue" title="Upload image">
-                                                    <UploadIcon className="w-8 h-8"/>
-                                                </button>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-            <SlideshowModal images={allImages} isOpen={isSlideshowOpen} onClose={() => setIsSlideshowOpen(false)} />
-        </div>
-    );
-};
-
-
 // --- App Component ---
-type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account' | 'dreamboard';
+type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account';
 
 export default function App() {
   const { projects, selectedProject, selectedProjectId, selectProject } = useProject();
@@ -814,8 +665,6 @@ export default function App() {
         return <InboxView />;
       case 'calendar':
         return <GlobalCalendar />;
-      case 'dreamboard':
-        return <DreamBoardView />;
       case 'global-mindmap':
         return <GlobalMindMapView onNewProject={() => setIsProjectModalOpen(true)} />;
       case 'global-gantt':

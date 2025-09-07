@@ -20,6 +20,7 @@ const taskSchemaProperties = {
 const subTaskLevel2 = { type: Type.OBJECT, properties: { ...taskSchemaProperties }, required: ["name", "description", "startDate", "endDate"] };
 const subTaskLevel1 = { type: Type.OBJECT, properties: { ...taskSchemaProperties, subtasks: { type: Type.ARRAY, items: subTaskLevel2 } }, required: ["name", "description", "startDate", "endDate"] };
 const projectPlanSchema = { type: Type.OBJECT, properties: { tasks: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { ...taskSchemaProperties, subtasks: { type: Type.ARRAY, items: subTaskLevel1 } }, required: ["name", "description", "startDate", "endDate"] } } }, required: ["tasks"]};
+const focusPlanSchema = { type: Type.OBJECT, properties: { priorities: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { taskId: { type: Type.STRING }, reason: { type: Type.STRING } }, required: ["taskId", "reason"] } } }, required: ["priorities"] };
 const scheduleUpdateSchema = { type: Type.OBJECT, properties: { updatedTasks: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, startDate: { type: Type.STRING }, endDate: { type: Type.STRING } }, required: ["id", "startDate", "endDate"] } } }, required: ["updatedTasks"] };
 
 
@@ -38,14 +39,17 @@ export default async function handler(request: any, response: any) {
             case 'generateProjectPlan':
                 result = await handleGenerateProjectPlan(payload);
                 break;
+            case 'generateFocusPlan':
+                result = await handleGenerateFocusPlan(payload);
+                break;
             case 'generateNewSchedule':
                 result = await handleGenerateNewSchedule(payload);
                 break;
             case 'generateWeeklySummary':
                 result = await handleGenerateWeeklySummary(payload);
                 break;
-            case 'generateImage':
-                result = await handleGenerateImage(payload);
+            case 'generateImageForTask':
+                result = await handleGenerateImageForTask(payload);
                 break;
             case 'getResourceMetadata':
                 result = await handleGetResourceMetadata(payload);
@@ -74,7 +78,21 @@ const handleGenerateProjectPlan = async (payload: any) => {
         config: { responseMimeType: "application/json", responseSchema: projectPlanSchema },
     });
     
-    return JSON.parse(geminiResponse.text?.trim() ?? '{}');
+    return JSON.parse(geminiResponse.text.trim());
+};
+
+const handleGenerateFocusPlan = async (payload: any) => {
+    const { projects, habits } = payload;
+    const today = new Date().toISOString().split('T')[0];
+    const prompt = `You are a friendly productivity coach. Analyze the user's projects and habits to identify the top 3-5 most important priorities for today, ${today}. Consider upcoming deadlines, incomplete tasks, and daily habits. Return a JSON object with the task IDs and a brief, encouraging reason for each priority. Data: ${JSON.stringify({ projects, habits })}`;
+    
+    const geminiResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: { responseMimeType: "application/json", responseSchema: focusPlanSchema },
+    });
+    
+    return JSON.parse(geminiResponse.text.trim());
 };
 
 const handleGenerateNewSchedule = async (payload: any) => {
@@ -88,7 +106,7 @@ const handleGenerateNewSchedule = async (payload: any) => {
         config: { responseMimeType: "application/json", responseSchema: scheduleUpdateSchema },
     });
 
-    return JSON.parse(geminiResponse.text?.trim() ?? '{}');
+    return JSON.parse(geminiResponse.text.trim());
 };
 
 const handleGenerateWeeklySummary = async (payload: any) => {
@@ -100,15 +118,15 @@ const handleGenerateWeeklySummary = async (payload: any) => {
         contents: prompt,
     });
     
-    return { summary: geminiResponse.text?.trim() ?? '' };
+    return { summary: geminiResponse.text.trim() };
 };
 
-const handleGenerateImage = async (payload: any) => {
+const handleGenerateImageForTask = async (payload: any) => {
     const { prompt } = payload;
     const geminiResponse = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
-        prompt: `An inspiring, photorealistic image for a dream board about: "${prompt}".`,
-        config: { numberOfImages: 1, outputMimeType: 'image/png', aspectRatio: '16:9' },
+        prompt: `A simple, clean icon representing the concept of: "${prompt}". Minimalist, on a white background.`,
+        config: { numberOfImages: 1, outputMimeType: 'image/png', aspectRatio: '1:1' },
     });
 
     if (geminiResponse.generatedImages?.[0]?.image?.imageBytes) {

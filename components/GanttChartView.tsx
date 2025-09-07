@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Task } from '../types';
 import { PlusIcon, MinusIcon, ImageIcon, DownloadIcon, ArrowLongRightIcon, ArrowLongLeftIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
+import { generateImageForTask } from '../services/geminiService';
 import Spinner from './Spinner';
 import { useDownloadImage } from '../hooks/useDownloadImage';
-import { int, dateToIndexUTC, indexToDateUTC, pixelToIndex, inclusiveWidth } from '../utils/taskUtils';
 
 interface GanttChartViewProps {
   onAddTask: (taskName: string, startDate?: string, endDate?: string) => Promise<void>;
@@ -16,11 +16,10 @@ interface GanttChartViewProps {
 interface InteractionState {
     type: 'drag' | 'resize-start' | 'resize-end';
     taskId: string;
-    pointerId: number;
-    startPointerX: number;
+    startX: number;
     originalTask: Task;
-    originalStartIndex: number;
-    originalEndIndex: number;
+    originalLeft: number;
+    originalWidth: number;
 }
 
 interface CreatingState {
@@ -70,6 +69,7 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
   const [creatingState, setCreatingState] = useState<CreatingState | null>(null);
   const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number } | null>(null);
+  const [tempTaskPositions, setTempTaskPositions] = useState<Map<string, { left: number; width: number }>>(new Map());
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState('');
 
@@ -151,6 +151,21 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
     });
     return localTaskPositions;
   }, [allTasks, chartStartDate, dayWidth]);
+  
+  useEffect(() => {
+    if (tempTaskPositions.size > 0) {
+      const newTempPositions = new Map(tempTaskPositions);
+      let changed = false;
+      for (const [taskId, tempPos] of tempTaskPositions.entries()) {
+        const currentPos = taskPositions.get(taskId);
+        if (currentPos && Math.round(currentPos.startX) === Math.round(tempPos.left) && Math.round(currentPos.endX - currentPos.startX) === Math.round(tempPos.width)) {
+          newTempPositions.delete(taskId);
+          changed = true;
+        }
+      }
+      if (changed) setTempTaskPositions(newTempPositions);
+    }
+  }, [project.tasks, taskPositions, tempTaskPositions]);
 
   const handleCreateMouseUp = useCallback(async (e: MouseEvent) => {
       if (!creatingState || !scrollContainerRef.current) return;
@@ -197,137 +212,124 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
         window.removeEventListener('mouseup', handleCreateMouseUp);
     };
   }, [creatingState, dayWidth, handleCreateMouseUp]);
+  
+  const handleMouseUp = useCallback(async (e: MouseEvent, interaction: InteractionState) => {
+    const finalOffsetPx = e.clientX - interaction.startX;
+    const dayDelta = Math.round(finalOffsetPx / dayWidth);
+    
+    if (dayDelta !== 0) {
+        const { originalTask } = interaction;
+        const originalStart = parseDate(originalTask.startDate);
+        const originalEnd = parseDate(originalTask.endDate);
+
+        if (!isNaN(originalStart.getTime()) && !isNaN(originalEnd.getTime())) {
+            let newStart = new Date(originalStart);
+            let newEnd = new Date(originalEnd);
+
+            if (interaction.type === 'drag') {
+                newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
+                const duration = dayDiff(originalStart, originalEnd);
+                newEnd = new Date(newStart);
+                newEnd.setUTCDate(newEnd.getUTCDate() + duration);
+            } else if (interaction.type === 'resize-start') {
+                newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
+            } else if (interaction.type === 'resize-end') {
+                newEnd.setUTCDate(newEnd.getUTCDate() + dayDelta);
+            }
+            
+            if (newStart <= newEnd) {
+                const draggedTaskUpdate = { ...originalTask, startDate: formatDate(newStart), endDate: formatDate(newEnd) };
+                const tasksToUpdate: Task[] = [draggedTaskUpdate];
+
+                if (interaction.type === 'drag') {
+                    const dragDelta = dayDiff(originalStart, newStart);
+                    
+                    const collectSubtasks = (tasks: Task[], delta: number) => {
+                        tasks.forEach(subtask => {
+                            const originalSubStart = parseDate(subtask.startDate);
+                            const originalSubEnd = parseDate(subtask.endDate);
+                            if (!isNaN(originalSubStart.getTime()) && !isNaN(originalSubEnd.getTime())) {
+                                const newSubStart = new Date(originalSubStart);
+                                newSubStart.setUTCDate(newSubStart.getUTCDate() + delta);
+                                const duration = dayDiff(originalSubStart, originalSubEnd);
+                                const newSubEnd = new Date(newSubStart);
+                                newSubEnd.setUTCDate(newSubEnd.getUTCDate() + duration);
+                                tasksToUpdate.push({ ...subtask, startDate: formatDate(newSubStart), endDate: formatDate(newSubEnd) });
+                            }
+                            if (subtask.subtasks) collectSubtasks(subtask.subtasks, delta);
+                        });
+                    };
+                    if (originalTask.subtasks) collectSubtasks(originalTask.subtasks, dragDelta);
+                }
+                
+                const newTempPositions = new Map<string, { left: number; width: number }>();
+                tasksToUpdate.forEach(updatedTask => {
+                    const start = parseDate(updatedTask.startDate);
+                    const end = parseDate(updatedTask.endDate);
+                    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                        const startOffset = dayDiff(chartStartDate, start);
+                        const duration = dayDiff(start, end) + 1;
+                        newTempPositions.set(updatedTask.id, { left: startOffset * dayWidth, width: Math.max(dayWidth, duration * dayWidth) });
+                    }
+                });
+                setTempTaskPositions(newTempPositions);
+                await updateMultipleTasks(project.id, tasksToUpdate);
+            }
+        }
+    }
+    setInteraction(null);
+  }, [dayWidth, updateMultipleTasks, project.id, chartStartDate]);
 
   useEffect(() => {
-    if (!interaction) return;
+    const currentInteraction = interaction;
+    if (!currentInteraction) return;
 
-    const taskBarEl = taskBarRefs.current.get(interaction.taskId);
-    if (!taskBarEl) {
-      setInteraction(null);
-      return;
-    }
-    
-    taskBarEl.setPointerCapture(interaction.pointerId);
-    document.body.style.cursor = interaction.type === 'drag' ? 'grabbing' : 'ew-resize';
-    document.body.style.userSelect = 'none';
+    const taskBarEl = taskBarRefs.current.get(currentInteraction.taskId);
 
-    const handlePointerMove = (e: PointerEvent) => {
-      if (e.pointerId !== interaction.pointerId) return;
-      e.preventDefault();
+    const handleMouseMove = (e: MouseEvent) => {
+        if (!taskBarEl) return;
+        const currentOffsetPx = e.clientX - currentInteraction.startX;
+        const dayDelta = Math.round(currentOffsetPx / dayWidth);
+        const snappedOffset = dayDelta * dayWidth;
+        const { originalLeft, originalWidth } = currentInteraction;
 
-      const deltaX = e.clientX - interaction.startPointerX;
-      let newLeftPx: number, newWidthPx: number;
-      
-      const originalStartPx = interaction.originalStartIndex * dayWidth;
-
-      if (interaction.type === 'drag') {
-        const dayDelta = Math.round(deltaX / dayWidth);
-        const newStartIndex = interaction.originalStartIndex + dayDelta;
-        
-        newLeftPx = newStartIndex * dayWidth;
-        newWidthPx = inclusiveWidth(interaction.originalStartIndex, interaction.originalEndIndex, dayWidth);
-
-      } else if (interaction.type === 'resize-start') {
-        const dayDelta = Math.round(deltaX / dayWidth);
-        let newStartIndex = interaction.originalStartIndex + dayDelta;
-        
-        if (newStartIndex > interaction.originalEndIndex) {
-            newStartIndex = interaction.originalEndIndex;
+        if (currentInteraction.type === 'drag') {
+            taskBarEl.style.left = `${originalLeft + snappedOffset}px`;
+        } else if (currentInteraction.type === 'resize-start') {
+            const newLeft = originalLeft + snappedOffset;
+            const newWidth = originalWidth - snappedOffset;
+            if (newWidth >= dayWidth) {
+                taskBarEl.style.left = `${newLeft}px`;
+                taskBarEl.style.width = `${newWidth}px`;
+            }
+        } else if (currentInteraction.type === 'resize-end') {
+            const newWidth = originalWidth + snappedOffset;
+            if (newWidth >= dayWidth) {
+                taskBarEl.style.width = `${newWidth}px`;
+            }
         }
-        newLeftPx = newStartIndex * dayWidth;
-        newWidthPx = inclusiveWidth(newStartIndex, interaction.originalEndIndex, dayWidth);
-
-      } else { // resize-end
-        const timelineRect = scrollContainerRef.current?.querySelector('.timeline-body')?.getBoundingClientRect();
-        if (!timelineRect) return;
-
-        const pointerXInTimeline = e.clientX - timelineRect.left;
-        const newEndIndex = pixelToIndex(pointerXInTimeline, dayWidth);
-        const finalEndIndex = Math.max(interaction.originalStartIndex, newEndIndex);
-
-        newLeftPx = originalStartPx;
-        newWidthPx = inclusiveWidth(interaction.originalStartIndex, finalEndIndex, dayWidth);
-      }
-      
-      taskBarEl.style.left = `${int(newLeftPx)}px`;
-      taskBarEl.style.width = `${int(newWidthPx)}px`;
+    };
+    
+    const onMouseUp = (e: MouseEvent) => {
+        handleMouseUp(e, currentInteraction);
     };
 
-    const handlePointerUp = async (e: PointerEvent) => {
-      if (e.pointerId !== interaction.pointerId) return;
-      
-      const { originalTask, startPointerX, type, originalStartIndex, originalEndIndex } = interaction;
-      let finalStartIndex = originalStartIndex;
-      let finalEndIndex = originalEndIndex;
-      const deltaX = e.clientX - startPointerX;
-      
-      if (type === 'drag') {
-        const dayDelta = Math.round(deltaX / dayWidth);
-        finalStartIndex += dayDelta;
-        finalEndIndex += dayDelta;
-      } else if (type === 'resize-start') {
-        const dayDelta = Math.round(deltaX / dayWidth);
-        finalStartIndex += dayDelta;
-        if (finalStartIndex > finalEndIndex) finalStartIndex = finalEndIndex;
-      } else { // resize-end
-        const timelineRect = scrollContainerRef.current?.querySelector('.timeline-body')?.getBoundingClientRect();
-        if (!timelineRect) { setInteraction(null); return; }
-        const pointerXInTimeline = e.clientX - timelineRect.left;
-        const newEndIndex = pixelToIndex(pointerXInTimeline, dayWidth);
-        finalEndIndex = Math.max(originalStartIndex, newEndIndex);
-      }
-
-      if (finalStartIndex !== originalStartIndex || finalEndIndex !== originalEndIndex) {
-          const newStartDate = indexToDateUTC(chartStartDate, finalStartIndex);
-          const newEndDate = indexToDateUTC(chartStartDate, finalEndIndex);
-          
-          const draggedTaskUpdate: Task = { ...originalTask, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) };
-          const tasksToUpdate: Task[] = [draggedTaskUpdate];
-  
-          if (type === 'drag' && originalTask.subtasks?.length) {
-              const dragDayDelta = finalStartIndex - originalStartIndex;
-              const collectSubtasks = (tasks: Task[], delta: number) => {
-                  tasks.forEach(subtask => {
-                      const oStart = parseDate(subtask.startDate), oEnd = parseDate(subtask.endDate);
-                      if (!isNaN(oStart.getTime()) && !isNaN(oEnd.getTime())) {
-                          const nStart = new Date(oStart); nStart.setUTCDate(nStart.getUTCDate() + delta);
-                          const duration = dayDiff(oStart, oEnd);
-                          const nEnd = new Date(nStart); nEnd.setUTCDate(nEnd.getUTCDate() + duration);
-                          tasksToUpdate.push({ ...subtask, startDate: formatDate(nStart), endDate: formatDate(nEnd) });
-                      }
-                      if (subtask.subtasks) collectSubtasks(subtask.subtasks, delta);
-                  });
-              };
-              collectSubtasks(originalTask.subtasks, dragDayDelta);
-          }
-          await updateMultipleTasks(project.id, tasksToUpdate);
-      }
-      
-      if (taskBarEl.hasPointerCapture(interaction.pointerId)) taskBarEl.releasePointerCapture(interaction.pointerId);
-      setInteraction(null);
-    };
-
-    const handlePointerCancel = (e: PointerEvent) => {
-        if (e.pointerId !== interaction.pointerId) return;
-        const originalStartPx = interaction.originalStartIndex * dayWidth;
-        const originalWidthPx = inclusiveWidth(interaction.originalStartIndex, interaction.originalEndIndex, dayWidth);
-        taskBarEl.style.left = `${int(originalStartPx)}px`;
-        taskBarEl.style.width = `${int(originalWidthPx)}px`;
-        setInteraction(null);
-    }
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerCancel);
+    document.body.style.cursor = currentInteraction.type === 'drag' ? 'grabbing' : 'ew-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', onMouseUp, { once: true });
     
     return () => {
-      document.body.style.cursor = 'default';
-      document.body.style.userSelect = 'auto';
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerCancel);
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = 'auto';
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        if (taskBarEl) {
+            taskBarEl.style.left = `${currentInteraction.originalLeft}px`;
+            taskBarEl.style.width = `${currentInteraction.originalWidth}px`;
+        }
     };
-  }, [interaction, dayWidth, chartStartDate, project.id, updateMultipleTasks]);
+  }, [interaction, handleMouseUp, dayWidth]);
 
   const handleZoom = (direction: 'in' | 'out') => setDayWidth(prev => Math.max(10, Math.min(100, direction === 'in' ? prev * 1.5 : prev / 1.5)));
 
@@ -443,20 +445,21 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
                                 );
                             }
                             const isInteracting = interaction?.taskId === task.id;
-                            const left = taskPos.startX;
-                            const width = taskPos.endX - taskPos.startX;
+                            const tempPos = tempTaskPositions.get(task.id);
+                            const left = tempPos ? tempPos.left : taskPos.startX;
+                            const width = tempPos ? tempPos.width : (taskPos.endX - taskPos.startX);
                             const endDate = parseDate(task.endDate);
                             const isOverdue = endDate && endDate < today && !task.completed;
 
                             return (
-                                <div key={task.id} ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }} data-task-id={task.id} className="absolute group touch-none" 
-                                style={{ top: `${index * rowHeight + 6}px`, left: `${int(left)}px`, width: `${int(width)}px`, transition: isInteracting ? 'none' : 'left 0.2s, width 0.2s', zIndex: isInteracting ? 10 : 1 }}>
+                                <div key={task.id} ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }} data-task-id={task.id} className="absolute group" 
+                                style={{ top: `${index * rowHeight + 6}px`, left: `${left}px`, width: `${width}px`, transition: isInteracting ? 'none' : 'left 0.2s, width 0.2s', zIndex: isInteracting ? 10 : 1 }}>
                                     <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 rounded-md flex items-center justify-between px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : 'bg-accent-blue'}`}
-                                        onPointerDown={(e) => { e.preventDefault(); const taskStart = parseDate(task.startDate); const taskEnd = parseDate(task.endDate); if (isNaN(taskStart.getTime()) || isNaN(taskEnd.getTime())) return; setInteraction({ type: 'drag', taskId: task.id, pointerId: e.pointerId, startPointerX: e.clientX, originalTask: task, originalStartIndex: dateToIndexUTC(chartStartDate, taskStart), originalEndIndex: dateToIndexUTC(chartStartDate, taskEnd) }); }}>
+                                        onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }}>
                                         <span className="truncate pointer-events-none">{task.name}</span>
                                     </div>
-                                    <div onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const taskStart = parseDate(task.startDate); const taskEnd = parseDate(task.endDate); if (isNaN(taskStart.getTime()) || isNaN(taskEnd.getTime())) return; setInteraction({ type: 'resize-start', taskId: task.id, pointerId: e.pointerId, startPointerX: e.clientX, originalTask: task, originalStartIndex: dateToIndexUTC(chartStartDate, taskStart), originalEndIndex: dateToIndexUTC(chartStartDate, taskEnd) }); }} className="absolute -left-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                    <div onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const taskStart = parseDate(task.startDate); const taskEnd = parseDate(task.endDate); if (isNaN(taskStart.getTime()) || isNaN(taskEnd.getTime())) return; setInteraction({ type: 'resize-end', taskId: task.id, pointerId: e.pointerId, startPointerX: e.clientX, originalTask: task, originalStartIndex: dateToIndexUTC(chartStartDate, taskStart), originalEndIndex: dateToIndexUTC(chartStartDate, taskEnd) }); }} className="absolute -right-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                    <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -left-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                    <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -right-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
                                 </div>
                             )
                         })}

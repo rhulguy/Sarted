@@ -125,28 +125,3 @@ export const findAndRemoveTask = (tasks: Task[], taskId: string): { foundTask: T
     const newTasks = filterAndFind(tasks);
     return { foundTask, newTasks };
 };
-
-// --- Gantt Chart Snapping Helpers ---
-
-export const int = (v: number): number => Math.round(v);
-
-export function dateToIndexUTC(chartStartDate: Date, date: Date): number {
-  const a = Date.UTC(chartStartDate.getUTCFullYear(), chartStartDate.getUTCMonth(), chartStartDate.getUTCDate());
-  const b = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-  return Math.floor((b - a) / 86400000); // 1000 * 60 * 60 * 24
-}
-
-export function indexToDateUTC(chartStartDate: Date, idx: number): Date {
-  const d = new Date(chartStartDate);
-  d.setUTCDate(d.getUTCDate() + idx);
-  d.setUTCHours(0,0,0,0);
-  return d;
-}
-
-export function pixelToIndex(px: number, dayWidth: number): number {
-    return Math.max(0, Math.floor(px / dayWidth));
-}
-
-export function inclusiveWidth(startIdx: number, endIdx: number, dayWidth: number): number {
-  return Math.max(dayWidth, (endIdx - startIdx + 1) * dayWidth);
-}

@@ -84,35 +84,11 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
             if (!data) {
                 return { id: d.id, name: 'Invalid Project Data', groupId: '', tasks: [], isArchived: true } as Project;
             }
-            // A robust recursive function to ensure task data integrity from Firestore.
             const traverseAndFixTasks = (tasks: any[]): Task[] => {
                 if (!Array.isArray(tasks)) return [];
-                return tasks.map(t => {
-                    if (typeof t !== 'object' || t === null) return null;
-
-                    const subtasks = t.subtasks ? traverseAndFixTasks(t.subtasks) : [];
-                    const newTask: Task = {
-                        id: t.id || `task-${Date.now()}-${Math.random()}`,
-                        name: t.name || 'Untitled Task',
-                        description: t.description || '',
-                        completed: t.completed ?? false,
-                        subtasks: subtasks,
-                    };
-                    // Add optional fields only if they exist on the source object to preserve them.
-                    if (t.completionDate) newTask.completionDate = t.completionDate;
-                    if (t.startDate) newTask.startDate = t.startDate;
-                    if (t.endDate) newTask.endDate = t.endDate;
-                    if (t.dependencies) newTask.dependencies = t.dependencies;
-                    if (t.imageUrl) newTask.imageUrl = t.imageUrl;
-                    if (t.resourceIds) newTask.resourceIds = t.resourceIds;
-                    if (t.startTime) newTask.startTime = t.startTime;
-                    if (t.duration) newTask.duration = t.duration;
-                    
-                    return newTask;
-                }).filter((t): t is Task => t !== null);
-            };
-
-            return { id: d.id, name: data.name || 'Untitled Project', groupId: data.groupId || '', tasks: traverseAndFixTasks(data.tasks), isArchived: data.isArchived ?? false, icon: data.icon, dreamBoardImages: data.dreamBoardImages } as Project;
+                return tasks.map(t => ({ ...t, id: t.id || `task-${Math.random()}`, name: t.name || 'Untitled Task', completed: t.completed ?? false, description: t.description || '', subtasks: traverseAndFixTasks(t.subtasks) }));
+            }
+            return { id: d.id, name: data.name || 'Untitled Project', groupId: data.groupId || '', tasks: traverseAndFixTasks(data.tasks), isArchived: data.isArchived ?? false, icon: data.icon } as Project;
         });
         setProjects(userProjects);
       }, (error) => console.error("Error fetching projects:", error));
