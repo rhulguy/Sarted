@@ -74,7 +74,7 @@ const handleGenerateProjectPlan = async (payload: any) => {
         config: { responseMimeType: "application/json", responseSchema: projectPlanSchema },
     });
     
-    return JSON.parse(geminiResponse.text.trim());
+    return JSON.parse(geminiResponse.text?.trim() ?? '{}');
 };
 
 const handleGenerateNewSchedule = async (payload: any) => {
@@ -88,7 +88,7 @@ const handleGenerateNewSchedule = async (payload: any) => {
         config: { responseMimeType: "application/json", responseSchema: scheduleUpdateSchema },
     });
 
-    return JSON.parse(geminiResponse.text.trim());
+    return JSON.parse(geminiResponse.text?.trim() ?? '{}');
 };
 
 const handleGenerateWeeklySummary = async (payload: any) => {
@@ -100,7 +100,7 @@ const handleGenerateWeeklySummary = async (payload: any) => {
         contents: prompt,
     });
     
-    return { summary: geminiResponse.text.trim() };
+    return { summary: geminiResponse.text?.trim() ?? '' };
 };
 
 const handleGenerateImage = async (payload: any) => {

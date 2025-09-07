@@ -152,19 +152,23 @@ const AddTaskFromProjectModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose,
     const { visibleProjects } = useProject();
     const [selectedTaskInfo, setSelectedTaskInfo] = useState<{ task: Task; projectId: string } | null>(null);
     const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+    const [searchTerm, setSearchTerm] = useState('');
+
 
     const unscheduledTasksByProject = useMemo(() => {
         const getUnscheduled = (tasks: Task[]): Task[] => {
             const results: Task[] = [];
-            tasks.forEach(task => {
-                if (!task.startDate) {
-                    results.push(task);
+            const findUnscheduled = (currentTasks: Task[]) => {
+                for (const task of currentTasks) {
+                    if (!task.startDate) {
+                        results.push(task);
+                    }
+                    if (task.subtasks) {
+                        findUnscheduled(task.subtasks);
+                    }
                 }
-                // Recursively find in subtasks as well
-                if (task.subtasks) {
-                    results.push(...getUnscheduled(task.subtasks));
-                }
-            });
+            };
+            findUnscheduled(tasks);
             return results;
         };
 
@@ -175,6 +179,17 @@ const AddTaskFromProjectModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose,
             }))
             .filter(p => p.unscheduledTasks.length > 0);
     }, [visibleProjects]);
+
+    const filteredUnscheduled = useMemo(() => {
+        if (!searchTerm.trim()) return unscheduledTasksByProject;
+        const lowercasedFilter = searchTerm.toLowerCase();
+        return unscheduledTasksByProject
+            .map(p => ({
+                ...p,
+                unscheduledTasks: p.unscheduledTasks.filter(t => t.name.toLowerCase().includes(lowercasedFilter))
+            }))
+            .filter(p => p.unscheduledTasks.length > 0);
+    }, [unscheduledTasksByProject, searchTerm]);
 
     const handleSchedule = () => {
         if (selectedTaskInfo && selectedDate) {
@@ -187,6 +202,7 @@ const AddTaskFromProjectModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose,
         if (!isOpen) {
             setSelectedTaskInfo(null);
             setSelectedDate(formatDate(new Date()));
+            setSearchTerm('');
         }
     }, [isOpen]);
 
@@ -197,6 +213,15 @@ const AddTaskFromProjectModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose,
             <div className="bg-card-background rounded-2xl shadow-xl w-full max-w-lg flex flex-col h-[70vh]" onClick={e => e.stopPropagation()}>
                 <header className="p-4 border-b border-border-color shrink-0">
                     <h2 className="text-xl font-bold">{selectedTaskInfo ? 'Schedule Task' : 'Add Task to Calendar'}</h2>
+                    {!selectedTaskInfo && (
+                        <input
+                            type="search"
+                            placeholder="Search for a task..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full mt-2 bg-app-background border border-border-color rounded p-2 text-sm"
+                        />
+                    )}
                 </header>
                 <div className="flex-grow p-4 overflow-y-auto">
                     {selectedTaskInfo ? (
@@ -211,21 +236,27 @@ const AddTaskFromProjectModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose,
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {unscheduledTasksByProject.map(project => (
-                                <details key={project.id} open>
-                                    <summary className="font-semibold cursor-pointer">{project.name}</summary>
-                                    <ul className="pl-4 mt-2 space-y-1">
-                                        {project.unscheduledTasks.map(task => (
-                                            <li key={task.id} className="flex items-center justify-between p-1 hover:bg-app-background rounded">
-                                                <span>{task.name}</span>
-                                                <button onClick={() => setSelectedTaskInfo({ task, projectId: project.id })} className="p-1 text-accent-blue">
-                                                    <PlusIcon className="w-5 h-5"/>
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </details>
-                            ))}
+                            {unscheduledTasksByProject.length === 0 ? (
+                                <p className="text-text-secondary text-center py-8">No unscheduled tasks available to add.</p>
+                            ) : filteredUnscheduled.length === 0 ? (
+                                <p className="text-text-secondary text-center py-8">No tasks match your search.</p>
+                            ) : (
+                                filteredUnscheduled.map(project => (
+                                    <details key={project.id} open>
+                                        <summary className="font-semibold cursor-pointer">{project.name}</summary>
+                                        <ul className="pl-4 mt-2 space-y-1">
+                                            {project.unscheduledTasks.map(task => (
+                                                <li key={task.id} className="flex items-center justify-between p-1 hover:bg-app-background rounded">
+                                                    <span>{task.name}</span>
+                                                    <button onClick={() => setSelectedTaskInfo({ task, projectId: project.id })} className="p-1 text-accent-blue" title="Schedule this task">
+                                                        <PlusIcon className="w-5 h-5"/>
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </details>
+                                ))
+                            )}
                         </div>
                     )}
                 </div>
@@ -261,8 +292,6 @@ const GlobalCalendar: React.FC = () => {
             const flatten = (tasks: Task[], projectId: string) => {
                 tasks.forEach(task => {
                     const startDateObj = parseDate(task.startDate);
-                    // Even if a task has a start date, we still want to be able to interact with it.
-                    // Let's adjust logic to consider tasks that can be scheduled.
                     let endDateObj = parseDate(task.endDate);
                     if (!isNaN(startDateObj.getTime()) && isNaN(endDateObj.getTime())) {
                         endDateObj = startDateObj;
@@ -377,7 +406,7 @@ const GlobalCalendar: React.FC = () => {
             <div className="flex-grow overflow-auto">
                 {displayMode === 'month' && <MonthGrid tasks={filteredTasks} setFocusedTask={setFocusedTask} calendarGrid={calendarGrid} />}
                 {displayMode === 'week' && <WeekGrid tasks={filteredTasks} setFocusedTask={setFocusedTask} weekDates={weekDates} />}
-                {displayMode === 'day' && <DayPlanner tasks={filteredTasks} setFocusedTask={setFocusedTask} selectedDate={currentDate} />}
+                {displayMode === 'day' && <DayPlanner tasks={filteredTasks} setFocusedTask={setFocusedTask} selectedDate={currentDate} projects={visibleProjects} projectGroups={projectGroups} />}
             </div>
 
             <AddTaskFromProjectModal isOpen={isAddTaskModalOpen} onClose={() => setIsAddTaskModalOpen(false)} onScheduleTask={handleScheduleTask} />
@@ -489,8 +518,32 @@ const MonthGrid: React.FC<{tasks: GlobalCalendarTask[], setFocusedTask: (t: Glob
 };
 
 const WeekGrid: React.FC<{tasks: GlobalCalendarTask[], setFocusedTask: (t: GlobalCalendarTask) => void, weekDates: Date[]}> = ({tasks, setFocusedTask, weekDates}) => {
-    const { projects, projectGroups, updateTask } = useProject();
+    const { visibleProjects, projects, projectGroups, updateTask, addTask } = useProject();
     const [draggedTaskId, setDraggedTaskId] = useState<string|null>(null);
+    const [addingTaskTo, setAddingTaskTo] = useState<Date | null>(null);
+    const [newTaskName, setNewTaskName] = useState("");
+    const [newProjectId, setNewProjectId] = useState<string>("");
+    const newTaskInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!newProjectId && visibleProjects.length > 0) {
+            setNewProjectId(visibleProjects[0].id);
+        }
+    }, [visibleProjects, newProjectId]);
+
+    useEffect(() => { if(addingTaskTo && newTaskInputRef.current) newTaskInputRef.current.focus(); }, [addingTaskTo]);
+
+    const handleAddTask = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const taskName = newTaskName.trim();
+        if (addingTaskTo && taskName && newProjectId) {
+            const dateStr = formatDate(addingTaskTo);
+            const newTaskData: Omit<Task, 'id'> = { name: taskName, description: '', completed: false, subtasks: [], startDate: dateStr, endDate: dateStr };
+            await addTask(newProjectId, { ...newTaskData, id: `task-${Date.now()}` });
+        }
+        setAddingTaskTo(null);
+        setNewTaskName("");
+    };
 
     const handleDrop = async (e: React.DragEvent, dropDate: Date) => {
         e.preventDefault(); const taskId = e.dataTransfer.getData('text/plain'); const task = tasks.find(t => t.id === taskId);
@@ -508,13 +561,35 @@ const WeekGrid: React.FC<{tasks: GlobalCalendarTask[], setFocusedTask: (t: Globa
             {weekDates.map((day, index) => {
                 const tasksForDay = tasks.filter(task => day >= task.startDateObj && day <= task.endDateObj);
                 const isToday = areDatesEqual(day, normalizeDate(new Date()));
+                 const isAddingHere = addingTaskTo && areDatesEqual(addingTaskTo, day);
+
                 return (
                     <div key={index} className={`relative border-r border-border-color p-2 flex flex-col group`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, day)}>
-                        <div className="flex justify-between items-center mb-2"><span className={`text-sm font-semibold ${isToday ? 'bg-accent-blue text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>{day.getUTCDate()}</span><span className="text-sm font-semibold text-text-secondary">{day.toLocaleDateString('default', { weekday: 'short', timeZone: 'UTC' })}</span></div>
+                        <div className="flex justify-between items-center mb-2">
+                            <span className={`text-sm font-semibold ${isToday ? 'bg-accent-blue text-white rounded-full flex items-center justify-center w-6 h-6' : 'text-text-primary'}`}>{day.getUTCDate()}</span>
+                             <div className="flex items-center">
+                                <span className="text-sm font-semibold text-text-secondary mr-2">{day.toLocaleDateString('default', { weekday: 'short', timeZone: 'UTC' })}</span>
+                                {!isAddingHere && (
+                                    <button onClick={() => setAddingTaskTo(day)} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue hover:text-blue-400" aria-label={`Add task for ${day.toISOString().slice(0,10)}`}>
+                                        <PlusIcon className="w-4 h-4"/>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                         <div className="flex-grow space-y-1.5 overflow-y-auto mt-1">{tasksForDay.map(task => {
                             const project = projects.find(p => p.id === task.projectId); const group = project ? projectGroups.find(g => g.id === project.groupId) : undefined;
                             return (<div key={task.id} title={task.name} draggable onDragStart={(e) => {e.dataTransfer.setData('text/plain', task.id); setDraggedTaskId(task.id)}} onClick={() => setFocusedTask(task)} className={`text-white text-xs rounded px-1.5 py-1 cursor-pointer flex items-center ${task.completed ? 'opacity-50 bg-gray-600' : ''} ${draggedTaskId === task.id ? 'opacity-30' : ''} ${group?.color || 'bg-gray-500'}`}><div className="flex items-center min-w-0"><span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.name}</span></div></div>);
-                        })}</div>
+                        })}
+                        {isAddingHere && (
+                            <form onSubmit={handleAddTask} className="bg-card-background p-1.5 rounded-lg space-y-2 relative z-10 border border-accent-blue shadow-lg mt-1">
+                                <input ref={newTaskInputRef} type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} onBlur={() => { if(!newTaskName.trim()) setAddingTaskTo(null);}} placeholder="New task..." className="w-full bg-app-background border border-border-color rounded p-1 text-xs focus:outline-none" />
+                                <select value={newProjectId} onChange={e => setNewProjectId(e.target.value)} className="w-full bg-app-background border border-border-color rounded p-1 text-xs focus:outline-none">
+                                    {visibleProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                                <button type="submit" className="w-full text-center text-xs p-1 bg-accent-blue text-white rounded">Add</button>
+                            </form>
+                        )}
+                        </div>
                     </div>
                 );
             })}
@@ -522,14 +597,30 @@ const WeekGrid: React.FC<{tasks: GlobalCalendarTask[], setFocusedTask: (t: Globa
     );
 };
 
-const DayPlanner: React.FC<{tasks: GlobalCalendarTask[], setFocusedTask: (t: GlobalCalendarTask) => void, selectedDate: Date}> = ({tasks, setFocusedTask, selectedDate}) => {
-    const { updateTask } = useProject();
+const DayPlanner: React.FC<{tasks: GlobalCalendarTask[], setFocusedTask: (t: GlobalCalendarTask) => void, selectedDate: Date, projects: Project[], projectGroups: ProjectGroup[]}> = ({tasks, setFocusedTask, selectedDate, projects, projectGroups}) => {
+    const { updateTask, addTask } = useProject();
     const timelineRef = useRef<HTMLDivElement>(null);
+    const [isAddingTask, setIsAddingTask] = useState(false);
+    const [newDayTaskName, setNewDayTaskName] = useState('');
+    const [newDayProjectId, setNewDayProjectId] = useState(projects.length > 0 ? projects[0].id : '');
 
     const tasksForDay = useMemo(() => tasks.filter(task => areDatesEqual(task.startDateObj, selectedDate)), [tasks, selectedDate]);
     const scheduledTasks = useMemo(() => tasksForDay.filter(t => t.startTime), [tasksForDay]);
     const unscheduledTasks = useMemo(() => tasksForDay.filter(t => !t.startTime), [tasksForDay]);
     
+    const handleAddDayTask = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newDayTaskName.trim() && newDayProjectId) {
+            const dateStr = formatDate(selectedDate);
+            await addTask(newDayProjectId, {
+                id: `task-${Date.now()}`, name: newDayTaskName.trim(), description: '',
+                completed: false, subtasks: [], startDate: dateStr, endDate: dateStr
+            });
+            setNewDayTaskName('');
+            setIsAddingTask(false);
+        }
+    };
+
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault(); const taskId = e.dataTransfer.getData('taskId'); const task = tasks.find(t => t.id === taskId); if (!task || !timelineRef.current) return;
         const rect = timelineRef.current.getBoundingClientRect(); const dropY = e.clientY - rect.top; const totalMinutes = (dropY / rect.height) * (23 - 6) * 60;
@@ -547,13 +638,29 @@ const DayPlanner: React.FC<{tasks: GlobalCalendarTask[], setFocusedTask: (t: Glo
             <div className="md:col-span-3 flex h-full">
                 <div className="w-16 shrink-0 text-right pr-2 text-xs text-text-secondary py-2">{Array.from({length: 18}).map((_, i) => <div key={i} className="h-16 flex items-start justify-end">{i+6}:00</div>)}</div>
                 <div ref={timelineRef} onDragOver={(e) => e.preventDefault()} onDrop={handleDrop} className="flex-grow relative bg-card-background border-l border-border-color">{Array.from({length: 34}).map((_, i) => <div key={i} className="h-8 border-b border-border-color"></div>)}
-                {scheduledTasks.map(task => <ScheduledTaskItem key={task.id} task={task} onUpdate={handleTaskUpdateOnTimeline} onClick={() => setFocusedTask(task)} />)}
+                {scheduledTasks.map(task => <ScheduledTaskItem key={task.id} task={task} onUpdate={handleTaskUpdateOnTimeline} onClick={() => setFocusedTask(task)} projects={projects} projectGroups={projectGroups} />)}
                 </div>
             </div>
             <div className="md:col-span-1 p-4 space-y-4 border-l border-border-color overflow-y-auto">
-                <div><h3 className="font-semibold mb-2">Unscheduled</h3>
-                    <div className="space-y-2">{unscheduledTasks.map(task => <UnscheduledTaskItem key={task.id} task={task} onClick={() => setFocusedTask(task)} />)}
-                        {unscheduledTasks.length === 0 && <p className="text-xs text-text-secondary">No unscheduled tasks for today.</p>}
+                <div>
+                    <h3 className="font-semibold mb-2 flex justify-between items-center">
+                        Unscheduled
+                        {!isAddingTask && <button onClick={() => setIsAddingTask(true)} className="p-1 text-accent-blue" title="Add new task"><PlusIcon className="w-4 h-4" /></button>}
+                    </h3>
+                     {isAddingTask && (
+                        <form onSubmit={handleAddDayTask} className="p-2 bg-app-background rounded-lg mb-2 space-y-2">
+                            <input type="text" value={newDayTaskName} onChange={e => setNewDayTaskName(e.target.value)} placeholder="New task name" className="w-full bg-card-background border border-border-color rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-accent-blue"/>
+                            <select value={newDayProjectId} onChange={e => setNewDayProjectId(e.target.value)} className="w-full bg-card-background border border-border-color rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-accent-blue">
+                                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            <div className="flex justify-end gap-2">
+                                <button type="button" onClick={() => setIsAddingTask(false)} className="px-2 py-1 text-xs rounded bg-border-color">Cancel</button>
+                                <button type="submit" className="px-2 py-1 text-xs rounded bg-accent-blue text-white">Add</button>
+                            </div>
+                        </form>
+                    )}
+                    <div className="space-y-2">{unscheduledTasks.map(task => <UnscheduledTaskItem key={task.id} task={task} onClick={() => setFocusedTask(task)} projects={projects} projectGroups={projectGroups}/>)}
+                        {unscheduledTasks.length === 0 && !isAddingTask && <p className="text-xs text-text-secondary">No unscheduled tasks for today.</p>}
                     </div>
                 </div>
             </div>
@@ -623,20 +730,29 @@ const AchievementsExportModal: React.FC<{isOpen: boolean; onClose: () => void; s
     );
 };
 
-const UnscheduledTaskItem: React.FC<{task: GlobalCalendarTask, onClick: () => void, reason?: string}> = ({ task, onClick, reason }) => {
+const UnscheduledTaskItem: React.FC<{task: GlobalCalendarTask, onClick: () => void, reason?: string, projects: Project[], projectGroups: ProjectGroup[]}> = ({ task, onClick, reason, projects, projectGroups }) => {
     const handleDragStart = (e: React.DragEvent) => {
         e.dataTransfer.setData('taskId', task.id);
         e.dataTransfer.effectAllowed = 'move';
     };
+    const project = useMemo(() => projects.find(p => p.id === task.projectId), [projects, task.projectId]);
+    const group = useMemo(() => project ? projectGroups.find(g => g.id === project.groupId) : null, [project, projectGroups]);
+    
     return (
         <div draggable onDragStart={handleDragStart} onClick={onClick} className={`p-2 rounded-lg cursor-pointer bg-card-background border border-border-color shadow-sm ${reason ? 'border-accent-blue/50' : ''}`}>
             <p className="text-sm font-medium">{task.name}</p>
+            {project && (
+                 <div className="flex items-center gap-1.5 text-xs text-text-secondary mt-1 truncate">
+                    {group && <div className={`w-2 h-2 rounded-full ${group.color} shrink-0`}></div>}
+                    <span className="truncate">{project.name}</span>
+                </div>
+            )}
             {reason && <p className="text-xs text-text-secondary italic mt-1">"{reason}"</p>}
         </div>
     );
 };
 
-const ScheduledTaskItem: React.FC<{task: GlobalCalendarTask, onUpdate: (id: string, updates: { startTime?: string, duration?: number }) => void, onClick: () => void}> = ({ task, onUpdate, onClick }) => {
+const ScheduledTaskItem: React.FC<{task: GlobalCalendarTask, onUpdate: (id: string, updates: { startTime?: string, duration?: number }) => void, onClick: () => void, projects: Project[], projectGroups: ProjectGroup[]}> = ({ task, onUpdate, onClick, projects, projectGroups }) => {
     const [isResizing, setIsResizing] = useState(false);
     const elementRef = useRef<HTMLDivElement>(null);
     const resizeStartRef = useRef({ y: 0, height: 0 });
@@ -653,6 +769,10 @@ const ScheduledTaskItem: React.FC<{task: GlobalCalendarTask, onUpdate: (id: stri
         return [topPercent, heightPercent];
     }, [task.startTime, task.duration]);
     
+    const project = useMemo(() => projects.find(p => p.id === task.projectId), [projects, task.projectId]);
+    const group = useMemo(() => project ? projectGroups.find(g => g.id === project.groupId) : null, [project, projectGroups]);
+    const bgColorClass = group?.color || 'bg-accent-blue';
+
     const handleResizeMouseDown = (e: React.MouseEvent) => {
         e.preventDefault(); e.stopPropagation();
         setIsResizing(true);
@@ -684,14 +804,21 @@ const ScheduledTaskItem: React.FC<{task: GlobalCalendarTask, onUpdate: (id: stri
 
     return (
         <div ref={elementRef} style={{ top: `${top}%`, height: `${height}%` }} className="absolute w-full px-1">
-            <div onClick={onClick} className={`h-full bg-accent-blue text-white rounded-lg p-1 text-xs overflow-hidden relative flex flex-col cursor-pointer ${task.completed ? 'opacity-60' : ''}`}>
-                <strong className="truncate">{task.name}</strong>
-                <p className="truncate">{task.startTime} - {(() => { 
+            <div onClick={onClick} className={`h-full ${bgColorClass} text-white rounded-lg p-2 text-xs overflow-hidden relative flex flex-col justify-center cursor-pointer ${task.completed ? 'opacity-60' : ''}`}>
+                <strong className="truncate font-semibold">{task.name}</strong>
+                <p className="truncate text-white/80">{task.startTime} - {(() => { 
+                    if (!task.startTime) return '';
                     const [h,m] = task.startTime.split(':').map(Number); 
                     const d = task.duration||60; 
                     const endM = (h*60+m+d); 
                     return `${String(Math.floor(endM/60) % 24).padStart(2,'0')}:${String(endM%60).padStart(2,'0')}`
                 })()}</p>
+                 {project && group && (
+                    <div className="flex items-center gap-1.5 text-xs text-white/80 mt-1 truncate">
+                        <div className={`w-2 h-2 rounded-full ${group.color} shrink-0 border border-white/20`}></div>
+                        <span className="truncate">{project.name}</span>
+                    </div>
+                )}
                 <div onMouseDown={handleResizeMouseDown} className="absolute bottom-0 left-0 w-full h-2 cursor-ns-resize" />
             </div>
         </div>
