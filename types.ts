@@ -10,6 +10,8 @@ export interface Task {
   dependencies?: string[];
   imageUrl?: string;
   resourceIds?: string[];
+  startTime?: string; // HH:mm
+  duration?: number; // in minutes
 }
 
 export interface Project {
@@ -19,6 +21,7 @@ export interface Project {
   tasks: Task[];
   isArchived: boolean;
   icon?: string;
+  dreamBoardImages?: string[];
 }
 
 export interface ProjectGroup {

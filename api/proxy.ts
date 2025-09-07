@@ -48,8 +48,8 @@ export default async function handler(request: any, response: any) {
             case 'generateWeeklySummary':
                 result = await handleGenerateWeeklySummary(payload);
                 break;
-            case 'generateImageForTask':
-                result = await handleGenerateImageForTask(payload);
+            case 'generateImage':
+                result = await handleGenerateImage(payload);
                 break;
             case 'getResourceMetadata':
                 result = await handleGetResourceMetadata(payload);
@@ -121,12 +121,12 @@ const handleGenerateWeeklySummary = async (payload: any) => {
     return { summary: geminiResponse.text.trim() };
 };
 
-const handleGenerateImageForTask = async (payload: any) => {
+const handleGenerateImage = async (payload: any) => {
     const { prompt } = payload;
     const geminiResponse = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
-        prompt: `A simple, clean icon representing the concept of: "${prompt}". Minimalist, on a white background.`,
-        config: { numberOfImages: 1, outputMimeType: 'image/png', aspectRatio: '1:1' },
+        prompt: `A photorealistic, inspiring image for a dream board, representing the concept of: "${prompt}". High resolution, vibrant colors.`,
+        config: { numberOfImages: 1, outputMimeType: 'image/png', aspectRatio: '16:9' },
     });
 
     if (geminiResponse.generatedImages?.[0]?.image?.imageBytes) {

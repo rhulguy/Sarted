@@ -25,10 +25,11 @@ import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 // import MyAccountView from './components/MyAccountView';
 import { Resource, Project, ProjectGroup, ProjectView } from './types';
 // FIX: Import EditIcon for the inlined MyAccountView component.
-import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon } from './components/IconComponents';
+import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon, SparklesIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
 import { useDownloadImage } from './hooks/useDownloadImage';
+import { generateImage } from './services/geminiService';
 
 
 // --- NEW RESOURCE COMPONENTS (Inlined due to file system constraints) ---
@@ -586,8 +587,147 @@ const MyAccountView: React.FC = () => {
 };
 
 
+// --- Dream Board Components ---
+
+const SlideshowModal: React.FC<{
+    images: string[];
+    isOpen: boolean;
+    onClose: () => void;
+}> = ({ images, isOpen, onClose }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [speed, setSpeed] = useState(500); // ms
+
+    useEffect(() => {
+        if (!isOpen || images.length === 0) return;
+        const timer = setTimeout(() => {
+            setCurrentIndex(prev => (prev + 1) % images.length);
+        }, speed);
+        return () => clearTimeout(timer);
+    }, [isOpen, currentIndex, speed, images.length]);
+
+    if (!isOpen || images.length === 0) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center z-50 p-4" onClick={onClose}>
+            <img src={images[currentIndex]} alt="Slideshow" className="max-w-full max-h-[80vh] object-contain rounded-lg"/>
+            <div className="absolute bottom-5 w-full max-w-md p-2 bg-black/50 rounded-lg">
+                <label className="flex items-center justify-center gap-3 text-white">
+                    <span>Slow</span>
+                    <input
+                        type="range"
+                        min="100" // 0.1s
+                        max="1000" // 1s
+                        step="100"
+                        value={speed}
+                        onChange={(e) => setSpeed(Number(e.target.value))}
+                        className="w-full"
+                    />
+                    <span>Fast</span>
+                </label>
+            </div>
+            <button onClick={onClose} className="absolute top-4 right-4 text-white text-4xl">&times;</button>
+        </div>
+    );
+};
+
+const DreamBoardView: React.FC = () => {
+    const { visibleProjects, projectGroups, updateProject } = useProject();
+    const [prompts, setPrompts] = useState<{ [key: string]: string }>({});
+    const [loadingImage, setLoadingImage] = useState<{ projectId: string; index: number } | null>(null);
+    const [isSlideshowOpen, setIsSlideshowOpen] = useState(false);
+    
+    const groupMap = useMemo(() => new Map(projectGroups.map(g => [g.id, g])), [projectGroups]);
+    
+    const allImages = useMemo(() => 
+        visibleProjects.flatMap(p => p.dreamBoardImages || []).filter(Boolean),
+    [visibleProjects]);
+
+    const handlePromptChange = (projectId: string, value: string) => {
+        setPrompts(prev => ({ ...prev, [projectId]: value }));
+    };
+
+    const handleGenerateImage = async (project: Project, index: number) => {
+        const prompt = prompts[project.id] || project.name;
+        if (!prompt) return;
+
+        setLoadingImage({ projectId: project.id, index });
+        try {
+            const imageUrl = await generateImage(prompt);
+            const newImages = [...(project.dreamBoardImages || Array(4).fill(null))];
+            newImages[index] = imageUrl;
+            await updateProject(project.id, { dreamBoardImages: newImages });
+        } catch (error) {
+            console.error(error);
+            alert("Failed to generate image. Please check the console.");
+        } finally {
+            setLoadingImage(null);
+        }
+    };
+
+    return (
+        <div className="h-full flex flex-col">
+            <header className="p-4 md:p-6 border-b border-border-color shrink-0 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold">Dream Board</h1>
+                    <p className="text-text-secondary">Visualize your project goals.</p>
+                </div>
+                <button 
+                    onClick={() => setIsSlideshowOpen(true)}
+                    disabled={allImages.length === 0}
+                    className="px-4 py-2 bg-brand-purple text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+                >
+                    Slideshow
+                </button>
+            </header>
+            <div className="flex-grow overflow-y-auto">
+                {visibleProjects.map(project => {
+                    const group = groupMap.get(project.groupId);
+                    return (
+                        <div key={project.id} className="border-b border-border-color p-4 md:p-6">
+                            <div className="flex items-center gap-2 mb-3">
+                                {group && <div className={`w-3 h-3 rounded-full ${group.color} shrink-0`}></div>}
+                                <h2 className="text-xl font-semibold">{project.name}</h2>
+                                <span className="text-sm text-text-secondary">{group?.name}</span>
+                            </div>
+                            <form onSubmit={(e) => { e.preventDefault(); handleGenerateImage(project, 0); }} className="flex gap-2 mb-4">
+                                <input 
+                                    type="text"
+                                    placeholder="Enter prompt to generate image..."
+                                    value={prompts[project.id] || ''}
+                                    onChange={(e) => handlePromptChange(project.id, e.target.value)}
+                                    className="flex-grow bg-app-background border border-border-color rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                                />
+                                <button type="submit" className="px-3 py-2 bg-accent-blue text-white rounded-lg text-sm flex items-center gap-1"><SparklesIcon className="w-4 h-4" /> Generate</button>
+                            </form>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {Array.from({ length: 4 }).map((_, index) => {
+                                    const image = project.dreamBoardImages?.[index];
+                                    const isLoading = loadingImage?.projectId === project.id && loadingImage?.index === index;
+                                    return (
+                                        <div key={index} className="aspect-video bg-app-background rounded-lg border border-border-color flex items-center justify-center relative overflow-hidden">
+                                            {isLoading ? <Spinner /> : image ? (
+                                                <img src={image} alt={`Dream board for ${project.name} #${index + 1}`} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <button onClick={() => handleGenerateImage(project, index)} className="text-text-secondary hover:text-accent-blue">
+                                                    <PlusIcon className="w-8 h-8"/>
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            <SlideshowModal images={allImages} isOpen={isSlideshowOpen} onClose={() => setIsSlideshowOpen(false)} />
+        </div>
+    );
+};
+
+
 // --- App Component ---
-type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account';
+type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account' | 'dreamboard';
 
 export default function App() {
   const { projects, selectedProject, selectedProjectId, selectProject } = useProject();
@@ -665,6 +805,8 @@ export default function App() {
         return <InboxView />;
       case 'calendar':
         return <GlobalCalendar />;
+      case 'dreamboard':
+        return <DreamBoardView />;
       case 'global-mindmap':
         return <GlobalMindMapView onNewProject={() => setIsProjectModalOpen(true)} />;
       case 'global-gantt':

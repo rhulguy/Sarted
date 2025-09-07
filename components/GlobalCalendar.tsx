@@ -5,7 +5,8 @@ import TaskItem from './TaskItem';
 import Spinner from './Spinner';
 import { useProject } from '../contexts/ProjectContext';
 import { useHabit } from '../contexts/HabitContext';
-import { generateImageForTask, generateFocusPlan, AIFocusPlan } from '../services/geminiService';
+// FIX: Removed unused import for generateImageForTask
+import { generateFocusPlan, AIFocusPlan } from '../services/geminiService';
 import { useDownloadImage } from '../hooks/useDownloadImage';
 
 // --- Type Definitions ---
@@ -71,9 +72,20 @@ const GlobalCalendar: React.FC = () => {
             const flatten = (tasks: Task[], projectId: string) => {
                 tasks.forEach(task => {
                     const startDateObj = parseDate(task.startDate);
-                    const endDateObj = parseDate(task.endDate);
-                    flattened.push({ ...task, projectId, startDateObj, endDateObj });
-                    if (task.subtasks) flatten(task.subtasks, projectId);
+                    
+                    // Only include tasks that have a valid start date.
+                    if (!isNaN(startDateObj.getTime())) {
+                        let endDateObj = parseDate(task.endDate);
+                        // If end date is invalid, default it to the start date.
+                        if (isNaN(endDateObj.getTime())) {
+                            endDateObj = startDateObj;
+                        }
+                        flattened.push({ ...task, projectId, startDateObj, endDateObj });
+                    }
+
+                    if (task.subtasks) {
+                        flatten(task.subtasks, projectId);
+                    }
                 });
             };
             flatten(project.tasks, project.id);

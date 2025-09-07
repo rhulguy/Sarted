@@ -1,12 +1,8 @@
-// FIX: Switched to Firebase v8 compat imports and usage to resolve module export errors.
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import firebase from 'firebase/compat/app';
+import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { Project, Habit, Resource, InboxTask, ProjectGroup } from '../types';
-
-// FIX: Define FirebaseUser type from the compat import, as the modular import was failing.
-type FirebaseUser = firebase.User;
 
 export interface User {
   id: string;
@@ -35,8 +31,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // FIX: Use auth.onAuthStateChanged (v8 compat) instead of onAuthStateChanged(auth, ...) (v9 modular).
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: FirebaseUser | null) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
         const userDoc = await getDoc(userRef);
@@ -110,8 +105,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ]);
 
           await deleteDoc(doc(db, `users/${user.id}/profile/main`));
-          // FIX: Use auth.signOut() (v8 compat) instead of the modular signOut function.
-          await auth.signOut();
+          await signOut(auth);
           setUser(null);
 
       } catch (error) {

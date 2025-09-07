@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Task, ProjectGroup, BaseMindMapNode, LaidoutMindMapNode } from '../types';
 import { useProject } from '../contexts/ProjectContext';
 import { PlusIcon, ImageIcon, EditIcon } from './IconComponents';
-import { generateImageForTask } from '../services/geminiService';
+import { generateImage } from '../services/geminiService';
 import Spinner from './Spinner';
 import { layoutGlobalTree } from '../utils/mindMapLayouts';
 
@@ -132,7 +132,8 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         if (!node.task || !node.projectId) return;
         setGeneratingImageFor(node.id);
         try {
-            const imageUrl = await generateImageForTask(node.name);
+            // FIX: Use generateImage with a descriptive prompt
+            const imageUrl = await generateImage(`A simple, clean icon representing: ${node.name}`);
             await updateTask(node.projectId, { ...node.task, imageUrl });
         } catch (e) { console.error(e); } finally { setGeneratingImageFor(null); }
     };

@@ -67,6 +67,8 @@ const GlobalGanttView: React.FC = () => {
   const [tempTaskPositions, setTempTaskPositions] = useState<Map<string, { left: number; width: number }>>(new Map());
   const [addingTaskToProject, setAddingTaskToProject] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState('');
+  const [newTaskStartDate, setNewTaskStartDate] = useState('');
+  const [newTaskEndDate, setNewTaskEndDate] = useState('');
   const [collapsedProjects, setCollapsedProjects] = useState(new Set<string>());
   const [collapsedGroups, setCollapsedGroups] = useState(new Set<string>());
   
@@ -247,11 +249,14 @@ const GlobalGanttView: React.FC = () => {
     if (newTaskName.trim() && addingTaskToProject) {
       const newTask: Task = {
         id: `task-${Date.now()}`, name: newTaskName.trim(), description: '', completed: false, subtasks: [],
+        startDate: newTaskStartDate || undefined, endDate: newTaskEndDate || undefined,
       };
       await addTask(addingTaskToProject, newTask);
       setNewTaskName('');
+      setNewTaskStartDate('');
+      setNewTaskEndDate('');
     }
-  }, [newTaskName, addingTaskToProject, addTask]);
+  }, [newTaskName, addingTaskToProject, addTask, newTaskStartDate, newTaskEndDate]);
 
   const handleMouseUp = useCallback(async (e: MouseEvent, currentInteraction: InteractionState) => {
     const { originalTask, startX, type, taskId } = currentInteraction;
@@ -465,20 +470,20 @@ const GlobalGanttView: React.FC = () => {
   if (visibleProjects.length === 0) return <div className="text-center text-text-secondary p-8">No projects to display.</div>;
   
   return (
-    <div ref={downloadRef} className="h-full flex flex-col bg-secondary rounded-lg">
+    <div ref={downloadRef} className="h-full flex flex-col bg-card-background rounded-lg">
         <div className="p-2 border-b border-border-color flex items-center justify-between">
             <div className="flex items-center space-x-1">
-                <button onClick={() => handleZoom('out')} className="p-1 rounded text-text-secondary hover:bg-highlight"><MinusIcon className="w-5 h-5" /></button>
-                <button onClick={() => handleZoom('in')} className="p-1 rounded text-text-secondary hover:bg-highlight"><PlusIcon className="w-5 h-5" /></button>
+                <button onClick={() => handleZoom('out')} className="p-1 rounded text-text-secondary hover:bg-app-background"><MinusIcon className="w-5 h-5" /></button>
+                <button onClick={() => handleZoom('in')} className="p-1 rounded text-text-secondary hover:bg-app-background"><PlusIcon className="w-5 h-5" /></button>
             </div>
-             <button onClick={() => downloadImage(`global-gantt-chart.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-highlight text-text-secondary rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
+             <button onClick={() => downloadImage(`global-gantt-chart.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color transition-colors disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
         </div>
 
         <div ref={scrollContainerRef} className="flex-grow overflow-auto">
             <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
                 {/* Sticky Header */}
-                <div className="sticky top-0 z-20 h-16 bg-secondary flex">
-                    <div className="w-72 shrink-0 sticky left-0 z-10 bg-primary border-r border-b border-border-color flex items-center p-2">
+                <div className="sticky top-0 z-20 h-16 bg-card-background flex">
+                    <div className="w-72 shrink-0 sticky left-0 z-10 bg-card-background border-r border-b border-border-color flex items-center p-2">
                         <h3 className="font-semibold">Task Name</h3>
                     </div>
                     <div className="flex-grow relative border-b border-border-color">
@@ -509,16 +514,19 @@ const GlobalGanttView: React.FC = () => {
 
                             return (
                                 <div key={item.type + '-' + item.data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
-                                    <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-primary">
+                                    <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-card-background">
                                         {item.data.id.startsWith('new-task-form') ? (
-                                            <form onSubmit={handleNewTaskSubmit} className="w-full" style={{ paddingLeft: '1.5rem' }}>
+                                            <form onSubmit={handleNewTaskSubmit} className="w-full flex items-center gap-1" style={{ paddingLeft: '1.5rem' }}>
                                                 <input
                                                     type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
                                                     onBlur={() => { if (newTaskName.trim() === '') setAddingTaskToProject(null); }}
                                                     onKeyDown={e => { if (e.key === 'Escape') { setNewTaskName(''); setAddingTaskToProject(null); } }}
                                                     placeholder="New task..." autoFocus
-                                                    className="w-full bg-secondary border border-accent rounded p-1 text-sm"
+                                                    className="w-full bg-app-background border border-accent-blue rounded p-1 text-sm"
                                                 />
+                                                <input type="date" value={newTaskStartDate} onChange={e => setNewTaskStartDate(e.target.value)} className="bg-app-background border rounded p-1 text-xs" />
+                                                <input type="date" value={newTaskEndDate} onChange={e => setNewTaskEndDate(e.target.value)} className="bg-app-background border rounded p-1 text-xs" />
+
                                             </form>
                                         ) : (
                                             <div className="flex items-center group w-full" style={{ paddingLeft: '1.5rem' }}>
@@ -541,7 +549,7 @@ const GlobalGanttView: React.FC = () => {
                                             if (!taskPos) {
                                                 return (
                                                     <div className="absolute inset-0 group/creator cursor-cell" onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: item, startX: e.clientX - timelineRect.left }); }}>
-                                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent/10 transition-colors flex items-center justify-center">
+                                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent-blue/10 transition-colors flex items-center justify-center">
                                                             <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
                                                         </div>
                                                     </div>
@@ -574,47 +582,53 @@ const GlobalGanttView: React.FC = () => {
                                     </div>
                                 </div>
                             );
-                        } else {
-                            const isGroup = item.type === 'group';
-                            const isProject = item.type === 'project';
-                            const data = item.data;
-
-                             return (
-                                <div key={item.type + '-' + data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
-                                    <div className={`w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color 
-                                        ${isGroup ? 'bg-secondary font-bold text-text-secondary' : ''}
-                                        ${isProject ? 'bg-highlight font-bold' : ''}
-                                    `}>
-                                        {isGroup && (
-                                            <div className="flex items-center w-full">
-                                                <button onClick={() => toggleGroupCollapse(data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
-                                                    <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedGroups.has(data.id) ? 'rotate-90' : ''}`} />
+                        } else if (item.type === 'group') {
+                            const group = item.data;
+                            return (
+                                <div key={item.type + '-' + group.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                    <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-sidebar-background font-bold text-text-primary">
+                                        <div className="flex items-center w-full">
+                                            <button onClick={() => toggleGroupCollapse(group.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
+                                                <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedGroups.has(group.id) ? 'rotate-90' : ''}`} />
+                                            </button>
+                                            <div className={`w-3 h-3 rounded-full ${group.color} mr-2`}></div>
+                                            <span className="truncate">{group.name}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex-grow h-full relative border-b border-border-color"><div className="w-full h-px bg-border-color absolute top-1/2"></div></div>
+                                </div>
+                            );
+                        } else if (item.type === 'project') {
+                            const project = item.data;
+                            const group = projectGroups.find(g => g.id === project.groupId);
+                            return (
+                                <div key={item.type + '-' + project.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                    <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-card-background font-semibold">
+                                        <div className="flex items-center justify-between w-full group" style={{ paddingLeft: '1rem' }}>
+                                            <div className="flex items-center truncate">
+                                                <button onClick={() => toggleProjectCollapse(project.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
+                                                    <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedProjects.has(project.id) ? 'rotate-90' : ''}`} />
                                                 </button>
-                                                <FolderIcon className="w-5 h-5 mr-2" />
-                                                <span className="truncate">{data.name}</span>
-                                            </div>
-                                        )}
-                                        {isProject && (
-                                            <div className="flex items-center justify-between w-full group" style={{ paddingLeft: '1rem' }}>
-                                                <div className="flex items-center truncate">
-                                                    <button onClick={() => toggleProjectCollapse(data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
-                                                        <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedProjects.has(data.id) ? 'rotate-90' : ''}`} />
-                                                    </button>
-                                                    <span className="truncate">{data.name}</span>
+                                                <div className="flex flex-col -my-1">
+                                                    <span className="truncate leading-tight">{project.name}</span>
+                                                    {group && (
+                                                        <span className="text-xs text-text-secondary font-normal flex items-center gap-1.5 leading-tight">
+                                                            <div className={`w-2 h-2 rounded-full ${group.color} shrink-0`}></div>
+                                                            {group.name}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(data.id); }} className="opacity-0 group-hover:opacity-100 text-accent hover:text-blue-400 p-1"><PlusIcon className="w-5 h-5"/></button>
                                             </div>
-                                        )}
+                                            <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(project.id); }} className="opacity-0 group-hover:opacity-100 text-accent-blue hover:text-blue-400 p-1"><PlusIcon className="w-5 h-5"/></button>
+                                        </div>
                                     </div>
-                                    <div className="flex-grow h-full relative border-b border-border-color">
-                                        <div className="w-full h-px bg-border-color absolute top-1/2"></div>
-                                    </div>
+                                    <div className="flex-grow h-full relative border-b border-border-color"><div className="w-full h-px bg-border-color absolute top-1/2"></div></div>
                                 </div>
                             );
                         }
                     })}
                     {creatingState && tempCreatingBar && (
-                        <div className="absolute h-7 top-1/2 -translate-y-1/2 pointer-events-none bg-accent/50 rounded-md" style={{ ...tempCreatingBar, top: `${itemsToRender.findIndex(i => i.data.id === creatingState.task.data.id) * 40 + 6}px` }}></div>
+                        <div className="absolute h-7 top-1/2 -translate-y-1/2 pointer-events-none bg-accent-blue/50 rounded-md" style={{ ...tempCreatingBar, top: `${itemsToRender.findIndex(i => i.data.id === creatingState.task.data.id) * 40 + 6}px` }}></div>
                     )}
                 </div>
             </div>
