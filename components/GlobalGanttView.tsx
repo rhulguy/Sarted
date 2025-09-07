@@ -395,21 +395,19 @@ const GlobalGanttView: React.FC = () => {
     const handleMouseMove = (e: MouseEvent) => {
         if (!taskBarEl) return;
         const currentOffsetPx = e.clientX - currentInteraction.startX;
-        const dayDelta = Math.round(currentOffsetPx / dayWidth);
-        const snappedOffset = dayDelta * dayWidth;
         const { originalLeft, originalWidth } = currentInteraction;
 
         if (currentInteraction.type === 'drag') {
-            taskBarEl.style.left = `${originalLeft + snappedOffset}px`;
+            taskBarEl.style.left = `${originalLeft + currentOffsetPx}px`;
         } else if (currentInteraction.type === 'resize-start') {
-            const newLeft = originalLeft + snappedOffset;
-            const newWidth = originalWidth - snappedOffset;
+            const newLeft = originalLeft + currentOffsetPx;
+            const newWidth = originalWidth - currentOffsetPx;
             if (newWidth >= dayWidth) {
                 taskBarEl.style.left = `${newLeft}px`;
                 taskBarEl.style.width = `${newWidth}px`;
             }
         } else if (currentInteraction.type === 'resize-end') {
-            const newWidth = originalWidth + snappedOffset;
+            const newWidth = originalWidth + currentOffsetPx;
             if (newWidth >= dayWidth) {
                 taskBarEl.style.width = `${newWidth}px`;
             }
@@ -430,10 +428,6 @@ const GlobalGanttView: React.FC = () => {
         document.body.style.userSelect = 'auto';
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
-        if (taskBarEl) {
-            taskBarEl.style.left = `${currentInteraction.originalLeft}px`;
-            taskBarEl.style.width = `${currentInteraction.originalWidth}px`;
-        }
     };
   }, [interaction, handleMouseUp, dayWidth]);
   
