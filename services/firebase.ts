@@ -1,6 +1,11 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  CACHE_SIZE_UNLIMITED 
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
@@ -8,6 +13,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyAXsEQK4GEtFCKZfsEVFihlQedivNWGzbc",
   authDomain: "swapmoo-e2b68.firebaseapp.com",
   projectId: "swapmoo-e2b68",
+  storageBucket: "swapmoo-e2b68.appspot.com", // CRITICAL FIX: This was missing
   messagingSenderId: "116829841158",
   appId: "1:116829841158:web:4afdd2b00706541c3ba087"
 };
@@ -17,5 +23,15 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase services using the v9 modular API.
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// PERFORMANCE FIX: Robust Firestore initialization to prevent connection timeouts
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+    tabManager: persistentMultipleTabManager()
+  }),
+  experimentalAutoDetectLongPolling: true,
+  useFetchStreams: false,
+});
+
 export const storage = getStorage(app);

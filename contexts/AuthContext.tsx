@@ -48,7 +48,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               picture: firebaseUser.photoURL,
             });
           } else {
-            // This is a new user, create their profile and seed initial data
+            // DATA LOSS FIX: This is a new user, create their profile and seed all initial data here, only once.
             const newUser: User = {
               id: firebaseUser.uid,
               name: firebaseUser.displayName || 'New User',
