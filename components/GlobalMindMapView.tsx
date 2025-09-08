@@ -115,11 +115,14 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         const taskName = newNodeName.trim();
         if (taskName) {
             isSubmittingRef.current = true;
-            const newTask: Omit<Task, 'id'> = { name: taskName, description: '', completed: false, subtasks: [], startDate: newNodeStartDate || undefined, endDate: newNodeEndDate || undefined };
+            const taskData: any = { name: taskName, description: '', completed: false, subtasks: [] };
+            if (newNodeStartDate) taskData.startDate = newNodeStartDate;
+            if (newNodeEndDate) taskData.endDate = newNodeEndDate;
+            
             if (addingToNode.isProject && addingToNode.id !== 'global-root') {
-                await addTask(addingToNode.id, { ...newTask, id: `task-${Date.now()}` });
+                await addTask(addingToNode.id, { ...taskData, id: `task-${Date.now()}` });
             } else if (addingToNode.projectId) {
-                await addSubtask(addingToNode.projectId, addingToNode.id, { ...newTask, id: `task-${Date.now()}` });
+                await addSubtask(addingToNode.projectId, addingToNode.id, { ...taskData, id: `task-${Date.now()}` });
             }
         }
         setAddingToNode(null);

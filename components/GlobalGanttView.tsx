@@ -247,11 +247,13 @@ const GlobalGanttView: React.FC = () => {
   const handleNewTaskSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (newTaskName.trim() && addingTaskToProject) {
-      const newTask: Task = {
+      const taskData: any = {
         id: `task-${Date.now()}`, name: newTaskName.trim(), description: '', completed: false, subtasks: [],
-        startDate: newTaskStartDate || undefined, endDate: newTaskEndDate || undefined,
       };
-      await addTask(addingTaskToProject, newTask);
+      if (newTaskStartDate) taskData.startDate = newTaskStartDate;
+      if (newTaskEndDate) taskData.endDate = newTaskEndDate;
+
+      await addTask(addingTaskToProject, taskData as Task);
       setNewTaskName('');
       setNewTaskStartDate('');
       setNewTaskEndDate('');

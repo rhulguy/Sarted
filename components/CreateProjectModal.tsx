@@ -52,15 +52,18 @@ const IconPicker: React.FC<{ selectedIcon: string; onSelect: (icon: string) => v
 
 // Helper to recursively add IDs and default properties to tasks from AI
 const processTasks = (tasks: AIGeneratedTask[]): Task[] => {
-  return tasks.map((task, index) => ({
-    id: `task-${Date.now()}-${index}`,
-    name: task.name || 'Untitled Task',
-    description: task.description || '',
-    startDate: task.startDate,
-    endDate: task.endDate,
-    completed: false,
-    subtasks: task.subtasks ? processTasks(task.subtasks) : [],
-  }));
+  return tasks.map((task, index) => {
+    const taskData: any = {
+      id: `task-${Date.now()}-${index}`,
+      name: task.name || 'Untitled Task',
+      description: task.description || '',
+      completed: false,
+      subtasks: task.subtasks ? processTasks(task.subtasks) : [],
+    };
+    if (task.startDate) taskData.startDate = task.startDate;
+    if (task.endDate) taskData.endDate = task.endDate;
+    return taskData as Task;
+  });
 };
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose }) => {
