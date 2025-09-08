@@ -1,4 +1,8 @@
-import { initializeApp } from "firebase/app";
+// FIX: Use compat library for initialization to support older Firebase versions while maintaining v9 modular API for services.
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/firestore';
+import 'firebase/compat/storage';
 import { getAuth } from "firebase/auth";
 import { 
   initializeFirestore, 
@@ -19,7 +23,8 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// FIX: Use compat version of initializeApp.
+const app = firebase.initializeApp(firebaseConfig);
 
 // Initialize Firebase services using the v9 modular API.
 export const auth = getAuth(app);
