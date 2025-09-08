@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Task, ProjectGroup, BaseMindMapNode, LaidoutMindMapNode } from '../types';
 import { useProject } from '../contexts/ProjectContext';
-import { PlusIcon, ImageIcon, EditIcon } from './IconComponents';
+import { PlusIcon, ImageIcon, EditIcon, DownloadIcon } from './IconComponents';
 import { generateImageForTask } from '../services/geminiService';
 import Spinner from './Spinner';
 import { layoutGlobalTree } from '../utils/mindMapLayouts';
+import { useDownloadImage } from '../hooks/useDownloadImage';
 
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 70;
@@ -22,6 +23,7 @@ interface EditableLaidoutMindMapNode extends LaidoutMindMapNode {
 
 const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) => {
     const { visibleProjects, projectGroups, addTask, addSubtask, updateTask } = useProject();
+    const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
     const svgRef = useRef<SVGSVGElement>(null);
     const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 1000, h: 800 });
     const [isPanning, setIsPanning] = useState(false);
@@ -196,11 +198,25 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
     };
 
     return (
-        <div className="w-full h-full relative bg-app-background rounded-xl border border-border-color">
-             <header className="absolute top-0 left-0 p-4 z-10">
-                <h1 className="text-2xl font-bold text-text-primary">Global Mind Map</h1>
-                <p className="text-sm text-text-secondary">A unified view of all your projects.</p>
-                <button onClick={onNewProject} className="mt-2 flex items-center space-x-2 px-3 py-1.5 bg-accent-blue text-white rounded-lg hover:opacity-90"><PlusIcon className="w-4 h-4" /><span>Add Project</span></button>
+        <div ref={downloadRef} className="w-full h-full relative bg-app-background rounded-xl border border-border-color">
+            <header className="absolute top-0 left-0 p-4 z-10">
+                <div className="flex items-center gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-text-primary">Global Mind Map</h1>
+                        <p className="text-sm text-text-secondary">A unified view of all your projects.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={onNewProject} className="flex items-center space-x-2 px-3 py-1.5 bg-accent-blue text-white rounded-lg hover:opacity-90"><PlusIcon className="w-4 h-4" /><span>Add Project</span></button>
+                        <button 
+                            onClick={() => downloadImage(`global-mind-map.png`)} 
+                            disabled={isDownloading} 
+                            className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-card-background text-text-secondary rounded-lg border border-border-color hover:bg-app-background transition-colors disabled:opacity-50"
+                          >
+                            <DownloadIcon className="w-4 h-4" />
+                            <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
+                        </button>
+                    </div>
+                </div>
             </header>
             <svg ref={svgRef} className="w-full h-full cursor-grab" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onWheel={handleWheel}>
                 <g>

@@ -64,16 +64,16 @@ const GlobalGanttView: React.FC = () => {
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
   const [creatingState, setCreatingState] = useState<CreatingState | null>(null);
   const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number } | null>(null);
-  const [tempTaskPositions, setTempTaskPositions] = useState<Map<string, { left: number; width: number }>>(new Map());
   const [addingTaskToProject, setAddingTaskToProject] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskStartDate, setNewTaskStartDate] = useState('');
   const [newTaskEndDate, setNewTaskEndDate] = useState('');
   const [collapsedProjects, setCollapsedProjects] = useState(new Set<string>());
   const [collapsedGroups, setCollapsedGroups] = useState(new Set<string>());
+  const [tempTaskBar, setTempTaskBar] = useState<{ id: string, left: number, width: number } | null>(null);
+
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const taskBarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const { allTasksWithMeta, minDate, maxDate } = useMemo(() => {
     let min: Date | null = null;
@@ -211,21 +211,6 @@ const GlobalGanttView: React.FC = () => {
     return localTaskPositions;
   }, [itemsToRender, chartStartDate, dayWidth]);
 
-  useEffect(() => {
-    if (tempTaskPositions.size > 0) {
-        const newTempPositions = new Map(tempTaskPositions);
-        let changed = false;
-        for (const [taskId, tempPos] of tempTaskPositions.entries()) {
-            const currentPos = taskPositions.get(taskId);
-            if (currentPos && Math.round(currentPos.startX) === Math.round(tempPos.left) && Math.round(currentPos.endX - currentPos.startX) === Math.round(tempPos.width)) {
-                newTempPositions.delete(taskId);
-                changed = true;
-            }
-        }
-        if (changed) setTempTaskPositions(newTempPositions);
-    }
-  }, [visibleProjects, taskPositions, tempTaskPositions]);
-
   const toggleProjectCollapse = useCallback((projectId: string) => {
     setCollapsedProjects(prev => {
         const newSet = new Set(prev);
@@ -261,18 +246,19 @@ const GlobalGanttView: React.FC = () => {
     }
   }, [newTaskName, addingTaskToProject, addTask, newTaskStartDate, newTaskEndDate]);
 
-  const handleMouseUp = useCallback(async (e: MouseEvent, currentInteraction: InteractionState) => {
+  const handleMouseUp = useCallback(async (e: MouseEvent) => {
+    const currentInteraction = interaction;
+    setInteraction(null);
+    setTempTaskBar(null);
+    if (!currentInteraction) return;
+
     const { originalTask, startX, type, taskId } = currentInteraction;
     const taskInfo = allTasksWithMeta.find(t => t.id === taskId);
-    if (!taskInfo) {
-      setInteraction(null);
-      return;
-    }
+    if (!taskInfo) return;
 
     const finalOffsetPx = e.clientX - startX;
     const dayDelta = Math.round(finalOffsetPx / dayWidth);
     
-    setInteraction(null);
     if (dayDelta === 0) return;
 
     const originalStart = parseDate(originalTask.startDate);
@@ -320,21 +306,9 @@ const GlobalGanttView: React.FC = () => {
             collectSubtasks(originalTask.subtasks, dragDayDelta);
         }
         
-        const newTempPositions = new Map<string, { left: number; width: number }>();
-        tasksToUpdate.forEach(updatedTask => {
-            const start = parseDate(updatedTask.startDate);
-            const end = parseDate(updatedTask.endDate);
-            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-                const startOffset = dayDiff(chartStartDate, start);
-                const duration = dayDiff(start, end) + 1;
-                newTempPositions.set(updatedTask.id, { left: startOffset * dayWidth, width: Math.max(dayWidth, duration * dayWidth) });
-            }
-        });
-        setTempTaskPositions(prev => new Map([...Array.from(prev.entries()), ...Array.from(newTempPositions.entries())]));
-        
         await updateMultipleTasks(taskInfo.projectId, tasksToUpdate);
     }
-  }, [dayWidth, updateMultipleTasks, allTasksWithMeta, chartStartDate]);
+  }, [dayWidth, updateMultipleTasks, allTasksWithMeta, chartStartDate, interaction]);
   
   const handleCreateMouseUp = useCallback(async (e: MouseEvent) => {
       if (!creatingState || !scrollContainerRef.current) return;
@@ -350,8 +324,8 @@ const GlobalGanttView: React.FC = () => {
 
       const endX = e.clientX - timelineRect.left;
       
-      const startDayIndex = Math.floor(Math.min(startX, endX) / dayWidth);
-      const endDayIndex = Math.floor(Math.max(startX, endX) / dayWidth);
+      const startDayIndex = Math.round(Math.min(startX, endX) / dayWidth);
+      const endDayIndex = Math.round(Math.max(startX, endX) / dayWidth);
 
       const newStartDate = new Date(chartStartDate);
       newStartDate.setUTCDate(newStartDate.getUTCDate() + startDayIndex);
@@ -375,7 +349,7 @@ const GlobalGanttView: React.FC = () => {
       if (!timelineRect) return;
 
       const currentX = e.clientX - timelineRect.left;
-      const width = Math.max(dayWidth / 2, Math.abs(currentX - creatingState.startX));
+      const width = Math.abs(currentX - creatingState.startX);
       const left = Math.min(currentX, creatingState.startX);
       setTempCreatingBar({ left, width });
     };
@@ -392,33 +366,27 @@ const GlobalGanttView: React.FC = () => {
     const currentInteraction = interaction;
     if (!currentInteraction) return;
 
-    const taskBarEl = taskBarRefs.current.get(currentInteraction.taskId);
-
     const handleMouseMove = (e: MouseEvent) => {
-        if (!taskBarEl) return;
         const currentOffsetPx = e.clientX - currentInteraction.startX;
         const { originalLeft, originalWidth } = currentInteraction;
+        let newLeft = originalLeft;
+        let newWidth = originalWidth;
 
         if (currentInteraction.type === 'drag') {
-            taskBarEl.style.left = `${originalLeft + currentOffsetPx}px`;
+            newLeft = originalLeft + currentOffsetPx;
         } else if (currentInteraction.type === 'resize-start') {
-            const newLeft = originalLeft + currentOffsetPx;
-            const newWidth = originalWidth - currentOffsetPx;
-            if (newWidth >= dayWidth) {
-                taskBarEl.style.left = `${newLeft}px`;
-                taskBarEl.style.width = `${newWidth}px`;
-            }
+            newLeft = originalLeft + currentOffsetPx;
+            newWidth = originalWidth - currentOffsetPx;
         } else if (currentInteraction.type === 'resize-end') {
-            const newWidth = originalWidth + currentOffsetPx;
-            if (newWidth >= dayWidth) {
-                taskBarEl.style.width = `${newWidth}px`;
-            }
+            newWidth = originalWidth + currentOffsetPx;
+        }
+
+        if (newWidth >= dayWidth) {
+           setTempTaskBar({ id: currentInteraction.taskId, left: newLeft, width: newWidth });
         }
     };
     
-    const onMouseUp = (e: MouseEvent) => {
-        handleMouseUp(e, currentInteraction);
-    };
+    const onMouseUp = (e: MouseEvent) => handleMouseUp(e);
 
     document.body.style.cursor = currentInteraction.type === 'drag' ? 'grabbing' : 'ew-resize';
     document.body.style.userSelect = 'none';
@@ -477,7 +445,7 @@ const GlobalGanttView: React.FC = () => {
         </div>
 
         <div ref={scrollContainerRef} className="flex-grow overflow-auto">
-            <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
+            <div className="relative" style={{ width: totalWidth + 288, minWidth: '100%' }}>
                 {/* Sticky Header */}
                 <div className="sticky top-0 z-20 h-16 bg-card-background flex">
                     <div className="w-72 shrink-0 sticky left-0 z-10 bg-card-background border-r border-b border-border-color flex items-center p-2">
@@ -492,7 +460,9 @@ const GlobalGanttView: React.FC = () => {
                 {/* Body */}
                 <div className="relative timeline-body">
                      {/* Vertical Grid Lines & Weekend Highlights */}
-                    {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
+                    <div className="absolute top-0 bottom-0 left-0" style={{ width: totalWidth }}>
+                      {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
+                    </div>
                     {/* Today Marker */}
                     {(() => { const todayOffset = dayDiff(chartStartDate, new Date()); if (todayOffset >= 0 && todayOffset < totalDays) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10" title="Today" style={{ left: todayOffset * dayWidth }}></div>; } return null; })()}
                     
@@ -513,31 +483,31 @@ const GlobalGanttView: React.FC = () => {
                                 <div key={item.type + '-' + item.data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
                                     <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-card-background">
                                         {item.data.id.startsWith('new-task-form') ? (
-                                            <form onSubmit={handleNewTaskSubmit} className="w-full flex items-center gap-2" style={{ paddingLeft: '1.5rem' }}>
+                                            <form onSubmit={handleNewTaskSubmit} className="w-full flex items-center gap-1" style={{ paddingLeft: '1rem' }}>
                                                 <input
                                                     type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
                                                     onBlur={() => { if (newTaskName.trim() === '') setAddingTaskToProject(null); }}
                                                     onKeyDown={e => { if (e.key === 'Escape') { setNewTaskName(''); setAddingTaskToProject(null); } }}
                                                     placeholder="New task..." autoFocus
-                                                    className="flex-grow bg-app-background border border-accent-blue rounded-md px-3 py-1.5 text-sm focus:outline-none"
+                                                    className="flex-grow bg-app-background border border-accent-blue rounded-md px-2 py-1.5 text-sm focus:outline-none"
                                                 />
                                                 <input 
                                                     type="date" 
                                                     value={newTaskStartDate} 
                                                     onChange={e => setNewTaskStartDate(e.target.value)} 
                                                     aria-label="Start Date"
-                                                    className="bg-app-background border border-border-color rounded-md p-1.5 text-sm text-text-secondary" 
+                                                    className="bg-app-background border border-border-color rounded-md p-1.5 text-sm text-text-secondary text-[12px]" 
                                                 />
                                                 <input 
                                                     type="date" 
                                                     value={newTaskEndDate} 
                                                     onChange={e => setNewTaskEndDate(e.target.value)} 
                                                     aria-label="End Date"
-                                                    className="bg-app-background border border-border-color rounded-md p-1.5 text-sm text-text-secondary"
+                                                    className="bg-app-background border border-border-color rounded-md p-1.5 text-sm text-text-secondary text-[12px]"
                                                 />
                                             </form>
                                         ) : (
-                                            <div className="flex items-center group w-full" style={{ paddingLeft: '1.5rem' }}>
+                                            <div className="flex items-center group w-full" style={{ paddingLeft: '1rem' }}>
                                                 <div className="flex-grow truncate text-sm" style={{ paddingLeft: `${item.level * 20}px` }}>
                                                   {item.data.name}
                                                 </div>
@@ -565,18 +535,15 @@ const GlobalGanttView: React.FC = () => {
                                             }
 
                                             const isInteracting = interaction?.taskId === task.id;
-                                            const tempPos = tempTaskPositions.get(task.id);
-                                            const left = tempPos ? tempPos.left : taskPos.startX;
-                                            const width = tempPos ? tempPos.width : (taskPos.endX - taskPos.startX);
+                                            const currentPos = tempTaskBar?.id === task.id ? tempTaskBar : { left: taskPos.startX, width: taskPos.endX - taskPos.startX };
                                             const endDate = parseDate(task.endDate);
                                             const isOverdue = endDate && endDate < today && !task.completed;
                                             
                                             return (
                                                 <div 
-                                                    ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }}
                                                     data-task-id={task.id} 
                                                     className="absolute h-7 top-1/2 -translate-y-1/2 group" 
-                                                    style={{ left: `${left}px`, width: `${width}px`, zIndex: isInteracting ? 20 : 1, transition: isInteracting ? 'none' : 'left 0.2s, width 0.2s' }}
+                                                    style={{ left: `${currentPos.left}px`, width: `${currentPos.width}px`, zIndex: isInteracting ? 20 : 1 }}
                                                     onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }}>
                                                     <div title={`${task.name}\n${task.startDate} to ${task.endDate}`} className={`h-full w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : task.completed ? 'bg-gray-600' : task.projectColor} ${task.completed ? 'opacity-50' : ''}`}>
                                                         {task.imageUrl && (<img src={task.imageUrl} alt={task.name} className="w-5 h-5 rounded-full object-cover mr-2 shrink-0"/>)}

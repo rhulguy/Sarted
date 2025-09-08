@@ -69,9 +69,10 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
   const [creatingState, setCreatingState] = useState<CreatingState | null>(null);
   const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number } | null>(null);
-  const [tempTaskPositions, setTempTaskPositions] = useState<Map<string, { left: number; width: number }>>(new Map());
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState('');
+  const [tempTaskBar, setTempTaskBar] = useState<{ id: string, left: number, width: number } | null>(null);
+
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const taskBarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -152,21 +153,6 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
     return localTaskPositions;
   }, [allTasks, chartStartDate, dayWidth]);
   
-  useEffect(() => {
-    if (tempTaskPositions.size > 0) {
-      const newTempPositions = new Map(tempTaskPositions);
-      let changed = false;
-      for (const [taskId, tempPos] of tempTaskPositions.entries()) {
-        const currentPos = taskPositions.get(taskId);
-        if (currentPos && Math.round(currentPos.startX) === Math.round(tempPos.left) && Math.round(currentPos.endX - currentPos.startX) === Math.round(tempPos.width)) {
-          newTempPositions.delete(taskId);
-          changed = true;
-        }
-      }
-      if (changed) setTempTaskPositions(newTempPositions);
-    }
-  }, [project.tasks, taskPositions, tempTaskPositions]);
-
   const handleCreateMouseUp = useCallback(async (e: MouseEvent) => {
       if (!creatingState || !scrollContainerRef.current) return;
       const { task, startX } = creatingState;
@@ -175,8 +161,8 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
 
       const endX = e.clientX - timelineRect.left;
       
-      const startDayIndex = Math.floor(Math.min(startX, endX) / dayWidth);
-      const endDayIndex = Math.floor(Math.max(startX, endX) / dayWidth);
+      const startDayIndex = Math.round(Math.min(startX, endX) / dayWidth);
+      const endDayIndex = Math.round(Math.max(startX, endX) / dayWidth);
 
       const newStartDate = new Date(chartStartDate);
       newStartDate.setUTCDate(newStartDate.getUTCDate() + startDayIndex);
@@ -200,7 +186,7 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
       if (!timelineRect) return;
 
       const currentX = e.clientX - timelineRect.left;
-      const width = Math.max(dayWidth / 2, Math.abs(currentX - creatingState.startX));
+      const width = Math.abs(currentX - creatingState.startX);
       const left = Math.min(currentX, creatingState.startX);
       setTempCreatingBar({ left, width });
     };
@@ -213,12 +199,18 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
     };
   }, [creatingState, dayWidth, handleCreateMouseUp]);
   
-  const handleMouseUp = useCallback(async (e: MouseEvent, interaction: InteractionState) => {
-    const finalOffsetPx = e.clientX - interaction.startX;
+  const handleMouseUp = useCallback(async (e: MouseEvent) => {
+    const currentInteraction = interaction;
+    setInteraction(null);
+    setTempTaskBar(null);
+
+    if (!currentInteraction) return;
+
+    const finalOffsetPx = e.clientX - currentInteraction.startX;
     const dayDelta = Math.round(finalOffsetPx / dayWidth);
     
     if (dayDelta !== 0) {
-        const { originalTask } = interaction;
+        const { originalTask } = currentInteraction;
         const originalStart = parseDate(originalTask.startDate);
         const originalEnd = parseDate(originalTask.endDate);
 
@@ -226,14 +218,14 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
             let newStart = new Date(originalStart);
             let newEnd = new Date(originalEnd);
 
-            if (interaction.type === 'drag') {
+            if (currentInteraction.type === 'drag') {
                 newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
                 const duration = dayDiff(originalStart, originalEnd);
                 newEnd = new Date(newStart);
                 newEnd.setUTCDate(newEnd.getUTCDate() + duration);
-            } else if (interaction.type === 'resize-start') {
+            } else if (currentInteraction.type === 'resize-start') {
                 newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
-            } else if (interaction.type === 'resize-end') {
+            } else if (currentInteraction.type === 'resize-end') {
                 newEnd.setUTCDate(newEnd.getUTCDate() + dayDelta);
             }
             
@@ -241,7 +233,7 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
                 const draggedTaskUpdate = { ...originalTask, startDate: formatDate(newStart), endDate: formatDate(newEnd) };
                 const tasksToUpdate: Task[] = [draggedTaskUpdate];
 
-                if (interaction.type === 'drag') {
+                if (currentInteraction.type === 'drag') {
                     const dragDelta = dayDiff(originalStart, newStart);
                     
                     const collectSubtasks = (tasks: Task[], delta: number) => {
@@ -262,55 +254,37 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
                     if (originalTask.subtasks) collectSubtasks(originalTask.subtasks, dragDelta);
                 }
                 
-                const newTempPositions = new Map<string, { left: number; width: number }>();
-                tasksToUpdate.forEach(updatedTask => {
-                    const start = parseDate(updatedTask.startDate);
-                    const end = parseDate(updatedTask.endDate);
-                    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-                        const startOffset = dayDiff(chartStartDate, start);
-                        const duration = dayDiff(start, end) + 1;
-                        newTempPositions.set(updatedTask.id, { left: startOffset * dayWidth, width: Math.max(dayWidth, duration * dayWidth) });
-                    }
-                });
-                setTempTaskPositions(newTempPositions);
                 await updateMultipleTasks(project.id, tasksToUpdate);
             }
         }
     }
-    setInteraction(null);
-  }, [dayWidth, updateMultipleTasks, project.id, chartStartDate]);
+  }, [dayWidth, updateMultipleTasks, project.id, chartStartDate, interaction]);
 
   useEffect(() => {
     const currentInteraction = interaction;
     if (!currentInteraction) return;
 
-    const taskBarEl = taskBarRefs.current.get(currentInteraction.taskId);
-
     const handleMouseMove = (e: MouseEvent) => {
-        if (!taskBarEl) return;
         const currentOffsetPx = e.clientX - currentInteraction.startX;
         const { originalLeft, originalWidth } = currentInteraction;
+        let newLeft = originalLeft;
+        let newWidth = originalWidth;
 
         if (currentInteraction.type === 'drag') {
-            taskBarEl.style.left = `${originalLeft + currentOffsetPx}px`;
+            newLeft = originalLeft + currentOffsetPx;
         } else if (currentInteraction.type === 'resize-start') {
-            const newLeft = originalLeft + currentOffsetPx;
-            const newWidth = originalWidth - currentOffsetPx;
-            if (newWidth >= dayWidth) {
-                taskBarEl.style.left = `${newLeft}px`;
-                taskBarEl.style.width = `${newWidth}px`;
-            }
+            newLeft = originalLeft + currentOffsetPx;
+            newWidth = originalWidth - currentOffsetPx;
         } else if (currentInteraction.type === 'resize-end') {
-            const newWidth = originalWidth + currentOffsetPx;
-            if (newWidth >= dayWidth) {
-                taskBarEl.style.width = `${newWidth}px`;
-            }
+            newWidth = originalWidth + currentOffsetPx;
+        }
+
+        if (newWidth >= dayWidth) {
+          setTempTaskBar({ id: currentInteraction.taskId, left: newLeft, width: newWidth });
         }
     };
     
-    const onMouseUp = (e: MouseEvent) => {
-        handleMouseUp(e, currentInteraction);
-    };
+    const onMouseUp = (e: MouseEvent) => handleMouseUp(e);
 
     document.body.style.cursor = currentInteraction.type === 'drag' ? 'grabbing' : 'ew-resize';
     document.body.style.userSelect = 'none';
@@ -439,15 +413,13 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
                                 );
                             }
                             const isInteracting = interaction?.taskId === task.id;
-                            const tempPos = tempTaskPositions.get(task.id);
-                            const left = tempPos ? tempPos.left : taskPos.startX;
-                            const width = tempPos ? tempPos.width : (taskPos.endX - taskPos.startX);
+                            const currentPos = tempTaskBar?.id === task.id ? tempTaskBar : { left: taskPos.startX, width: taskPos.endX - taskPos.startX };
                             const endDate = parseDate(task.endDate);
                             const isOverdue = endDate && endDate < today && !task.completed;
 
                             return (
-                                <div key={task.id} ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }} data-task-id={task.id} className="absolute group" 
-                                style={{ top: `${index * rowHeight + 6}px`, left: `${left}px`, width: `${width}px`, transition: isInteracting ? 'none' : 'left 0.2s, width 0.2s', zIndex: isInteracting ? 10 : 1 }}>
+                                <div key={task.id} data-task-id={task.id} className="absolute group" 
+                                style={{ top: `${index * rowHeight + 6}px`, left: `${currentPos.left}px`, width: `${currentPos.width}px`, zIndex: isInteracting ? 10 : 1 }}>
                                     <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 rounded-md flex items-center justify-between px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : 'bg-accent-blue'}`}
                                         onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }}>
                                         <span className="truncate pointer-events-none">{task.name}</span>
