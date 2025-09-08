@@ -42,7 +42,6 @@ const Header: React.FC<HeaderProps> = ({ onNewProject, onToggleSidebar, isMobile
         <div className="flex items-center gap-2">
           <SartedLogoIcon className="w-7 h-7" />
           <h1 className="text-xl font-bold text-text-primary">sarted</h1>
-          <span className="text-xs text-text-secondary mt-1">v1.1</span>
         </div>
       </div>
       <div className="flex items-center space-x-4">

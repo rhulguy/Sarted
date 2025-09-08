@@ -1,7 +1,6 @@
 import React, { useState, useEffect, memo, useRef } from 'react';
 import { Task, Project } from '../types';
 import { TrashIcon, ChevronRightIcon, CornerDownRightIcon, EditIcon, ImageIcon, UploadIcon } from './IconComponents';
-import { generateImageForTask } from '../services/geminiService';
 import Spinner from './Spinner';
 import { useProject } from '../contexts/ProjectContext';
 
@@ -44,15 +43,6 @@ const formatDate = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
-const fileToBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-  });
-
-
 const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, onAddSubtask, projects, currentProjectId, onMoveProject }) => {
     const { projectGroups } = useProject();
     const project = projects?.find(p => p.id === currentProjectId);
@@ -60,23 +50,28 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
     const colorClass = group ? group.color.replace('bg-', 'bg-brand-') : 'bg-accent-blue';
 
     const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
-    const [description, setDescription] = useState(task.description);
-    const [startDate, setStartDate] = useState(task.startDate || '');
-    const [endDate, setEndDate] = useState(task.endDate || '');
     const [isExpanded, setIsExpanded] = useState(true);
     const [isAddingSubtask, setIsAddingSubtask] = useState(false);
     const [newSubtaskName, setNewSubtaskName] = useState('');
     const [newSubtaskStartDate, setNewSubtaskStartDate] = useState('');
     const [newSubtaskEndDate, setNewSubtaskEndDate] = useState('');
-    const [generatingImage, setGeneratingImage] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     
-    useEffect(() => {
-        setDescription(task.description);
-        setStartDate(task.startDate || '');
-        setEndDate(task.endDate || '');
-    }, [task]);
+    const [showSaved, setShowSaved] = useState(false);
+    const saveTimeoutRef = useRef<number | null>(null);
 
+    const triggerSaveAnimation = () => {
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        setShowSaved(true);
+        saveTimeoutRef.current = window.setTimeout(() => {
+            setShowSaved(false);
+        }, 2000);
+    };
+    
+    const handleUpdate = (updates: Partial<Task>) => {
+        onUpdate({ ...task, ...updates });
+        triggerSaveAnimation();
+    };
+    
     const handleToggleComplete = () => {
         const newCompletedStatus = !task.completed;
         const completionDate = newCompletedStatus ? formatDate(new Date()) : undefined;
@@ -98,22 +93,6 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
         });
     };
 
-    const handleDescriptionBlur = () => {
-        if (description !== task.description) {
-            onUpdate({ ...task, description });
-        }
-    };
-
-    const handleDateChange = (type: 'start' | 'end', value: string) => {
-        if (type === 'start') {
-            setStartDate(value);
-            onUpdate({ ...task, startDate: value || undefined });
-        } else {
-            setEndDate(value);
-            onUpdate({ ...task, endDate: value || undefined });
-        }
-    };
-
     const handleSubtaskFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (newSubtaskName.trim()) {
@@ -124,36 +103,6 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
             setIsAddingSubtask(false);
             setIsExpanded(true);
         }
-    };
-
-    const handleGenerateImage = async () => {
-        setGeneratingImage(true);
-        try {
-            const imageUrl = await generateImageForTask(task.name);
-            onUpdate({ ...task, imageUrl });
-        } catch (error) {
-            console.error("Failed to generate image for task:", error);
-            alert("Could not generate image. Please check the console for details.");
-        } finally {
-            setGeneratingImage(false);
-        }
-    };
-
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        try {
-          const base64 = await fileToBase64(file);
-          onUpdate({ ...task, imageUrl: base64 });
-        } catch (error) {
-          console.error("Error converting file to base64", error);
-          alert("Could not upload image. Please try another file.");
-        }
-      }
-    };
-
-    const handleRemoveImage = () => {
-      onUpdate({ ...task, imageUrl: undefined });
     };
     
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
@@ -173,7 +122,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                     </span>
                 </div>
                 <div className="flex items-center space-x-2 md:space-x-1">
-                    <button onClick={() => setIsDetailsExpanded(o => !o)} className="p-2 text-text-secondary hover:text-accent-blue" title="Edit details">
+                    <button onClick={() => setIsDetailsExpanded(prev => !prev)} className="p-2 text-text-secondary hover:text-accent-blue" title="Edit details">
                         <EditIcon className="w-5 h-5" />
                     </button>
                     <button onClick={() => setIsAddingSubtask(true)} className="p-2 text-text-secondary hover:text-accent-blue" title="Add sub-task">
@@ -186,65 +135,54 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
             </div>
 
             {isDetailsExpanded && (
-                <div className="py-2 px-4 space-y-3 bg-card-background rounded-b-xl mb-2" style={{ marginLeft: `3.5rem` }}>
+                <div className="py-2 px-4 space-y-3 bg-card-background rounded-b-xl mb-2 relative" style={{ marginLeft: `3.5rem` }}>
+                     {showSaved && (
+                        <div className="absolute top-3 right-3 text-xs text-accent-green bg-green-100/50 px-2 py-0.5 rounded-full animate-fade-in-out z-10">
+                            Saved
+                        </div>
+                    )}
                     <div>
                         <label className="block text-xs font-medium text-text-secondary mb-1">Description</label>
                         <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            onBlur={handleDescriptionBlur}
+                            key={`${task.id}-desc`}
+                            defaultValue={task.description}
+                            onBlur={(e) => {
+                                if (e.target.value !== task.description) {
+                                    handleUpdate({ description: e.target.value });
+                                }
+                            }}
                             placeholder="Add a description..."
                             className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             rows={3}
                         />
                     </div>
-                     <div>
-                        <label className="block text-xs font-medium text-text-secondary mb-1">Image</label>
-                        <div className="mt-1 flex items-center gap-4">
-                            {task.imageUrl ? (
-                                <div className="relative group">
-                                    <img src={task.imageUrl} alt="Task visual" className="h-24 w-24 rounded-lg object-cover" />
-                                    <button 
-                                    onClick={handleRemoveImage}
-                                    title="Remove Image"
-                                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                    <TrashIcon className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ) : (
-                            <div className="flex gap-2">
-                                <button onClick={handleGenerateImage} disabled={generatingImage} className="flex items-center gap-2 px-3 py-2 text-sm bg-app-background rounded-lg hover:bg-border-color disabled:opacity-50">
-                                    {generatingImage ? <Spinner /> : <ImageIcon className="w-5 h-5" />}
-                                    <span>{generatingImage ? 'Generating...' : 'Generate AI'}</span>
-                                </button>
-                                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 text-sm bg-app-background rounded-lg hover:bg-border-color">
-                                    <UploadIcon className="w-5 h-5" />
-                                    <span>Upload</span>
-                                </button>
-                                <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-                            </div>
-                            )}
-                        </div>
-                    </div>
                     <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
                         <div className="flex-1">
                             <label className="block text-xs font-medium text-text-secondary mb-1">Start Date</label>
                             <input
+                                key={`${task.id}-start`}
                                 type="date"
-                                value={startDate}
-                                onChange={(e) => handleDateChange('start', e.target.value)}
-                                max={endDate || undefined}
+                                defaultValue={task.startDate || ''}
+                                onBlur={(e) => {
+                                    if(e.target.value !== (task.startDate || '')) {
+                                        handleUpdate({ startDate: e.target.value || undefined });
+                                    }
+                                }}
                                 className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             />
                         </div>
                         <div className="flex-1">
                             <label className="block text-xs font-medium text-text-secondary mb-1">End Date</label>
                             <input
+                                key={`${task.id}-end`}
                                 type="date"
-                                value={endDate}
-                                onChange={(e) => handleDateChange('end', e.target.value)}
-                                min={startDate || undefined}
+                                defaultValue={task.endDate || ''}
+                                onBlur={(e) => {
+                                    if(e.target.value !== (task.endDate || '')) {
+                                        handleUpdate({ endDate: e.target.value || undefined });
+                                    }
+                                }}
+                                min={task.startDate || undefined}
                                 className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             />
                         </div>
@@ -253,7 +191,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, level, onUpdate, onDelete, on
                         <div>
                             <label className="block text-xs font-medium text-text-secondary mb-1">Move to Project</label>
                             <select
-                                value={currentProjectId}
+                                defaultValue={currentProjectId}
                                 onChange={(e) => onMoveProject(e.target.value)}
                                 className="w-full bg-app-background border border-border-color rounded-md p-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue"
                             >

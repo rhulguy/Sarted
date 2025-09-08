@@ -141,20 +141,23 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({ isOpen, onClose }) 
                           type="button"
                           onClick={() => setColor(c)}
                           className={`w-full pt-[100%] relative rounded-full ${c} ${color === c ? 'ring-2 ring-offset-2 ring-offset-card-background ring-accent-blue' : ''}`}
-                          aria-label={`Set color to ${c}`}
-                      />
+                          aria-label={`Set color to ${c.split('-')[1]}`}
+                      ></button>
                   ))}
               </div>
             </div>
           </div>
-          <div className="mt-6 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-app-background rounded-lg hover:bg-border-color">Cancel</button>
-            <button type="submit" disabled={!name.trim()} className="px-4 py-2 bg-accent-blue text-white rounded-lg disabled:opacity-50">Create Habit</button>
+          
+          <div className="mt-8 flex flex-col-reverse md:flex-row justify-end md:space-x-4 gap-2">
+            <button type="submit" disabled={!name.trim()} className="px-4 py-3 md:py-2 rounded-lg text-white bg-accent-blue hover:opacity-90 disabled:opacity-50 w-full md:w-auto">
+              Create Habit
+            </button>
+            <button type="button" onClick={onClose} className="px-4 py-3 md:py-2 rounded-lg text-text-primary bg-app-background hover:bg-border-color w-full md:w-auto">Cancel</button>
           </div>
         </form>
       </div>
     </div>
   );
 };
-// FIX: Add default export to resolve import error in App.tsx.
+
 export default CreateHabitModal;

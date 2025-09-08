@@ -10,6 +10,8 @@ interface SpeechRecognitionAlternative {
 
 interface SpeechRecognitionResult {
     readonly isFinal: boolean;
+    readonly length: number;
+    item(index: number): SpeechRecognitionAlternative;
     readonly [index: number]: SpeechRecognitionAlternative;
 }
 
@@ -20,13 +22,13 @@ interface SpeechRecognitionResultList {
 }
 
 interface SpeechRecognitionEvent extends Event {
-    resultIndex: number;
-    results: SpeechRecognitionResultList;
+    readonly resultIndex: number;
+    readonly results: SpeechRecognitionResultList;
 }
 
 interface SpeechRecognitionErrorEvent extends Event {
-  error: SpeechRecognitionErrorCode;
-  message: string;
+  readonly error: SpeechRecognitionErrorCode;
+  readonly message: string;
 }
 
 type SpeechRecognitionErrorCode =

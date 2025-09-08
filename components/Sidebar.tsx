@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderIcon, TrendingUpIcon, InboxIcon, CalendarIcon, MindMapIcon, GanttIcon, BookmarkSquareIcon, UserCircleIcon, SparklesIcon } from './IconComponents';
+import { FolderIcon, TrendingUpIcon, InboxIcon, CalendarIcon, MindMapIcon, GanttIcon, BookmarkSquareIcon, UserCircleIcon, ImageIcon } from './IconComponents';
 
 type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account' | 'dreamboard';
 
@@ -16,10 +16,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMob
   const navItems = [
     { id: 'inbox', name: 'Inbox', icon: InboxIcon },
     { id: 'calendar', name: 'Global Calendar', icon: CalendarIcon },
+    { id: 'dreamboard', name: 'Dream Board', icon: ImageIcon },
     { id: 'global-mindmap', name: 'Global Map', icon: MindMapIcon },
     { id: 'global-gantt', name: 'Global Gantt', icon: GanttIcon },
     { id: 'resources', name: 'Resources', icon: BookmarkSquareIcon },
-    { id: 'dreamboard', name: 'Dream Board', icon: SparklesIcon },
     { id: 'projects', name: 'Projects', icon: FolderIcon },
     { id: 'habits', name: 'Habits', icon: TrendingUpIcon },
     { id: 'my-account', name: 'My Account', icon: UserCircleIcon },

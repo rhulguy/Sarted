@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Task } from '../types';
 import { PlusIcon, MinusIcon, ImageIcon, DownloadIcon, ArrowLongRightIcon, ArrowLongLeftIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
-import { generateImageForTask } from '../services/geminiService';
 import Spinner from './Spinner';
 import { useDownloadImage } from '../hooks/useDownloadImage';
+import { int, dateToIndexUTC, indexToDateUTC, pixelToIndex, inclusiveWidth } from '../utils/taskUtils';
 
 interface GanttChartViewProps {
   onAddTask: (taskName: string, startDate?: string, endDate?: string) => Promise<void>;
@@ -16,10 +16,11 @@ interface GanttChartViewProps {
 interface InteractionState {
     type: 'drag' | 'resize-start' | 'resize-end';
     taskId: string;
-    startX: number;
+    pointerId: number;
+    startPointerX: number;
     originalTask: Task;
-    originalLeft: number;
-    originalWidth: number;
+    originalStartIndex: number;
+    originalEndIndex: number;
 }
 
 interface CreatingState {
@@ -71,8 +72,6 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
   const [tempCreatingBar, setTempCreatingBar] = useState<{ left: number; width: number } | null>(null);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState('');
-  const [tempTaskBar, setTempTaskBar] = useState<{ id: string, left: number, width: number } | null>(null);
-
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const taskBarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -98,18 +97,16 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
     };
     findDateRangeAndFlatten(project.tasks, 0, null);
 
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0); // Normalize to UTC midnight
+    const mondayThisWeek = getMondayOfWeek(new Date());
 
-    let effectiveMin = today; // Default start date is today
-
-    // If the earliest task starts in the future, use that date as the start
-    // so the user doesn't have a huge empty space at the beginning.
-    if (min && min > today) {
+    let effectiveMin = mondayThisWeek;
+    if (min && min < mondayThisWeek) {
         effectiveMin = min;
     }
 
     let effectiveMax = max;
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
     const futureDate = new Date(today);
     futureDate.setUTCDate(futureDate.getUTCDate() + 30);
     if (!effectiveMax || effectiveMax < futureDate) {
@@ -154,7 +151,7 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
     });
     return localTaskPositions;
   }, [allTasks, chartStartDate, dayWidth]);
-  
+
   const handleCreateMouseUp = useCallback(async (e: MouseEvent) => {
       if (!creatingState || !scrollContainerRef.current) return;
       const { task, startX } = creatingState;
@@ -163,15 +160,13 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
 
       const endX = e.clientX - timelineRect.left;
       
-      const startDayIndex = Math.round(Math.min(startX, endX) / dayWidth);
-      const endDayIndex = Math.round(Math.max(startX, endX) / dayWidth) - 1; // Snap to end of day
+      const startDayIndex = Math.floor(Math.min(startX, endX) / dayWidth);
+      const endDayIndex = Math.floor(Math.max(startX, endX) / dayWidth);
 
       const newStartDate = new Date(chartStartDate);
       newStartDate.setUTCDate(newStartDate.getUTCDate() + startDayIndex);
       const newEndDate = new Date(chartStartDate);
       newEndDate.setUTCDate(newEndDate.getUTCDate() + endDayIndex);
-
-      if (newStartDate > newEndDate) return;
 
       const taskToUpdate = task;
       if (taskToUpdate) {
@@ -190,7 +185,7 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
       if (!timelineRect) return;
 
       const currentX = e.clientX - timelineRect.left;
-      const width = Math.abs(currentX - creatingState.startX);
+      const width = Math.max(dayWidth / 2, Math.abs(currentX - creatingState.startX));
       const left = Math.min(currentX, creatingState.startX);
       setTempCreatingBar({ left, width });
     };
@@ -202,109 +197,137 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
         window.removeEventListener('mouseup', handleCreateMouseUp);
     };
   }, [creatingState, dayWidth, handleCreateMouseUp]);
-  
-  const handleMouseUp = useCallback(async (e: MouseEvent) => {
-    const currentInteraction = interaction;
-    setInteraction(null);
-    setTempTaskBar(null);
-
-    if (!currentInteraction) return;
-
-    const finalOffsetPx = e.clientX - currentInteraction.startX;
-    const dayDelta = Math.round(finalOffsetPx / dayWidth);
-    
-    // Only update if there was a meaningful change
-    if (dayDelta === 0 && currentInteraction.type === 'drag') {
-        return;
-    }
-        
-    const { originalTask } = currentInteraction;
-    const originalStart = parseDate(originalTask.startDate);
-    const originalEnd = parseDate(originalTask.endDate);
-
-    if (!isNaN(originalStart.getTime()) && !isNaN(originalEnd.getTime())) {
-        let newStart = new Date(originalStart);
-        let newEnd = new Date(originalEnd);
-
-        if (currentInteraction.type === 'drag') {
-            newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
-            const duration = dayDiff(originalStart, originalEnd);
-            newEnd = new Date(newStart);
-            newEnd.setUTCDate(newEnd.getUTCDate() + duration);
-        } else if (currentInteraction.type === 'resize-start') {
-            newStart.setUTCDate(newStart.getUTCDate() + dayDelta);
-        } else if (currentInteraction.type === 'resize-end') {
-            newEnd.setUTCDate(newEnd.getUTCDate() + dayDelta);
-        }
-        
-        if (newStart <= newEnd) {
-            const draggedTaskUpdate = { ...originalTask, startDate: formatDate(newStart), endDate: formatDate(newEnd) };
-            const tasksToUpdate: Task[] = [draggedTaskUpdate];
-
-            if (currentInteraction.type === 'drag') {
-                const dragDelta = dayDiff(originalStart, newStart);
-                
-                const collectSubtasks = (tasks: Task[], delta: number) => {
-                    tasks.forEach(subtask => {
-                        const originalSubStart = parseDate(subtask.startDate);
-                        const originalSubEnd = parseDate(subtask.endDate);
-                        if (!isNaN(originalSubStart.getTime()) && !isNaN(originalSubEnd.getTime())) {
-                            const newSubStart = new Date(originalSubStart);
-                            newSubStart.setUTCDate(newSubStart.getUTCDate() + delta);
-                            const duration = dayDiff(originalSubStart, originalSubEnd);
-                            const newSubEnd = new Date(newSubStart);
-                            newSubEnd.setUTCDate(newSubEnd.getUTCDate() + duration);
-                            tasksToUpdate.push({ ...subtask, startDate: formatDate(newSubStart), endDate: formatDate(newSubEnd) });
-                        }
-                        if (subtask.subtasks) collectSubtasks(subtask.subtasks, delta);
-                    });
-                };
-                if (originalTask.subtasks) collectSubtasks(originalTask.subtasks, dragDelta);
-            }
-            
-            await updateMultipleTasks(project.id, tasksToUpdate);
-        }
-    }
-  }, [dayWidth, updateMultipleTasks, project.id, chartStartDate, interaction]);
 
   useEffect(() => {
-    const currentInteraction = interaction;
-    if (!currentInteraction) return;
+    if (!interaction) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
-        const currentOffsetPx = e.clientX - currentInteraction.startX;
-        const { originalLeft, originalWidth } = currentInteraction;
-        let newLeft = originalLeft;
-        let newWidth = originalWidth;
-
-        if (currentInteraction.type === 'drag') {
-            newLeft = originalLeft + currentOffsetPx;
-        } else if (currentInteraction.type === 'resize-start') {
-            newLeft = originalLeft + currentOffsetPx;
-            newWidth = originalWidth - currentOffsetPx;
-        } else if (currentInteraction.type === 'resize-end') {
-            newWidth = originalWidth + currentOffsetPx;
-        }
-
-        if (newWidth >= dayWidth) {
-          setTempTaskBar({ id: currentInteraction.taskId, left: newLeft, width: newWidth });
-        }
-    };
+    const taskBarEl = taskBarRefs.current.get(interaction.taskId);
+    if (!taskBarEl) {
+      setInteraction(null);
+      return;
+    }
     
-    const onMouseUp = (e: MouseEvent) => handleMouseUp(e);
-
-    document.body.style.cursor = currentInteraction.type === 'drag' ? 'grabbing' : 'ew-resize';
+    taskBarEl.setPointerCapture(interaction.pointerId);
+    document.body.style.cursor = interaction.type === 'drag' ? 'grabbing' : 'ew-resize';
     document.body.style.userSelect = 'none';
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', onMouseUp, { once: true });
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerId !== interaction.pointerId) return;
+      e.preventDefault();
+
+      const deltaX = e.clientX - interaction.startPointerX;
+      let newLeftPx: number, newWidthPx: number;
+      
+      const originalStartPx = interaction.originalStartIndex * dayWidth;
+
+      if (interaction.type === 'drag') {
+        const dayDelta = Math.round(deltaX / dayWidth);
+        const newStartIndex = interaction.originalStartIndex + dayDelta;
+        
+        newLeftPx = newStartIndex * dayWidth;
+        newWidthPx = inclusiveWidth(interaction.originalStartIndex, interaction.originalEndIndex, dayWidth);
+
+      } else if (interaction.type === 'resize-start') {
+        const dayDelta = Math.round(deltaX / dayWidth);
+        let newStartIndex = interaction.originalStartIndex + dayDelta;
+        
+        if (newStartIndex > interaction.originalEndIndex) {
+            newStartIndex = interaction.originalEndIndex;
+        }
+        newLeftPx = newStartIndex * dayWidth;
+        newWidthPx = inclusiveWidth(newStartIndex, interaction.originalEndIndex, dayWidth);
+
+      } else { // resize-end
+        const timelineRect = scrollContainerRef.current?.querySelector('.timeline-body')?.getBoundingClientRect();
+        if (!timelineRect) return;
+
+        const pointerXInTimeline = e.clientX - timelineRect.left;
+        const newEndIndex = pixelToIndex(pointerXInTimeline, dayWidth);
+        const finalEndIndex = Math.max(interaction.originalStartIndex, newEndIndex);
+
+        newLeftPx = originalStartPx;
+        newWidthPx = inclusiveWidth(interaction.originalStartIndex, finalEndIndex, dayWidth);
+      }
+      
+      taskBarEl.style.left = `${int(newLeftPx)}px`;
+      taskBarEl.style.width = `${int(newWidthPx)}px`;
+    };
+
+    const handlePointerUp = async (e: PointerEvent) => {
+      if (e.pointerId !== interaction.pointerId) return;
+      
+      const { originalTask, startPointerX, type, originalStartIndex, originalEndIndex } = interaction;
+      let finalStartIndex = originalStartIndex;
+      let finalEndIndex = originalEndIndex;
+      const deltaX = e.clientX - startPointerX;
+      
+      if (type === 'drag') {
+        const dayDelta = Math.round(deltaX / dayWidth);
+        finalStartIndex += dayDelta;
+        finalEndIndex += dayDelta;
+      } else if (type === 'resize-start') {
+        const dayDelta = Math.round(deltaX / dayWidth);
+        finalStartIndex += dayDelta;
+        if (finalStartIndex > finalEndIndex) finalStartIndex = finalEndIndex;
+      } else { // resize-end
+        const timelineRect = scrollContainerRef.current?.querySelector('.timeline-body')?.getBoundingClientRect();
+        if (!timelineRect) { setInteraction(null); return; }
+        const pointerXInTimeline = e.clientX - timelineRect.left;
+        const newEndIndex = pixelToIndex(pointerXInTimeline, dayWidth);
+        finalEndIndex = Math.max(originalStartIndex, newEndIndex);
+      }
+
+      if (finalStartIndex !== originalStartIndex || finalEndIndex !== originalEndIndex) {
+          const newStartDate = indexToDateUTC(chartStartDate, finalStartIndex);
+          const newEndDate = indexToDateUTC(chartStartDate, finalEndIndex);
+          
+          const draggedTaskUpdate: Task = { ...originalTask, startDate: formatDate(newStartDate), endDate: formatDate(newEndDate) };
+          const tasksToUpdate: Task[] = [draggedTaskUpdate];
+  
+          if (type === 'drag' && originalTask.subtasks?.length) {
+              const dragDayDelta = finalStartIndex - originalStartIndex;
+              const collectSubtasks = (tasks: Task[], delta: number) => {
+                  tasks.forEach(subtask => {
+                      const oStart = parseDate(subtask.startDate), oEnd = parseDate(subtask.endDate);
+                      if (!isNaN(oStart.getTime()) && !isNaN(oEnd.getTime())) {
+                          const nStart = new Date(oStart); nStart.setUTCDate(nStart.getUTCDate() + delta);
+                          const duration = dayDiff(oStart, oEnd);
+                          const nEnd = new Date(nStart); nEnd.setUTCDate(nEnd.getUTCDate() + duration);
+                          tasksToUpdate.push({ ...subtask, startDate: formatDate(nStart), endDate: formatDate(nEnd) });
+                      }
+                      if (subtask.subtasks) collectSubtasks(subtask.subtasks, delta);
+                  });
+              };
+              collectSubtasks(originalTask.subtasks, dragDayDelta);
+          }
+          await updateMultipleTasks(project.id, tasksToUpdate);
+      }
+      
+      if (taskBarEl.hasPointerCapture(interaction.pointerId)) taskBarEl.releasePointerCapture(interaction.pointerId);
+      setInteraction(null);
+    };
+
+    const handlePointerCancel = (e: PointerEvent) => {
+        if (e.pointerId !== interaction.pointerId) return;
+        const originalStartPx = interaction.originalStartIndex * dayWidth;
+        const originalWidthPx = inclusiveWidth(interaction.originalStartIndex, interaction.originalEndIndex, dayWidth);
+        taskBarEl.style.left = `${int(originalStartPx)}px`;
+        taskBarEl.style.width = `${int(originalWidthPx)}px`;
+        setInteraction(null);
+    }
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
     
     return () => {
-        document.body.style.cursor = 'default';
-        document.body.style.userSelect = 'auto';
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
     };
-  }, [interaction, handleMouseUp, dayWidth]);
+  }, [interaction, dayWidth, chartStartDate, project.id, updateMultipleTasks]);
 
   const handleZoom = (direction: 'in' | 'out') => setDayWidth(prev => Math.max(10, Math.min(100, direction === 'in' ? prev * 1.5 : prev / 1.5)));
 
@@ -353,89 +376,95 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
                 <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
             </button>
         </div>
-        <div ref={scrollContainerRef} className="flex-grow overflow-auto flex">
-            {/* Task List Column */}
-            <div className="w-64 shrink-0 sticky left-0 z-20 bg-card-background border-r border-border-color">
-                <div className="h-16 flex items-center justify-between p-2 border-b border-border-color">
-                    <h3 className="font-semibold">Task Name</h3>
-                    <button onClick={() => setIsAddingTask(true)} title="Add New Task" className="p-1 text-text-secondary hover:text-accent-blue"><PlusIcon className="w-5 h-5"/></button>
+        <div ref={scrollContainerRef} className="flex-grow overflow-auto">
+            <div className="relative" style={{ width: totalWidth + 256, minWidth: '100%' }}>
+                {/* Sticky Header */}
+                <div className="sticky top-0 z-20 h-16 flex">
+                    <div className="w-64 shrink-0 sticky left-0 z-10 bg-card-background border-r border-b border-border-color flex items-center justify-between p-2">
+                        <h3 className="font-semibold">Task Name</h3>
+                        <button onClick={() => setIsAddingTask(true)} title="Add New Task" className="p-1 text-text-secondary hover:text-accent-blue"><PlusIcon className="w-5 h-5"/></button>
+                    </div>
+                    <div className="flex-grow relative border-b border-border-color bg-card-background">
+                        <div className="absolute top-0 left-0 w-full h-8 flex">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div>
+                        <div className="absolute bottom-0 left-0 w-full h-8 flex">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div>
+                    </div>
                 </div>
-                <div className="relative">
-                    {allTasks.map((task, index) => (
-                        <div key={task.id} className="flex h-10 items-center p-2 border-b border-border-color group" style={{ paddingLeft: `${10 + task.level * 20}px` }}>
-                            <span className="flex-grow truncate text-sm">{task.name}</span>
-                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
-                                <button onClick={() => handleIndent(task, index)} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongRightIcon className="w-5 h-5" /></button>
-                                <button onClick={() => handleOutdent(task)} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongLeftIcon className="w-5 h-5" /></button>
-                            </div>
-                        </div>
-                    ))}
-                    {isAddingTask && (
-                        <div className="flex h-10 items-center p-1 border-b border-border-color" style={{ paddingLeft: `${10}px` }}>
-                            <form onSubmit={handleNewTaskSubmit} className="w-full h-full">
-                                <input
-                                    type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
-                                    onBlur={() => { if (!newTaskName.trim()) setIsAddingTask(false); }}
-                                    onKeyDown={e => { if (e.key === 'Escape') setIsAddingTask(false); }}
-                                    placeholder="New task name..."
-                                    className="w-full h-full bg-app-background border border-accent-blue rounded px-2 text-sm" autoFocus
-                                />
-                            </form>
-                        </div>
-                    )}
-                </div>
-            </div>
-            
-            {/* Timeline Column */}
-            <div className="flex-grow relative">
-                <div className="sticky top-0 z-10 bg-card-background">
-                    <div className="h-8 flex">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-b border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth, minWidth: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div>
-                    <div className="h-8 flex">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return (<div key={i} className={`flex items-center justify-center border-r border-b border-border-color text-xs text-text-secondary ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ width: dayWidth, minWidth: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div>
-                </div>
-                <div className="relative timeline-body" style={{ width: totalWidth, minWidth: totalWidth, height: Math.max(400, (allTasks.length + (isAddingTask ? 1 : 0)) * rowHeight) }}>
-                    {/* Vertical Grid Lines & Weekends */}
-                    {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
-                    {/* Today Marker */}
-                    {(() => { const todayOffset = dayDiff(chartStartDate, new Date()); if (todayOffset >= 0 && todayOffset < totalDays) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500/80 z-20" title="Today" style={{ left: todayOffset * dayWidth }}></div>; } return null; })()}
 
-                    {/* Horizontal Grid Lines */}
-                    {allTasks.map((_, index) => <div key={`row-${index}`} className="absolute w-full border-b border-border-color" style={{ top: (index + 1) * rowHeight, height: '1px' }}></div>)}
-                    {isAddingTask && <div className="absolute w-full border-b border-border-color" style={{ top: (allTasks.length + 1) * rowHeight, height: '1px' }}></div>}
-                    
-                    {/* Task Bars */}
-                    {allTasks.map((task, index) => {
-                        const taskPos = taskPositions.get(task.id);
-                        if (!taskPos) {
-                            return (
-                                <div key={`creator-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: index * rowHeight }} 
-                                    onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: task, startX: e.clientX - timelineRect.left }); }}>
-                                    <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent-blue/10 transition-colors flex items-center justify-center">
-                                        <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
+                {/* Body Content */}
+                <div className="relative" style={{ height: Math.max(400, (allTasks.length + (isAddingTask ? 1 : 0)) * rowHeight) }}>
+                     {/* Vertical Grid Lines & Weekends */}
+                    <div className="absolute top-0 h-full" style={{ left: 256, width: totalWidth }}>
+                      {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/20' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
+                    </div>
+                     {/* Today Marker */}
+                    {(() => { const todayOffset = dayDiff(chartStartDate, new Date()) * dayWidth; if (todayOffset >= 0 && todayOffset <= totalWidth) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500/80 z-20" title="Today" style={{ left: 256 + todayOffset }}></div>; } return null; })()}
+
+                    {/* Task Rows */}
+                    <div className="relative">
+                        {allTasks.map((task, index) => (
+                           <div key={task.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                <div className="w-64 shrink-0 sticky left-0 z-10 flex items-center p-2 border-r border-b border-border-color bg-card-background group" style={{ paddingLeft: `${10 + task.level * 20}px` }}>
+                                    <span className="flex-grow truncate text-sm">{task.name}</span>
+                                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+                                        <button onClick={() => handleIndent(task, index)} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongRightIcon className="w-5 h-5" /></button>
+                                        <button onClick={() => handleOutdent(task)} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongLeftIcon className="w-5 h-5" /></button>
                                     </div>
                                 </div>
-                            );
-                        }
-                        const isInteracting = interaction?.taskId === task.id;
-                        const currentPos = tempTaskBar?.id === task.id ? tempTaskBar : { left: taskPos.startX, width: taskPos.endX - taskPos.startX };
-                        const endDate = parseDate(task.endDate);
-                        const isOverdue = endDate && endDate < today && !task.completed;
-
-                        return (
-                            <div key={task.id} data-task-id={task.id} className="absolute group" 
-                            style={{ top: `${index * rowHeight + 6}px`, left: `${currentPos.left}px`, width: `${currentPos.width}px`, zIndex: isInteracting ? 10 : 1 }}>
-                                <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 rounded-md flex items-center justify-between px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : 'bg-accent-blue'}`}
-                                    onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }}>
-                                    <span className="truncate pointer-events-none">{task.name}</span>
+                           </div>
+                        ))}
+                         {isAddingTask && (
+                            <div className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
+                                <div className="w-64 shrink-0 sticky left-0 z-10 flex items-center p-1 border-r border-b border-border-color bg-card-background" style={{ paddingLeft: `${10}px` }}>
+                                   <form onSubmit={handleNewTaskSubmit} className="w-full h-full">
+                                        <input
+                                            type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
+                                            onBlur={() => { if (!newTaskName.trim()) setIsAddingTask(false); }}
+                                            onKeyDown={e => { if (e.key === 'Escape') setIsAddingTask(false); }}
+                                            placeholder="New task name..."
+                                            className="w-full h-full bg-app-background border border-accent-blue rounded px-2 text-sm" autoFocus
+                                        />
+                                    </form>
                                 </div>
-                                <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -left-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -right-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
                             </div>
-                        )
-                    })}
-                     {creatingState && tempCreatingBar && (
-                        <div className="absolute h-7 pointer-events-none bg-accent-blue/50 rounded-md" 
-                        style={{ ...tempCreatingBar, top: `${allTasks.findIndex(t => t.id === creatingState.task.id) * rowHeight + 6}px` }}></div>
-                    )}
+                         )}
+                    </div>
+                     {/* Task Bars */}
+                    <div className="absolute top-0 left-64 w-full h-full timeline-body">
+                         {allTasks.map((task, index) => {
+                            const taskPos = taskPositions.get(task.id);
+                            if (!taskPos) {
+                                return (
+                                    <div key={`creator-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: index * rowHeight }} 
+                                        onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: task, startX: e.clientX - timelineRect.left }); }}>
+                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent-blue/10 transition-colors flex items-center justify-center">
+                                            <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            const isInteracting = interaction?.taskId === task.id;
+                            const left = taskPos.startX;
+                            const width = taskPos.endX - taskPos.startX;
+                            const endDate = parseDate(task.endDate);
+                            const isOverdue = endDate && endDate < today && !task.completed;
+
+                            return (
+                                <div key={task.id} ref={el => { if (el) taskBarRefs.current.set(task.id, el); else taskBarRefs.current.delete(task.id); }} data-task-id={task.id} className="absolute group touch-none" 
+                                style={{ top: `${index * rowHeight + 6}px`, left: `${int(left)}px`, width: `${int(width)}px`, transition: isInteracting ? 'none' : 'left 0.2s, width 0.2s', zIndex: isInteracting ? 10 : 1 }}>
+                                    <div title={`${task.name}\nStart: ${task.startDate}\nEnd: ${task.endDate}`} className={`h-7 rounded-md flex items-center justify-between px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : 'bg-accent-blue'}`}
+                                        onPointerDown={(e) => { e.preventDefault(); const taskStart = parseDate(task.startDate); const taskEnd = parseDate(task.endDate); if (isNaN(taskStart.getTime()) || isNaN(taskEnd.getTime())) return; setInteraction({ type: 'drag', taskId: task.id, pointerId: e.pointerId, startPointerX: e.clientX, originalTask: task, originalStartIndex: dateToIndexUTC(chartStartDate, taskStart), originalEndIndex: dateToIndexUTC(chartStartDate, taskEnd) }); }}>
+                                        <span className="truncate pointer-events-none">{task.name}</span>
+                                    </div>
+                                    <div onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const taskStart = parseDate(task.startDate); const taskEnd = parseDate(task.endDate); if (isNaN(taskStart.getTime()) || isNaN(taskEnd.getTime())) return; setInteraction({ type: 'resize-start', taskId: task.id, pointerId: e.pointerId, startPointerX: e.clientX, originalTask: task, originalStartIndex: dateToIndexUTC(chartStartDate, taskStart), originalEndIndex: dateToIndexUTC(chartStartDate, taskEnd) }); }} className="absolute -left-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                    <div onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const taskStart = parseDate(task.startDate); const taskEnd = parseDate(task.endDate); if (isNaN(taskStart.getTime()) || isNaN(taskEnd.getTime())) return; setInteraction({ type: 'resize-end', taskId: task.id, pointerId: e.pointerId, startPointerX: e.clientX, originalTask: task, originalStartIndex: dateToIndexUTC(chartStartDate, taskStart), originalEndIndex: dateToIndexUTC(chartStartDate, taskEnd) }); }} className="absolute -right-2 top-0 w-4 h-7 cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                </div>
+                            )
+                        })}
+                         {creatingState && tempCreatingBar && (
+                            <div className="absolute h-7 pointer-events-none bg-accent-blue/50 rounded-md" 
+                            style={{ ...tempCreatingBar, top: `${allTasks.findIndex(t => t.id === creatingState.task.id) * rowHeight + 6}px` }}></div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

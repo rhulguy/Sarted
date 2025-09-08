@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Header from './components/Header';
 import ProjectList from './components/ProjectList';
 import TaskList from './components/TaskList';
@@ -20,19 +20,19 @@ import GlobalMindMapView from './components/GlobalMindMapView';
 import { useAuth, User } from './contexts/AuthContext';
 import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
-import DreamBoardView from './components/DreamBoardView';
-// MyAccountView will be inlined in this file
-// import MyAccountView from './components/MyAccountView';
-import { Resource, Project, ProjectGroup, ProjectView } from './types';
-import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon, ViewListIcon } from './components/IconComponents';
+import { Resource, Project, ProjectGroup, ProjectView, BackupData } from './types';
+import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon, SparklesIcon, UploadIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
 import { useDownloadImage } from './hooks/useDownloadImage';
+import { useHabit } from './contexts/HabitContext';
+import { useInbox } from './contexts/InboxContext';
+import { useLoading } from './contexts/LoadingContext';
+import Footer from './components/Footer';
+import DataManagementModal from './components/DataManagementModal';
 
 
-// --- NEW RESOURCE COMPONENTS (Inlined due to file system constraints) ---
-
-// Helper: Custom hook for detecting clicks outside an element
+// --- HELPER HOOK (Moved to top-level for stability) ---
 const useClickOutside = (ref: React.RefObject<HTMLElement>, handler: (event: MouseEvent) => void) => {
     useEffect(() => {
         const listener = (event: MouseEvent) => {
@@ -48,7 +48,8 @@ const useClickOutside = (ref: React.RefObject<HTMLElement>, handler: (event: Mou
     }, [ref, handler]);
 };
 
-// Helper: Project Multi-Select Popover
+// --- STABLE TOP-LEVEL COMPONENT DEFINITIONS ---
+
 const ProjectMultiSelect: React.FC<{
     selectedProjectIds: string[];
     onSelectionChange: (ids: string[]) => void;
@@ -113,8 +114,6 @@ const ProjectMultiSelect: React.FC<{
     );
 };
 
-
-// AddResourceModal Component
 const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void; initialContext?: { projectId?: string; groupId?: string } }> = ({ isOpen, onClose, initialContext }) => {
     const { addResource } = useResource();
     const { projects, projectGroups } = useProject();
@@ -234,103 +233,11 @@ const ExportDropdown: React.FC<{
     );
 };
 
-const ResourceListItem: React.FC<{ resource: Resource, onUpdate: (r: Resource) => void, onDelete: (id: string) => void, projects: Project[], projectGroups: ProjectGroup[] }> = ({ resource, onUpdate, onDelete, projects, projectGroups }) => {
-    const [isEditingNotes, setIsEditingNotes] = useState(false);
-    const [notes, setNotes] = useState(resource.notes);
-    const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
-
-    useEffect(() => {
-        if (isEditingNotes) {
-            notesTextareaRef.current?.focus();
-            notesTextareaRef.current?.select();
-        }
-    }, [isEditingNotes]);
-
-    const handleSaveNotes = () => {
-        if (notes.trim() !== resource.notes) {
-            onUpdate({ ...resource, notes: notes.trim() });
-        }
-        setIsEditingNotes(false);
-    };
-
-    return (
-        <div className="grid grid-cols-12 gap-4 items-center bg-card-background p-3 rounded-xl shadow-card hover:bg-app-background/50 transition-colors">
-            {/* Column 1: Resource Title/URL */}
-            <div className="col-span-3 flex items-center gap-3 min-w-0">
-                <img src={resource.thumbnailUrl} alt={resource.title} className="w-10 h-10 rounded-lg border border-border-color object-contain shrink-0" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
-                <div className="min-w-0">
-                    <a href={resource.url} target="_blank" rel="noopener noreferrer" className="font-semibold truncate text-text-primary hover:text-accent-blue">{resource.title}</a>
-                    <p className="text-sm text-text-secondary truncate">{resource.url}</p>
-                </div>
-            </div>
-
-            {/* Column 2: Notes (Editable) */}
-            <div className="col-span-3">
-                {isEditingNotes ? (
-                    <textarea
-                        ref={notesTextareaRef}
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        onBlur={handleSaveNotes}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveNotes(); }
-                            if (e.key === 'Escape') { setNotes(resource.notes); setIsEditingNotes(false); }
-                        }}
-                        placeholder="Add notes..."
-                        className="text-sm w-full bg-app-background border border-accent-blue rounded-md p-1 focus:outline-none resize-none"
-                        rows={2}
-                    />
-                ) : (
-                    <p onClick={() => setIsEditingNotes(true)} className="text-sm text-text-secondary truncate cursor-pointer hover:text-text-primary h-10 py-1">
-                        {resource.notes || <span className="text-gray-400">Add notes...</span>}
-                    </p>
-                )}
-            </div>
-
-            {/* Column 3: Group */}
-            <div className="col-span-2">
-                <select 
-                    value={resource.projectGroupId} 
-                    onChange={e => onUpdate({ ...resource, projectGroupId: e.target.value })} 
-                    className="w-full bg-app-background border border-border-color rounded-lg p-2 text-sm"
-                >
-                    <option value="" disabled>Select a group</option>
-                    {projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
-            </div>
-
-            {/* Column 4: Projects */}
-            <div className="col-span-3">
-                 <ProjectMultiSelect 
-                    selectedProjectIds={resource.projectIds} 
-                    onSelectionChange={(ids) => onUpdate({ ...resource, projectIds: ids })} 
-                    projects={projects} 
-                    projectGroups={projectGroups}
-                 >
-                    <div className="w-full bg-app-background border border-border-color rounded-lg p-2 text-sm text-left flex justify-between items-center">
-                        <span className="truncate">{resource.projectIds.length > 0 ? `${resource.projectIds.length} project(s) selected` : 'None selected'}</span>
-                        <ChevronDownIcon className="w-4 h-4" />
-                    </div>
-                </ProjectMultiSelect>
-            </div>
-            
-            {/* Column 5: Actions */}
-            <div className="col-span-1 flex justify-end items-center gap-1">
-                <a href={resource.url} target="_blank" rel="noopener noreferrer" title="Open link" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><LinkIcon className="w-5 h-5"/></a>
-                <button onClick={() => { if(window.confirm('Delete this resource?')) onDelete(resource.id); }} title="Delete" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><TrashIcon className="w-5 h-5"/></button>
-            </div>
-        </div>
-    );
-};
-
-
-// ResourceView Component
 const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }) => {
     const { resources, loading, updateResource, deleteResource } = useResource();
     const { projects, projectGroups } = useProject();
     const [filterGroupId, setFilterGroupId] = useState('all');
     const [filterProjectId, setFilterProjectId] = useState('all');
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const { ref: downloadRef, downloadImage } = useDownloadImage<HTMLDivElement>();
 
     const filteredResources = useMemo(() => {
@@ -393,61 +300,32 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
             <header className="flex-wrap items-center justify-between pb-6 gap-4 flex">
                 <div><h1 className="text-3xl font-bold">Resources</h1></div>
                 <div className="flex items-center gap-2 flex-wrap">
-                     <div className="bg-card-background p-1 rounded-lg flex space-x-1 border border-border-color">
-                        <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-accent-blue text-white' : 'hover:bg-app-background'}`} title="Grid View">
-                            <ViewGridIcon className={`w-5 h-5 ${viewMode !== 'grid' ? 'text-text-primary' : ''}`} />
-                        </button>
-                        <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-accent-blue text-white' : 'hover:bg-app-background'}`} title="List View">
-                            <ViewListIcon className={`w-5 h-5 ${viewMode !== 'list' ? 'text-text-primary' : ''}`} />
-                        </button>
-                    </div>
                      <select value={filterGroupId} onChange={e => setFilterGroupId(e.target.value)} className="bg-card-background border border-border-color rounded-full px-4 py-2 text-sm"><option value="all">All Groups</option>{projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
                      <select value={filterProjectId} onChange={e => setFilterProjectId(e.target.value)} className="bg-card-background border border-border-color rounded-full px-4 py-2 text-sm"><option value="all">All Projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
                      <ExportDropdown onExportImage={() => downloadImage('resources.png')} onExportCsv={exportAsCsv} onExportDoc={exportAsDoc} />
                 </div>
             </header>
             <div ref={downloadRef} className="flex-grow overflow-y-auto p-2 -m-2">
-                 {loading ? (
-                    <div className="text-center text-text-secondary p-8">Loading resources...</div>
-                ) : filteredResources.length === 0 ? (
-                    <div className="col-span-full bg-card-background rounded-2xl shadow-card p-8 flex flex-col items-center justify-center text-center">
-                        <div className="text-4xl mb-4">✨</div>
-                        <h3 className="text-xl font-semibold mb-2">Add your first resource</h3>
-                        <p className="text-text-secondary mb-4">Save links, articles, and inspiration.</p>
-                        <button onClick={onAddResource} className="px-6 py-2 bg-accent-yellow text-text-primary font-semibold rounded-full hover:opacity-90">Add</button>
-                    </div>
-                ) : (
-                    <>
-                        {viewMode === 'grid' ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                {filteredResources.map(res => (
-                                    <ResourceCard key={res.id} resource={res} onUpdate={updateResource} onDelete={deleteResource} projects={projects} projectGroups={projectGroups} />
-                                ))}
-                                <button onClick={onAddResource} className="border-2 border-dashed border-border-color rounded-2xl flex flex-col items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors min-h-[16rem]">
-                                    <PlusIcon className="w-8 h-8 mb-2" />
-                                    <span className="font-semibold">Add Resource</span>
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-semibold text-text-secondary uppercase">
-                                    <div className="col-span-3">Resource</div>
-                                    <div className="col-span-3">Notes</div>
-                                    <div className="col-span-2">Group</div>
-                                    <div className="col-span-3">Projects</div>
-                                    <div className="col-span-1 text-right">Actions</div>
-                                </div>
-                                {filteredResources.map(res => (
-                                    <ResourceListItem key={res.id} resource={res} onUpdate={updateResource} onDelete={deleteResource} projects={projects} projectGroups={projectGroups} />
-                                ))}
-                                <button onClick={onAddResource} className="mt-4 w-full border-2 border-dashed border-border-color rounded-xl flex items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors p-4">
-                                    <PlusIcon className="w-6 h-6 mr-2" />
-                                    <span className="font-semibold">Add New Resource</span>
-                                </button>
-                            </div>
-                        )}
-                    </>
-                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                     {loading ? (
+                        Array.from({length: 4}).map((_, i) => <div key={i} className="h-64 bg-card-background rounded-2xl shadow-card animate-pulse"></div>)
+                    ) : filteredResources.length === 0 ? (
+                        <div className="col-span-full bg-card-background rounded-2xl shadow-card p-8 flex flex-col items-center justify-center text-center">
+                            <div className="text-4xl mb-4">✨</div>
+                            <h3 className="text-xl font-semibold mb-2">Add your first resource</h3>
+                            <p className="text-text-secondary mb-4">Save links, articles, and inspiration.</p>
+                            <button onClick={onAddResource} className="px-6 py-2 bg-accent-yellow text-text-primary font-semibold rounded-full hover:opacity-90">Add</button>
+                        </div>
+                    ) : (
+                        filteredResources.map(res => (
+                            <ResourceCard key={res.id} resource={res} onUpdate={updateResource} onDelete={deleteResource} projects={projects} projectGroups={projectGroups} />
+                        ))
+                    )}
+                    <button onClick={onAddResource} className="border-2 border-dashed border-border-color rounded-2xl flex flex-col items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors min-h-[16rem]">
+                        <PlusIcon className="w-8 h-8 mb-2" />
+                        <span className="font-semibold">Add Resource</span>
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -457,98 +335,28 @@ const ResourceCard: React.FC<{ resource: Resource, onUpdate: (r: Resource) => vo
     const group = projectGroups.find(g => g.id === resource.projectGroupId);
     const linkedProjects = useMemo(() => resource.projectIds.map(id => projects.find(p => p.id === id)).filter(Boolean), [resource.projectIds, projects]);
     
-    const [isEditingNotes, setIsEditingNotes] = useState(false);
-    const [notes, setNotes] = useState(resource.notes);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    const [isEditingLinks, setIsEditingLinks] = useState(false);
-
-    useEffect(() => {
-        if (isEditingNotes) {
-            textareaRef.current?.focus();
-            textareaRef.current?.select();
-        }
-    }, [isEditingNotes]);
-
-    const handleSaveNotes = () => {
-        if (notes.trim() !== resource.notes) {
-            onUpdate({ ...resource, notes: notes.trim() });
-        }
-        setIsEditingNotes(false);
-    };
-
     return (
-        <div className="bg-card-background rounded-2xl shadow-card p-5 flex flex-col justify-between">
-            <div>
-                <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <img src={resource.thumbnailUrl} alt={resource.title} className="w-12 h-12 rounded-full border-2 border-border-color p-1 object-contain shrink-0" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
-                        <div className="min-w-0">
-                            <h3 className="font-semibold truncate">{resource.title}</h3>
-                        </div>
-                    </div>
-                     <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => setIsEditingLinks(p => !p)} title="Edit links" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><PencilIcon className="w-5 h-5"/></button>
-                        <a href={resource.url} target="_blank" rel="noopener noreferrer" title={resource.url} className="p-2 rounded-full hover:bg-app-background text-text-secondary"><LinkIcon className="w-5 h-5"/></a>
-                        <button onClick={() => { if(window.confirm('Delete this resource?')) onDelete(resource.id); }} title="Delete" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><TrashIcon className="w-5 h-5"/></button>
+        <div className="bg-card-background rounded-2xl shadow-card p-5 flex flex-col gap-4">
+            <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                    <img src={resource.thumbnailUrl} alt={resource.title} className="w-12 h-12 rounded-full border-2 border-border-color p-1 object-contain" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
+                    <div className="min-w-0">
+                        <h3 className="font-semibold truncate">{resource.title}</h3>
+                        <p className="text-sm text-text-secondary truncate">{resource.notes || "No notes yet."}</p>
                     </div>
                 </div>
-                 {isEditingNotes ? (
-                    <textarea
-                        ref={textareaRef}
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        onBlur={handleSaveNotes}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveNotes(); }
-                            if (e.key === 'Escape') { setNotes(resource.notes); setIsEditingNotes(false); }
-                        }}
-                        placeholder="Add notes..."
-                        className="text-sm w-full bg-app-background border border-accent-blue rounded-md p-1 mt-1 focus:outline-none resize-none"
-                        rows={3}
-                    />
-                ) : (
-                    <p
-                        onClick={() => setIsEditingNotes(true)}
-                        className="text-sm text-text-secondary cursor-pointer hover:text-text-primary min-h-[3.5rem]"
-                    >
-                        {resource.notes || <span className="text-gray-400">Add notes...</span>}
-                    </p>
-                )}
+                 <div className="flex items-center gap-2">
+                    <a href={resource.url} target="_blank" rel="noopener noreferrer" title={resource.url} className="p-2 rounded-full hover:bg-app-background text-text-secondary"><LinkIcon className="w-5 h-5"/></a>
+                    <button onClick={() => { if(window.confirm('Delete this resource?')) onDelete(resource.id); }} title="Delete" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><TrashIcon className="w-5 h-5"/></button>
+                </div>
             </div>
-            <div className="mt-2">
-                {isEditingLinks ? (
-                     <div className="space-y-2 p-2 bg-app-background rounded-lg border border-border-color">
-                        <div>
-                            <label className="text-xs font-medium text-text-secondary">Project Group</label>
-                            <select value={resource.projectGroupId} onChange={e => onUpdate({ ...resource, projectGroupId: e.target.value })} className="w-full mt-1 bg-card-background border border-border-color rounded-lg p-1 text-sm">
-                                <option value="" disabled>Select group</option>
-                                {projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="text-xs font-medium text-text-secondary">Projects</label>
-                            <ProjectMultiSelect selectedProjectIds={resource.projectIds} onSelectionChange={(ids) => onUpdate({ ...resource, projectIds: ids })} projects={projects} projectGroups={projectGroups}>
-                                <div className="w-full mt-1 bg-card-background border border-border-color rounded-lg p-1.5 text-sm text-left flex justify-between items-center">
-                                    <span className="truncate">{resource.projectIds.length} selected</span>
-                                    <ChevronDownIcon className="w-4 h-4" />
-                                </div>
-                            </ProjectMultiSelect>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {group && <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${group.color}`}>{group.name}</span>}
-                        {linkedProjects.map(p => p && <span key={p.id} className="px-3 py-1 rounded-full text-xs font-medium bg-app-background text-text-secondary">{p.name}</span>)}
-                    </div>
-                )}
+            <div className="flex items-center gap-2 flex-wrap">
+                {group && <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${group.color}`}>{group.name}</span>}
+                {linkedProjects.map(p => p && <span key={p.id} className="px-3 py-1 rounded-full text-xs font-medium bg-app-background text-text-secondary">{p.name}</span>)}
             </div>
         </div>
     );
 };
-
-
-// --- Projects Dashboard (Replaces WelcomePlaceholder) ---
 
 const ProjectsDashboardView = () => {
     const { visibleProjects, projectGroups, selectProject, archiveProject, deleteProject, updateProject } = useProject();
@@ -573,7 +381,7 @@ const ProjectsDashboardView = () => {
                 {groupedProjects.map(group => (
                     <div key={group.id}>
                          <h2 className="flex items-center text-xl font-semibold text-text-primary mb-3">
-                            <span className="text-2xl mr-3">{group.icon || '📁'}</span>
+                            <span className={`w-4 h-4 rounded-full ${group.color} mr-3`}></span>
                             {group.name}
                         </h2>
                         {group.projects.length > 0 ? (
@@ -665,14 +473,20 @@ const ProjectCard: React.FC<{ project: Project, onClick: () => void, onArchive: 
 const MyAccountView: React.FC = () => {
     const { user, updateUserProfile, deleteUserAccount, loading } = useAuth();
     const [isEditingName, setIsEditingName] = useState(false);
-    const [displayName, setDisplayName] = useState(user?.name || '');
+    const [displayName, setDisplayName] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
+    
+    // Create a safe user object with fallbacks to prevent rendering errors from null/undefined data
+    const safeUser = useMemo(() => ({
+        name: user?.name || 'User',
+        email: user?.email || 'No email provided',
+        picture: user?.picture || '',
+        plan: user?.plan || 'free',
+    }), [user]);
 
     useEffect(() => {
-        if (user) {
-            setDisplayName(user.name);
-        }
-    }, [user]);
+        setDisplayName(safeUser.name);
+    }, [safeUser.name]);
 
     const handleNameSave = async () => {
         if (user && displayName.trim() && displayName.trim() !== user.name) {
@@ -686,7 +500,6 @@ const MyAccountView: React.FC = () => {
             setIsDeleting(true);
             try {
                 await deleteUserAccount();
-                // The AuthProvider will handle logging the user out upon successful deletion.
             } catch (error) {
                 console.error("Failed to delete account:", error);
                 alert("Could not delete account. Please try again.");
@@ -695,7 +508,7 @@ const MyAccountView: React.FC = () => {
         }
     };
 
-    if (loading || !user) {
+    if (loading) {
         return (
             <div className="h-full flex items-center justify-center">
                 <Spinner />
@@ -715,7 +528,7 @@ const MyAccountView: React.FC = () => {
                 <div className="bg-card-background rounded-2xl shadow-card border border-border-color p-6">
                     <h2 className="text-xl font-semibold mb-4 text-text-primary">Profile</h2>
                     <div className="flex items-center space-x-6">
-                        <img src={user.picture || ''} alt="Profile" className="w-20 h-20 rounded-full" />
+                        <img src={safeUser.picture} alt="Profile" className="w-20 h-20 rounded-full" />
                         <div className="flex-grow">
                             <div className="flex items-center gap-4">
                                 {isEditingName ? (
@@ -729,24 +542,15 @@ const MyAccountView: React.FC = () => {
                                         autoFocus
                                     />
                                 ) : (
-                                    <h3 className="text-2xl font-bold text-text-primary">{user.name}</h3>
+                                    <h3 className="text-2xl font-bold text-text-primary">{safeUser.name}</h3>
                                 )}
                                 <button onClick={() => setIsEditingName(!isEditingName)} className="text-text-secondary hover:text-accent-blue">
                                     <EditIcon className="w-5 h-5" />
                                 </button>
                             </div>
-                            <p className="text-text-secondary">{user.email}</p>
+                            <p className="text-text-secondary">{safeUser.email}</p>
                         </div>
                     </div>
-                </div>
-
-                {/* Plan Section */}
-                <div className="bg-card-background rounded-2xl shadow-card border border-border-color p-6">
-                     <h2 className="text-xl font-semibold mb-4 text-text-primary">Current Plan</h2>
-                     <div className="flex items-center justify-between">
-                        <p className="text-text-primary">You are currently on the <span className="font-bold text-brand-teal">{user.plan === 'free' ? 'Free Tier' : 'Paid Tier'}</span>.</p>
-                        <button className="px-4 py-2 bg-accent-blue text-white rounded-lg opacity-50 cursor-not-allowed" disabled>Upgrade Plan</button>
-                     </div>
                 </div>
 
                 {/* Danger Zone */}
@@ -769,14 +573,163 @@ const MyAccountView: React.FC = () => {
     );
 };
 
+const SlideshowModal: React.FC<{
+    images: string[];
+    isOpen: boolean;
+    onClose: () => void;
+}> = ({ images, isOpen, onClose }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [speed, setSpeed] = useState(500); // ms
+
+    useEffect(() => {
+        if (!isOpen || images.length === 0) return;
+        const timer = setTimeout(() => {
+            setCurrentIndex(prev => (prev + 1) % images.length);
+        }, speed);
+        return () => clearTimeout(timer);
+    }, [isOpen, currentIndex, speed, images.length]);
+
+    if (!isOpen || images.length === 0) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center z-50 p-4" onClick={onClose}>
+            <img src={images[currentIndex]} alt="Slideshow" className="max-w-full max-h-[80vh] object-contain rounded-lg"/>
+            <div className="absolute bottom-5 w-full max-w-md p-2 bg-black/50 rounded-lg">
+                <label className="flex items-center justify-center gap-3 text-white">
+                    <span>Slow</span>
+                    <input
+                        type="range"
+                        min="100" // 0.1s
+                        max="1000" // 1s
+                        step="100"
+                        value={speed}
+                        onChange={(e) => setSpeed(Number(e.target.value))}
+                        className="w-full"
+                    />
+                    <span>Fast</span>
+                </label>
+            </div>
+            <button onClick={onClose} className="absolute top-4 right-4 text-white text-4xl">&times;</button>
+        </div>
+    );
+};
+
+const DreamBoardView: React.FC = () => {
+    const { visibleProjects, projectGroups, updateProject } = useProject();
+    const [isSlideshowOpen, setIsSlideshowOpen] = useState(false);
+    const [uploadContext, setUploadContext] = useState<{ project: Project; index: number } | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const groupMap = useMemo(() => new Map(projectGroups.map(g => [g.id, g])), [projectGroups]);
+    
+    const allImages = useMemo(() => 
+        visibleProjects.flatMap(p => p.dreamBoardImages || []).filter(Boolean),
+    [visibleProjects]);
+
+    const handleImageUploadClick = (project: Project, index: number) => {
+        setUploadContext({ project, index });
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (!event.target.files || event.target.files.length === 0 || !uploadContext) {
+            return;
+        }
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = async (loadEvent) => {
+            const imageUrl = loadEvent.target?.result as string;
+            if (imageUrl) {
+                const { project, index } = uploadContext;
+                const newImages = [...(project.dreamBoardImages || Array(4).fill(null))];
+                newImages[index] = imageUrl;
+                await updateProject(project.id, { dreamBoardImages: newImages });
+            }
+            setUploadContext(null);
+        };
+        reader.onerror = () => {
+            alert("Failed to read the image file.");
+            setUploadContext(null);
+        }
+        reader.readAsDataURL(file);
+        // Reset file input to allow uploading the same file again
+        event.target.value = '';
+    };
+
+
+    return (
+        <div className="h-full flex flex-col">
+            <header className="p-4 md:p-6 border-b border-border-color shrink-0 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold">Dream Board</h1>
+                    <p className="text-text-secondary">Visualize your project goals.</p>
+                </div>
+                <button 
+                    onClick={() => setIsSlideshowOpen(true)}
+                    disabled={allImages.length === 0}
+                    className="px-4 py-2 bg-brand-purple text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+                >
+                    Slideshow
+                </button>
+            </header>
+            <div className="flex-grow overflow-y-auto">
+                 <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/png, image/jpeg, image/webp"
+                    style={{ display: 'none' }}
+                />
+                {visibleProjects.map(project => {
+                    const group = groupMap.get(project.groupId);
+                    return (
+                        <div key={project.id} className="border-b border-border-color p-4 md:p-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                {group && <div className={`w-3 h-3 rounded-full ${group.color} shrink-0`}></div>}
+                                <h2 className="text-xl font-semibold">{project.name}</h2>
+                                <span className="text-sm text-text-secondary">{group?.name}</span>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {Array.from({ length: 4 }).map((_, index) => {
+                                    const image = project.dreamBoardImages?.[index];
+                                    return (
+                                        <div key={index} className="aspect-video bg-app-background rounded-lg border border-border-color flex items-center justify-center relative overflow-hidden group">
+                                            {image ? (
+                                                <>
+                                                    <img src={image} alt={`Dream board for ${project.name} #${index + 1}`} className="w-full h-full object-cover" />
+                                                    <button onClick={() => handleImageUploadClick(project, index)} className="absolute inset-0 bg-black/50 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity" title="Change image">
+                                                        <PencilIcon className="w-8 h-8"/>
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <button onClick={() => handleImageUploadClick(project, index)} className="text-text-secondary hover:text-accent-blue" title="Upload image">
+                                                    <UploadIcon className="w-8 h-8"/>
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            <SlideshowModal images={allImages} isOpen={isSlideshowOpen} onClose={() => setIsSlideshowOpen(false)} />
+        </div>
+    );
+};
 
 // --- App Component ---
 type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account' | 'dreamboard';
 
 export default function App() {
-  const { projects, selectedProject, selectedProjectId, selectProject } = useProject();
+  const { projects, selectedProject, selectedProjectId, selectProject, projectGroups, importAndOverwriteProjectsAndGroups } = useProject();
+  const { resources, importAndOverwriteResources } = useResource();
+  const { habits, importAndOverwriteHabits } = useHabit();
+  const { tasks: inboxTasks, importAndOverwriteInbox } = useInbox();
+  const { dispatch: loadingDispatch } = useLoading();
   const { shouldShowReview, setReviewShown } = useWeeklyReview();
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   
   const [isProjectModalOpen, setIsProjectModalOpen] = useState<boolean>(false);
   const [isHabitModalOpen, setIsHabitModalOpen] = useState<boolean>(false);
@@ -785,20 +738,97 @@ export default function App() {
   const [isGroupEditorOpen, setIsGroupEditorOpen] = useState<boolean>(false);
   const [isAddResourceModalOpen, setIsAddResourceModalOpen] = useState<boolean>(false);
   const [resourceModalContext, setResourceModalContext] = useState<{ projectId?: string; groupId?: string } | null>(null);
+  const [isDataManagementModalOpen, setIsDataManagementModalOpen] = useState(false);
+  const [dataManagementMode, setDataManagementMode] = useState<'import' | 'export'>('export');
+  const [isImporting, setIsImporting] = useState(false);
 
   const [mainView, setMainView] = useState<MainView>('projects');
   const [projectView, setProjectView] = useState<ProjectView>('list');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
 
-  // Show the weekly review modal when the context says so.
+  const handleExportData = useCallback(() => {
+    if (!user) {
+        alert("Please sign in to export your data.");
+        return;
+    }
+    try {
+        const backupData: BackupData = {
+            version: "1.0.0",
+            exportedAt: new Date().toISOString(),
+            projectGroups,
+            projects,
+            habits,
+            resources,
+            inboxTasks,
+        };
+        const jsonString = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `sarted-backup-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error("Failed to export data:", error);
+        alert("An error occurred while exporting your data. Please check the console for details.");
+    }
+  }, [user, projectGroups, projects, habits, resources, inboxTasks]);
+
+  const handleImportData = useCallback(async (file: File) => {
+    if (!user) {
+      alert("Please sign in to import data.");
+      return;
+    }
+    setIsImporting(true);
+    loadingDispatch({ type: 'SET_LOADING', payload: true });
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            const result = event.target?.result;
+            if (typeof result !== 'string') throw new Error("File could not be read.");
+            
+            const data: BackupData = JSON.parse(result);
+
+            if (!data.version || !Array.isArray(data.projects) || !Array.isArray(data.projectGroups) || !Array.isArray(data.habits) || !Array.isArray(data.resources) || !Array.isArray(data.inboxTasks)) {
+                throw new Error("Invalid backup file format.");
+            }
+
+            await Promise.all([
+                importAndOverwriteProjectsAndGroups({ projects: data.projects, projectGroups: data.projectGroups }),
+                importAndOverwriteHabits({ habits: data.habits }),
+                importAndOverwriteResources({ resources: data.resources }),
+                importAndOverwriteInbox({ inboxTasks: data.inboxTasks }),
+            ]);
+
+            alert("Data imported successfully! The application will now reload.");
+            window.location.reload();
+        } catch (error) {
+            console.error("Failed to import data:", error);
+            alert(`An error occurred during import: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            setIsImporting(false);
+            loadingDispatch({ type: 'SET_LOADING', payload: false });
+        }
+    };
+    reader.onerror = () => {
+        alert("Failed to read the backup file.");
+        setIsImporting(false);
+        loadingDispatch({ type: 'SET_LOADING', payload: false });
+    };
+    reader.readAsText(file);
+  }, [user, importAndOverwriteProjectsAndGroups, importAndOverwriteHabits, importAndOverwriteResources, importAndOverwriteInbox, loadingDispatch]);
+
   useEffect(() => {
     if (shouldShowReview) {
       setIsReviewModalOpen(true);
     }
   }, [shouldShowReview]);
 
-  // Command Bar keyboard shortcut
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
@@ -810,15 +840,12 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Effect to close mobile sidebar when switching to desktop
   useEffect(() => {
     if (!isMobile) {
       setIsSidebarOpen(false);
     }
   }, [isMobile]);
 
-  // Effect to switch to project view when a project is selected
-  // and close the mobile sidebar
   useEffect(() => {
     if (selectedProjectId) {
       setMainView('projects');
@@ -849,6 +876,8 @@ export default function App() {
         return <InboxView />;
       case 'calendar':
         return <GlobalCalendar />;
+      case 'dreamboard':
+        return <DreamBoardView />;
       case 'global-mindmap':
         return <GlobalMindMapView onNewProject={() => setIsProjectModalOpen(true)} />;
       case 'global-gantt':
@@ -857,8 +886,6 @@ export default function App() {
         return <HabitTracker onNewHabit={() => setIsHabitModalOpen(true)} />;
       case 'resources':
         return <ResourceView onAddResource={() => handleOpenAddResourceModal()} />;
-      case 'dreamboard':
-        return <DreamBoardView />;
       case 'my-account':
         return <MyAccountView />;
       case 'projects':
@@ -905,11 +932,17 @@ export default function App() {
             onEditGroups={() => setIsGroupEditorOpen(true)}
           />
         </Sidebar>
-        <main className="flex-1 bg-card-background md:p-0">
-          <ErrorBoundary>
-            {renderMainContent()}
-          </ErrorBoundary>
-        </main>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <main className="flex-1 bg-card-background md:p-0 overflow-y-auto min-h-0">
+            <ErrorBoundary>
+              {renderMainContent()}
+            </ErrorBoundary>
+          </main>
+          <Footer
+            onExportClick={() => { setDataManagementMode('export'); setIsDataManagementModalOpen(true); }}
+            onImportClick={() => { setDataManagementMode('import'); setIsDataManagementModalOpen(true); }}
+          />
+        </div>
       </div>
       {isProjectModalOpen && (
         <CreateProjectModal 
@@ -949,6 +982,16 @@ export default function App() {
                 setIsReviewModalOpen(false);
                 setReviewShown();
             }}
+        />
+      )}
+      {isDataManagementModalOpen && (
+        <DataManagementModal
+            isOpen={isDataManagementModalOpen}
+            onClose={() => setIsDataManagementModalOpen(false)}
+            mode={dataManagementMode}
+            onExport={handleExportData}
+            onImport={handleImportData}
+            isImporting={isImporting}
         />
       )}
     </div>

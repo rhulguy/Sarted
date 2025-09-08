@@ -1,42 +1,33 @@
-// FIX: Use compat library for initialization to support older Firebase versions while maintaining v9 modular API for services.
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/auth';
-import 'firebase/compat/firestore';
-import 'firebase/compat/storage';
-import { getAuth } from "firebase/auth";
-import { 
-  initializeFirestore, 
-  persistentLocalCache, 
-  persistentMultipleTabManager,
-  CACHE_SIZE_UNLIMITED 
-} from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { getFirestore } from "firebase/firestore";
+import firebase from "firebase/compat/app";
+import "firebase/compat/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAXsEQK4GEtFCKZfsEVFihlQedivNWGzbc",
   authDomain: "swapmoo-e2b68.firebaseapp.com",
   projectId: "swapmoo-e2b68",
-  storageBucket: "swapmoo-e2b68.appspot.com", // CRITICAL FIX: This was missing
   messagingSenderId: "116829841158",
   appId: "1:116829841158:web:4afdd2b00706541c3ba087"
 };
 
-// Initialize Firebase
-// FIX: Use compat version of initializeApp.
-const app = firebase.initializeApp(firebaseConfig);
+// Initialize using the v8 compat API.
+// This creates the default app instance that both v8 compat services (like auth)
+// and v9 modular services (like getFirestore) can automatically discover.
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
-// Initialize Firebase services using the v9 modular API.
-export const auth = getAuth(app);
+// Get the v9 Firestore service. It automatically uses the default app initialized above.
+export const db = getFirestore();
 
-// PERFORMANCE FIX: Robust Firestore initialization to prevent connection timeouts
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    cacheSizeBytes: CACHE_SIZE_UNLIMITED,
-    tabManager: persistentMultipleTabManager()
-  }),
-  experimentalAutoDetectLongPolling: true,
-  useFetchStreams: false,
-});
+// Get the v8 Auth service. It also automatically uses the default app.
+export const auth = firebase.auth();
 
-export const storage = getStorage(app);
+// Set auth persistence to 'local' for better cross-origin/incognito support
+// This helps ensure the sign-in state is remembered after the Google sign-in popup.
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+  .catch((error) => {
+    // This can happen in restricted environments like browser extensions.
+    console.error("Firebase auth persistence error:", error.code, error.message);
+  });

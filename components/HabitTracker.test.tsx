@@ -27,15 +27,18 @@ const mockHabits: Habit[] = [
 ];
 
 describe('HabitTracker component', () => {
+  // Fix: The context now uses specific functions instead of a generic dispatch.
   const mockAddHabit = vi.fn();
   const mockUpdateHabit = vi.fn();
   const mockDeleteHabit = vi.fn();
+  // FIX: Add missing mock function for importAndOverwriteHabits
+  const mockImportAndOverwriteHabits = vi.fn();
   const mockOnNewHabit = vi.fn();
 
   // Helper to render the component with a mock context
   const renderComponent = (habits: Habit[] = mockHabits) => {
     return render(
-      <HabitContext.Provider value={{ habits, addHabit: mockAddHabit, updateHabit: mockUpdateHabit, deleteHabit: mockDeleteHabit }}>
+      <HabitContext.Provider value={{ habits, addHabit: mockAddHabit, updateHabit: mockUpdateHabit, deleteHabit: mockDeleteHabit, importAndOverwriteHabits: mockImportAndOverwriteHabits }}>
         <HabitTracker onNewHabit={mockOnNewHabit} />
       </HabitContext.Provider>
     );
@@ -48,6 +51,8 @@ describe('HabitTracker component', () => {
     mockAddHabit.mockClear();
     mockUpdateHabit.mockClear();
     mockDeleteHabit.mockClear();
+    // FIX: Clear the new mock function before each test
+    mockImportAndOverwriteHabits.mockClear();
     mockOnNewHabit.mockClear();
   });
 
@@ -74,6 +79,7 @@ describe('HabitTracker component', () => {
     const dailyHabitCheckbox = screen.getByLabelText('Mark Daily Meditation as complete for 2024-07-30');
     fireEvent.click(dailyHabitCheckbox);
 
+    // Fix: Assert that updateHabit was called with the correct payload.
     expect(mockUpdateHabit).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'habit-1',
@@ -120,6 +126,7 @@ describe('HabitTracker component', () => {
     // Note: The delete button is only visible on hover, but fireEvent works without simulating hover
     const deleteButton = screen.getByTitle('Delete habit: Daily Meditation');
     fireEvent.click(deleteButton);
+    // Fix: Assert that deleteHabit was called with the correct habit ID.
     expect(mockDeleteHabit).toHaveBeenCalledWith('habit-1');
   });
 });

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+// FIX: Import firebase v8 compat library and remove modular auth imports to fix missing member errors.
+import firebase from 'firebase/compat/app';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { GoogleIcon } from './IconComponents';
@@ -10,21 +11,20 @@ const Auth: React.FC = () => {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const handleGoogleSignIn = async () => {
-        const provider = new GoogleAuthProvider();
+        // FIX: Use v8 compat syntax for GoogleAuthProvider.
+        const provider = new firebase.auth.GoogleAuthProvider();
         try {
-            await signInWithPopup(auth, provider);
-        } catch (error: any) { // Type as any to access 'code' property
+            // FIX: Use v8 compat syntax for signInWithPopup.
+            await auth.signInWithPopup(provider);
+        } catch (error) {
             console.error("Error during Google sign-in:", error);
-            if (error.code === 'auth/unauthorized-domain') {
-                alert("This domain is not authorized for sign-in. Please add 'sarted.com' to the list of authorized domains in your Firebase project's authentication settings.");
-            } else {
-                alert("Failed to sign in. Please ensure popups are enabled and try again. Check the console for more details.");
-            }
+            alert("Failed to sign in. Please ensure popups are enabled and try again. Check the console for more details.");
         }
     };
 
     const handleLogout = () => {
-        signOut(auth);
+        // FIX: Use v8 compat syntax for signOut.
+        auth.signOut();
         setIsDropdownOpen(false);
     };
 

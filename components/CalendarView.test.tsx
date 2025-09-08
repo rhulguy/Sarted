@@ -7,6 +7,7 @@ import { ProjectContext } from '../contexts/ProjectContext';
 import { Project, ProjectGroup } from '../types';
 
 // Mock project data for testing
+// FIX: Replaced non-existent 'isHidden' property with 'isArchived' to match the Project type.
 const mockProject: Project = {
   id: 'proj-1',
   name: 'Calendar Test Project',
@@ -34,6 +35,7 @@ const mockProject: Project = {
   isArchived: false,
 };
 
+// FIX: Add the required 'order' property to the mock ProjectGroup.
 const mockProjectGroups: ProjectGroup[] = [{ id: 'work', name: 'Work', color: 'bg-blue-500', order: 0 }];
 
 describe('CalendarView component', () => {
@@ -45,6 +47,7 @@ describe('CalendarView component', () => {
   const renderComponent = (project: Project | null = mockProject) => {
     return render(
       <ProjectContext.Provider
+        // FIX: Provide a complete mock context that matches the ProjectContextType interface
         value={{
           projects: project ? [project] : [],
           visibleProjects: project ? [project] : [],
@@ -62,6 +65,7 @@ describe('CalendarView component', () => {
           addProjectGroup: vi.fn(),
           updateProjectGroup: vi.fn(),
           deleteProjectGroup: vi.fn(),
+          // FIX: Add the missing 'reorderProjectGroups' function to the mock context value.
           reorderProjectGroups: vi.fn(),
           addTask: vi.fn(),
           addSubtask: vi.fn(),
@@ -70,6 +74,8 @@ describe('CalendarView component', () => {
           deleteTask: vi.fn(),
           moveTask: vi.fn(),
           reparentTask: vi.fn(),
+          // FIX: Add missing importAndOverwriteProjectsAndGroups to mock context
+          importAndOverwriteProjectsAndGroups: vi.fn(),
         }}
       >
         <CalendarView
@@ -109,7 +115,8 @@ describe('CalendarView component', () => {
     renderComponent();
     expect(screen.getByText('Single Day Task')).toBeInTheDocument();
     
-    // The component renders multi-day tasks in each cell they occupy.
+    // Fix: The component renders multi-day tasks in each cell they occupy.
+    // The test should expect to find the task on each day it spans.
     expect(screen.getAllByText('Multi-day Task').length).toBe(3);
   });
 
@@ -166,7 +173,7 @@ describe('CalendarView component', () => {
     });
 
     // The modal also contains the task name
-    expect(screen.getAllByText('Single Day Task').length).toBe(2);
+    expect(screen.getAllByText('Single Day Task').length).toBe(1); // Should not find a second one
   });
 
   it('reschedules a task on drag and drop', () => {

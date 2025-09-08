@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { InboxTask } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, deleteDoc, Timestamp, getDocs, writeBatch } from 'firebase/firestore';
 
 interface InboxState {
   tasks: InboxTask[];
@@ -11,6 +11,7 @@ interface InboxState {
 interface InboxContextType extends InboxState {
   addTask: (taskName: string) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
+  importAndOverwriteInbox: (data: { inboxTasks: InboxTask[] }) => Promise<void>;
 }
 
 const InboxContext = createContext<InboxContextType | undefined>(undefined);
@@ -67,11 +68,45 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [user]);
 
+  const importAndOverwriteInbox = useCallback(async (data: { inboxTasks: InboxTask[] }) => {
+    if (!user) return;
+
+    const CHUNK_SIZE = 400;
+    const inboxRef = collection(db, `users/${user.id}/inbox`);
+    const snapshot = await getDocs(inboxRef);
+    
+    // Delete existing tasks in chunks
+    for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
+        const chunk = snapshot.docs.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+    }
+
+    // Add new tasks from backup in chunks, converting timestamp
+    const tasksWithTimestamps = data.inboxTasks.map(task => ({
+        ...task,
+        createdAt: Timestamp.fromMillis(task.createdAt),
+    }));
+
+    for (let i = 0; i < tasksWithTimestamps.length; i += CHUNK_SIZE) {
+        const chunk = tasksWithTimestamps.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach(task => {
+            const { id, ...taskData } = task;
+            const newDocRef = doc(db, `users/${user.id}/inbox/${id}`);
+            batch.set(newDocRef, taskData);
+        });
+        await batch.commit();
+    }
+  }, [user]);
+
   const contextValue = useMemo(() => ({
     tasks,
     addTask,
-    deleteTask
-  }), [tasks, addTask, deleteTask]);
+    deleteTask,
+    importAndOverwriteInbox,
+  }), [tasks, addTask, deleteTask, importAndOverwriteInbox]);
 
   return (
     <InboxContext.Provider value={contextValue}>

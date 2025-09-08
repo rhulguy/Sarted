@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useInbox } from '../contexts/InboxContext';
-import { TrashIcon, MicrophoneIcon } from './IconComponents';
+import { TrashIcon, MicrophoneIcon, SparklesIcon } from './IconComponents';
 import { InboxTask } from '../types';
 import { useSpeechToText } from '../hooks/useSpeechToText';
+import { parseTextToTasks } from '../services/geminiService';
+import Spinner from './Spinner';
 
 const InboxItem: React.FC<{ task: InboxTask }> = ({ task }) => {
     const { deleteTask } = useInbox();
@@ -36,6 +38,8 @@ const InboxItem: React.FC<{ task: InboxTask }> = ({ task }) => {
 
 const InboxView: React.FC = () => {
     const { tasks, addTask } = useInbox();
+    const [textInput, setTextInput] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const handleAddTaskFromVoice = (taskName: string) => {
         if (taskName) {
@@ -47,14 +51,32 @@ const InboxView: React.FC = () => {
         onTranscriptFinalized: handleAddTaskFromVoice,
     });
 
+    const handleProcessText = async () => {
+        if (!textInput.trim()) return;
+        setIsProcessing(true);
+        try {
+            const taskNames = await parseTextToTasks(textInput);
+            for (const name of taskNames) {
+                await addTask(name);
+            }
+            setTextInput('');
+        } catch (error) {
+            console.error(error);
+            alert(error instanceof Error ? error.message : "An unknown error occurred.");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+
     return (
-        <div className="max-w-4xl mx-auto h-full flex flex-col">
+        <div className="max-w-4xl mx-auto h-full flex flex-col p-4">
             <header className="mb-6 shrink-0">
                 <div className="flex justify-between items-start">
                     <div>
                         <h1 className="text-3xl font-bold text-text-primary mb-2">Inbox</h1>
                         <p className="text-text-secondary">
-                            This is your capture space. Drag tasks to a project or use voice to add new ones.
+                            Your capture space. Add tasks, paste notes to convert, or drag items to a project.
                         </p>
                     </div>
                     <button
@@ -72,10 +94,28 @@ const InboxView: React.FC = () => {
                     </div>
                 )}
             </header>
+            
+            <div className="mb-4">
+                <textarea
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    placeholder="Paste a list, meeting notes, or any text to convert into tasks..."
+                    className="w-full h-24 p-3 bg-app-background border border-border-color rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                    disabled={isProcessing}
+                />
+                <button
+                    onClick={handleProcessText}
+                    disabled={!textInput.trim() || isProcessing}
+                    className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+                >
+                    {isProcessing ? <Spinner/> : <SparklesIcon className="w-5 h-5" />}
+                    {isProcessing ? 'Processing...' : 'Process Text into Tasks'}
+                </button>
+            </div>
 
             {tasks.length === 0 && !isListening ? (
                 <div className="flex-grow flex items-center justify-center text-center text-text-secondary">
-                    <p>Your inbox is empty. Use <kbd className="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Ctrl+K</kbd> or the microphone to add tasks!</p>
+                    <p>Your inbox is empty. Add tasks via text, voice, or <kbd className="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Ctrl+K</kbd>.</p>
                 </div>
             ) : (
                 <div className="space-y-2 overflow-y-auto">

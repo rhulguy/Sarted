@@ -92,16 +92,16 @@ const TaskList: React.FC<TaskListProps> = ({ projectView, setProjectView, onAddR
 
   // --- Task Management Handlers ---
   const handleAddTask = useCallback(async (taskName: string, startDate?: string, endDate?: string) => {
-    const taskData: any = {
+    const newTask: Task = {
       id: `task-${Date.now()}`,
       name: taskName,
       description: '',
       completed: false,
       subtasks: [],
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
     };
-    if (startDate) taskData.startDate = startDate;
-    if (endDate) taskData.endDate = endDate;
-    await addTask(project.id, taskData as Task);
+    await addTask(project.id, newTask);
   }, [project.id, addTask]);
   
   const handleUpdateTask = useCallback(async (updatedTask: Task) => {
@@ -113,16 +113,16 @@ const TaskList: React.FC<TaskListProps> = ({ projectView, setProjectView, onAddR
   }, [project.id, deleteTask]);
 
   const handleAddSubtask = useCallback(async (parentId: string, subtaskName: string, startDate?: string, endDate?: string) => {
-      const subtaskData: any = {
+      const newSubtask: Task = {
         id: `task-${Date.now()}`,
         name: subtaskName,
         description: '',
         completed: false,
         subtasks: [],
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
       };
-      if (startDate) subtaskData.startDate = startDate;
-      if (endDate) subtaskData.endDate = endDate;
-      await addSubtask(project.id, parentId, subtaskData as Task);
+      await addSubtask(project.id, parentId, newSubtask);
   }, [project.id, addSubtask]);
 
   const viewProps = { 

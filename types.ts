@@ -10,6 +10,8 @@ export interface Task {
   dependencies?: string[];
   imageUrl?: string;
   resourceIds?: string[];
+  startTime?: string; // HH:mm
+  duration?: number; // in minutes
 }
 
 export interface Project {
@@ -19,6 +21,7 @@ export interface Project {
   tasks: Task[];
   isArchived: boolean;
   icon?: string;
+  dreamBoardImages?: string[];
 }
 
 export interface ProjectGroup {
@@ -26,7 +29,6 @@ export interface ProjectGroup {
   name: string;
   color: string;
   order: number;
-  icon?: string;
 }
 
 export interface Habit {
@@ -61,12 +63,14 @@ export interface Resource {
   createdAt: number; // timestamp
 }
 
-export interface DreamBoardImage {
-  id: string;
-  url: string;
-  projectGroupId: string;
-  createdAt: number; // timestamp
-  storagePath: string;
+export interface BackupData {
+  version: string;
+  exportedAt: string;
+  projectGroups: ProjectGroup[];
+  projects: Project[];
+  habits: Habit[];
+  resources: Resource[];
+  inboxTasks: InboxTask[];
 }
 
 // --- Mind Map Layout Types ---
@@ -78,10 +82,8 @@ export interface BaseMindMapNode {
     isProject: boolean;
     isCompleted: boolean;
     color?: string;
-    groupName?: string;
     imageUrl?: string;
     task?: Task;
-    icon?: string;
 }
 
 // Node structure after layout algorithm has been applied

@@ -1,59 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { ProjectGroup } from '../types';
 import { useProject } from '../contexts/ProjectContext';
 import { PlusIcon, TrashIcon, PencilIcon, DragHandleIcon } from './IconComponents';
-import { GROUP_ICON_OPTIONS } from '../constants';
+import { COLOR_PALETTE } from '../constants';
 
 interface ProjectGroupEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const GroupIconPicker: React.FC<{ selectedIcon: string; onSelect: (icon: string) => void }> = ({ selectedIcon, onSelect }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const pickerRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    return (
-        <div className="relative" ref={pickerRef}>
-            <button type="button" onClick={() => setIsOpen(!isOpen)} className="h-10 w-10 text-2xl bg-app-background border border-border-color rounded-lg flex items-center justify-center shrink-0">
-                {selectedIcon}
-            </button>
-            {isOpen && (
-                <div className="absolute top-full mt-2 w-64 bg-card-background border border-border-color rounded-lg p-2 grid grid-cols-6 gap-2 z-20 shadow-soft">
-                    {GROUP_ICON_OPTIONS.map(emoji => (
-                        <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => { onSelect(emoji); setIsOpen(false); }}
-                            className={`text-2xl rounded-md p-1 hover:bg-app-background ${selectedIcon === emoji ? 'bg-accent-blue' : ''}`}
-                        >
-                            {emoji}
-                        </button>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-};
-
-
 const ProjectGroupEditorModal: React.FC<ProjectGroupEditorModalProps> = ({ isOpen, onClose }) => {
   const { projectGroups, addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups } = useProject();
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [editingIcon, setEditingIcon] = useState('💼');
   const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupIcon, setNewGroupIcon] = useState(GROUP_ICON_OPTIONS[0]);
+  const [newGroupColor, setNewGroupColor] = useState(COLOR_PALETTE[4]);
   
   const dragItem = useRef<string | null>(null);
   const dragOverItem = useRef<string | null>(null);
@@ -61,14 +22,11 @@ const ProjectGroupEditorModal: React.FC<ProjectGroupEditorModalProps> = ({ isOpe
   const handleStartEditing = (group: ProjectGroup) => {
     setEditingGroupId(group.id);
     setEditingName(group.name);
-    setEditingIcon(group.icon || '💼');
   };
 
   const handleSaveEdit = (group: ProjectGroup) => {
-    const nameChanged = editingName.trim() && editingName.trim() !== group.name;
-    const iconChanged = editingIcon !== group.icon;
-    if (nameChanged || iconChanged) {
-      updateProjectGroup({ ...group, name: editingName.trim(), icon: editingIcon });
+    if (editingName.trim() && editingName.trim() !== group.name) {
+      updateProjectGroup({ ...group, name: editingName.trim() });
     }
     setEditingGroupId(null);
   };
@@ -82,9 +40,8 @@ const ProjectGroupEditorModal: React.FC<ProjectGroupEditorModalProps> = ({ isOpe
   const handleAddNewGroup = (e: React.FormEvent) => {
       e.preventDefault();
       if(newGroupName.trim()) {
-          addProjectGroup({ name: newGroupName.trim(), icon: newGroupIcon });
+          addProjectGroup({ name: newGroupName.trim(), color: newGroupColor });
           setNewGroupName('');
-          setNewGroupIcon(GROUP_ICON_OPTIONS[0]);
       }
   }
 
@@ -142,27 +99,22 @@ const ProjectGroupEditorModal: React.FC<ProjectGroupEditorModalProps> = ({ isOpe
               <div className="cursor-move text-text-secondary">
                   <DragHandleIcon className="w-5 h-5" />
               </div>
+              <div className={`w-5 h-5 rounded-full ${group.color} shrink-0`}></div>
               {editingGroupId === group.id ? (
-                <>
-                  <GroupIconPicker selectedIcon={editingIcon} onSelect={setEditingIcon} />
-                  <input
-                    type="text"
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    onBlur={() => handleSaveEdit(group)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(group); if (e.key === 'Escape') setEditingGroupId(null); }}
-                    className="flex-grow bg-card-background border border-accent-blue rounded px-2 py-1 text-sm text-text-primary"
-                    autoFocus
-                  />
-                </>
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={() => handleSaveEdit(group)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(group); if (e.key === 'Escape') setEditingGroupId(null); }}
+                  className="flex-grow bg-card-background border border-accent-blue rounded px-2 py-1 text-sm text-text-primary"
+                  autoFocus
+                />
               ) : (
-                <>
-                  <span className="text-2xl w-10 h-10 flex items-center justify-center shrink-0">{group.icon || '📁'}</span>
-                  <span className="flex-grow text-text-primary">{group.name}</span>
-                  <button onClick={() => handleStartEditing(group)} className="text-text-secondary hover:text-accent-blue"><PencilIcon className="w-4 h-4"/></button>
-                  <button onClick={() => handleDelete(group.id)} className="text-text-secondary hover:text-accent-red"><TrashIcon className="w-4 h-4"/></button>
-                </>
+                <span className="flex-grow text-text-primary">{group.name}</span>
               )}
+              <button onClick={() => handleStartEditing(group)} className="text-text-secondary hover:text-accent-blue"><PencilIcon className="w-4 h-4"/></button>
+              <button onClick={() => handleDelete(group.id)} className="text-text-secondary hover:text-accent-red"><TrashIcon className="w-4 h-4"/></button>
             </div>
           ))}
         </div>
@@ -170,15 +122,19 @@ const ProjectGroupEditorModal: React.FC<ProjectGroupEditorModalProps> = ({ isOpe
         <form onSubmit={handleAddNewGroup} className="mt-6 border-t border-border-color pt-4">
             <h3 className="text-lg font-semibold mb-2 text-text-primary">Add New Group</h3>
             <div className="flex flex-col sm:flex-row gap-2">
-                <GroupIconPicker selectedIcon={newGroupIcon} onSelect={setNewGroupIcon} />
                 <input
                     type="text"
                     value={newGroupName}
                     onChange={(e) => setNewGroupName(e.target.value)}
                     placeholder="New group name..."
-                    className="flex-grow bg-app-background border border-border-color rounded-lg px-3 py-2 text-sm"
+                    className="flex-grow bg-app-background border border-border-color rounded-md px-3 py-2 text-sm"
                 />
-                <button type="submit" className="px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90 font-semibold">Create</button>
+                <div className="flex items-center justify-center gap-2 p-2 bg-app-background rounded-md">
+                    {COLOR_PALETTE.map(c => (
+                        <button key={c} type="button" onClick={() => setNewGroupColor(c)} className={`w-5 h-5 rounded-full ${c} ${newGroupColor === c ? 'ring-2 ring-offset-2 ring-offset-app-background ring-white' : ''}`}></button>
+                    ))}
+                </div>
+                <button type="submit" className="px-4 py-2 bg-accent-blue text-white rounded-md hover:opacity-90"><PlusIcon className="w-5 h-5"/></button>
             </div>
         </form>
 

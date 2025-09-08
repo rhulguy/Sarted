@@ -1,10 +1,9 @@
-import React, { createContext, useState, useContext, ReactNode, useEffect, useMemo, useCallback } from 'react';
-import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
+import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
+// FIX: Import firebase v8 compat library and remove modular auth imports to fix missing member errors.
+import firebase from 'firebase/compat/app';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { Project, Habit, Resource, InboxTask, ProjectGroup } from '../types';
-import { INITIAL_PROJECT_GROUPS, INITIAL_PROJECTS, INITIAL_RESOURCES, INITIAL_HABITS } from '../constants';
-
 
 export interface User {
   id: string;
@@ -33,98 +32,54 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      setLoading(true);
-      if (firebaseUser) {
-        try {
+    // FIX: Use v8 compat syntax for onAuthStateChanged and User type.
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: firebase.User | null) => {
+      try {
+        if (firebaseUser) {
           const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
           const userDoc = await getDoc(userRef);
 
-          if (userDoc.exists()) {
-            const profileData = userDoc.data();
-            // Case 1: Returning user, already correctly initialized.
-            if (profileData.initialDataSeeded) {
-              console.log("Returning user with seeded flag detected.");
-              setUser({
-                id: firebaseUser.uid,
-                name: profileData.name || firebaseUser.displayName || 'User',
-                email: firebaseUser.email,
-                picture: firebaseUser.photoURL,
-                // FIX: Ensure plan is correctly typed as 'free' | 'paid'.
-                plan: profileData.plan === 'paid' ? 'paid' : 'free',
-              });
-            } else {
-              // Case 2: Legacy user. Profile exists but no seeded flag.
-              // We assume their data exists and just add the flag to prevent future wipes.
-              console.log("Legacy user detected. Adding seeded flag without overwriting data.");
-              await updateDoc(userRef, { initialDataSeeded: true });
-              setUser({
-                 id: firebaseUser.uid,
-                name: profileData.name || firebaseUser.displayName || 'User',
-                email: firebaseUser.email,
-                picture: firebaseUser.photoURL,
-                // FIX: Ensure plan is correctly typed as 'free' | 'paid'.
-                plan: profileData.plan === 'paid' ? 'paid' : 'free',
-              });
+          if (!userDoc.exists()) {
+            // First time sign-in, create a profile document
+            let finalName = 'New User';
+            if (firebaseUser.displayName && typeof firebaseUser.displayName === 'string' && firebaseUser.displayName.trim()) {
+                finalName = firebaseUser.displayName.trim();
             }
-          } else {
-            // Case 3: Brand new user. Profile does not exist.
-            // This is the ONLY case where we seed data.
-            console.log("Brand new user detected. Seeding initial data.");
-            const batch = writeBatch(db);
-            const newUserProfile = {
+            const newUser: User = {
               id: firebaseUser.uid,
-              name: firebaseUser.displayName || 'New User',
-              plan: 'free',
-              initialDataSeeded: true, // The critical flag
+              name: finalName,
+              email: (firebaseUser.email && typeof firebaseUser.email === 'string') ? firebaseUser.email : null,
+              picture: (firebaseUser.photoURL && typeof firebaseUser.photoURL === 'string') ? firebaseUser.photoURL : null,
+              plan: 'free'
             };
-            batch.set(userRef, newUserProfile);
+            await setDoc(userRef, newUser);
+            setUser(newUser);
+          } else {
+            // Existing user, robustly create user object
+            const profileData = userDoc.data();
             
-            const collectionsToSeed = [
-              { name: 'projectGroups', initialData: INITIAL_PROJECT_GROUPS },
-              { name: 'projects', initialData: INITIAL_PROJECTS },
-              { name: 'resources', initialData: INITIAL_RESOURCES },
-              { name: 'habits', initialData: INITIAL_HABITS }
-            ];
-
-            for (const { name, initialData } of collectionsToSeed) {
-                const collectionRef = collection(db, `users/${firebaseUser.uid}/${name}`);
-                initialData.forEach((item: any) => {
-                    if (item.id) {
-                        const itemRef = doc(collectionRef, item.id);
-                        batch.set(itemRef, item);
-                    }
-                });
+            let finalName = 'User'; // Start with a safe default
+            if (profileData && typeof profileData.name === 'string' && profileData.name.trim()) {
+                finalName = profileData.name.trim();
+            } else if (firebaseUser.displayName && typeof firebaseUser.displayName === 'string' && firebaseUser.displayName.trim()) {
+                finalName = firebaseUser.displayName.trim();
             }
 
-            await batch.commit();
-
-            // FIX: The object passed to setUser must conform to the User interface.
-            // Spreading newUserProfile included `initialDataSeeded`, which is not in the User type,
-            // and `plan` was inferred as `string` instead of the literal `'free'`.
             setUser({
-              id: newUserProfile.id,
-              name: newUserProfile.name,
-              plan: 'free',
-              email: firebaseUser.email,
-              picture: firebaseUser.photoURL,
+              id: firebaseUser.uid,
+              name: finalName,
+              email: (firebaseUser.email && typeof firebaseUser.email === 'string') ? firebaseUser.email : null,
+              picture: (firebaseUser.photoURL && typeof firebaseUser.photoURL === 'string') ? firebaseUser.photoURL : null,
+              plan: (profileData && profileData.plan === 'paid') ? 'paid' : 'free',
             });
           }
-        } catch (error) {
-          console.error("Firestore error getting/creating user profile:", error);
-          // Fallback to auth data if Firestore fails, ensures user stays logged in visually
-          setUser({
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || 'User',
-            email: firebaseUser.email,
-            picture: firebaseUser.photoURL,
-            plan: 'free',
-          });
-        } finally {
-            setLoading(false);
+        } else {
+          setUser(null);
         }
-      } else {
+      } catch (error) {
+        console.error("Error during authentication state change:", error);
         setUser(null);
+      } finally {
         setLoading(false);
       }
     });
@@ -132,7 +87,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => unsubscribe();
   }, []);
 
-  const updateUserProfile = useCallback(async (updates: Partial<User>) => {
+  const updateUserProfile = async (updates: Partial<User>) => {
       if (!user) return;
       
       const updatedUser = { ...user, ...updates };
@@ -146,9 +101,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(user); // Revert on failure
           alert("Could not save changes. Please try again.");
       }
-  }, [user]);
+  };
 
-  const deleteUserAccount = useCallback(async () => {
+  const deleteUserAccount = async () => {
       if (!user) return;
       
       const deleteCollection = async (collectionPath: string) => {
@@ -170,25 +125,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ]);
 
           await deleteDoc(doc(db, `users/${user.id}/profile/main`));
-          await signOut(auth);
+          // FIX: Use v8 compat syntax for signOut.
+          await auth.signOut();
           setUser(null);
 
       } catch (error) {
           console.error("Error deleting user account data:", error);
           throw error;
       }
-  }, [user]);
-
-  const value = useMemo(() => ({
-    user,
-    loading,
-    updateUserProfile,
-    deleteUserAccount
-  }), [user, loading, updateUserProfile, deleteUserAccount]);
+  };
 
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, loading, updateUserProfile, deleteUserAccount }}>
       {children}
     </AuthContext.Provider>
   );
