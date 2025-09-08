@@ -24,7 +24,7 @@ import DreamBoardView from './components/DreamBoardView';
 // MyAccountView will be inlined in this file
 // import MyAccountView from './components/MyAccountView';
 import { Resource, Project, ProjectGroup, ProjectView } from './types';
-import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon } from './components/IconComponents';
+import { PlusIcon, TrashIcon, LinkIcon, ChevronDownIcon, ArchiveBoxIcon, PencilIcon, EditIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon, ViewListIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import { calculateProgress } from './utils/taskUtils';
 import { useDownloadImage } from './hooks/useDownloadImage';
@@ -234,6 +234,95 @@ const ExportDropdown: React.FC<{
     );
 };
 
+const ResourceListItem: React.FC<{ resource: Resource, onUpdate: (r: Resource) => void, onDelete: (id: string) => void, projects: Project[], projectGroups: ProjectGroup[] }> = ({ resource, onUpdate, onDelete, projects, projectGroups }) => {
+    const [isEditingNotes, setIsEditingNotes] = useState(false);
+    const [notes, setNotes] = useState(resource.notes);
+    const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (isEditingNotes) {
+            notesTextareaRef.current?.focus();
+            notesTextareaRef.current?.select();
+        }
+    }, [isEditingNotes]);
+
+    const handleSaveNotes = () => {
+        if (notes.trim() !== resource.notes) {
+            onUpdate({ ...resource, notes: notes.trim() });
+        }
+        setIsEditingNotes(false);
+    };
+
+    return (
+        <div className="grid grid-cols-12 gap-4 items-center bg-card-background p-3 rounded-xl shadow-card hover:bg-app-background/50 transition-colors">
+            {/* Column 1: Resource Title/URL */}
+            <div className="col-span-3 flex items-center gap-3 min-w-0">
+                <img src={resource.thumbnailUrl} alt={resource.title} className="w-10 h-10 rounded-lg border border-border-color object-contain shrink-0" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
+                <div className="min-w-0">
+                    <a href={resource.url} target="_blank" rel="noopener noreferrer" className="font-semibold truncate text-text-primary hover:text-accent-blue">{resource.title}</a>
+                    <p className="text-sm text-text-secondary truncate">{resource.url}</p>
+                </div>
+            </div>
+
+            {/* Column 2: Notes (Editable) */}
+            <div className="col-span-3">
+                {isEditingNotes ? (
+                    <textarea
+                        ref={notesTextareaRef}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        onBlur={handleSaveNotes}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveNotes(); }
+                            if (e.key === 'Escape') { setNotes(resource.notes); setIsEditingNotes(false); }
+                        }}
+                        placeholder="Add notes..."
+                        className="text-sm w-full bg-app-background border border-accent-blue rounded-md p-1 focus:outline-none resize-none"
+                        rows={2}
+                    />
+                ) : (
+                    <p onClick={() => setIsEditingNotes(true)} className="text-sm text-text-secondary truncate cursor-pointer hover:text-text-primary h-10 py-1">
+                        {resource.notes || <span className="text-gray-400">Add notes...</span>}
+                    </p>
+                )}
+            </div>
+
+            {/* Column 3: Group */}
+            <div className="col-span-2">
+                <select 
+                    value={resource.projectGroupId} 
+                    onChange={e => onUpdate({ ...resource, projectGroupId: e.target.value })} 
+                    className="w-full bg-app-background border border-border-color rounded-lg p-2 text-sm"
+                >
+                    <option value="" disabled>Select a group</option>
+                    {projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+            </div>
+
+            {/* Column 4: Projects */}
+            <div className="col-span-3">
+                 <ProjectMultiSelect 
+                    selectedProjectIds={resource.projectIds} 
+                    onSelectionChange={(ids) => onUpdate({ ...resource, projectIds: ids })} 
+                    projects={projects} 
+                    projectGroups={projectGroups}
+                 >
+                    <div className="w-full bg-app-background border border-border-color rounded-lg p-2 text-sm text-left flex justify-between items-center">
+                        <span className="truncate">{resource.projectIds.length > 0 ? `${resource.projectIds.length} project(s) selected` : 'None selected'}</span>
+                        <ChevronDownIcon className="w-4 h-4" />
+                    </div>
+                </ProjectMultiSelect>
+            </div>
+            
+            {/* Column 5: Actions */}
+            <div className="col-span-1 flex justify-end items-center gap-1">
+                <a href={resource.url} target="_blank" rel="noopener noreferrer" title="Open link" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><LinkIcon className="w-5 h-5"/></a>
+                <button onClick={() => { if(window.confirm('Delete this resource?')) onDelete(resource.id); }} title="Delete" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><TrashIcon className="w-5 h-5"/></button>
+            </div>
+        </div>
+    );
+};
+
 
 // ResourceView Component
 const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }) => {
@@ -241,6 +330,7 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
     const { projects, projectGroups } = useProject();
     const [filterGroupId, setFilterGroupId] = useState('all');
     const [filterProjectId, setFilterProjectId] = useState('all');
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const { ref: downloadRef, downloadImage } = useDownloadImage<HTMLDivElement>();
 
     const filteredResources = useMemo(() => {
@@ -303,32 +393,61 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
             <header className="flex-wrap items-center justify-between pb-6 gap-4 flex">
                 <div><h1 className="text-3xl font-bold">Resources</h1></div>
                 <div className="flex items-center gap-2 flex-wrap">
+                     <div className="bg-card-background p-1 rounded-lg flex space-x-1 border border-border-color">
+                        <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-accent-blue text-white' : 'hover:bg-app-background'}`} title="Grid View">
+                            <ViewGridIcon className={`w-5 h-5 ${viewMode !== 'grid' ? 'text-text-primary' : ''}`} />
+                        </button>
+                        <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-accent-blue text-white' : 'hover:bg-app-background'}`} title="List View">
+                            <ViewListIcon className={`w-5 h-5 ${viewMode !== 'list' ? 'text-text-primary' : ''}`} />
+                        </button>
+                    </div>
                      <select value={filterGroupId} onChange={e => setFilterGroupId(e.target.value)} className="bg-card-background border border-border-color rounded-full px-4 py-2 text-sm"><option value="all">All Groups</option>{projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
                      <select value={filterProjectId} onChange={e => setFilterProjectId(e.target.value)} className="bg-card-background border border-border-color rounded-full px-4 py-2 text-sm"><option value="all">All Projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
                      <ExportDropdown onExportImage={() => downloadImage('resources.png')} onExportCsv={exportAsCsv} onExportDoc={exportAsDoc} />
                 </div>
             </header>
             <div ref={downloadRef} className="flex-grow overflow-y-auto p-2 -m-2">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                     {loading ? (
-                        Array.from({length: 4}).map((_, i) => <div key={i} className="h-64 bg-card-background rounded-2xl shadow-card animate-pulse"></div>)
-                    ) : filteredResources.length === 0 ? (
-                        <div className="col-span-full bg-card-background rounded-2xl shadow-card p-8 flex flex-col items-center justify-center text-center">
-                            <div className="text-4xl mb-4">✨</div>
-                            <h3 className="text-xl font-semibold mb-2">Add your first resource</h3>
-                            <p className="text-text-secondary mb-4">Save links, articles, and inspiration.</p>
-                            <button onClick={onAddResource} className="px-6 py-2 bg-accent-yellow text-text-primary font-semibold rounded-full hover:opacity-90">Add</button>
-                        </div>
-                    ) : (
-                        filteredResources.map(res => (
-                            <ResourceCard key={res.id} resource={res} onUpdate={updateResource} onDelete={deleteResource} projects={projects} projectGroups={projectGroups} />
-                        ))
-                    )}
-                    <button onClick={onAddResource} className="border-2 border-dashed border-border-color rounded-2xl flex flex-col items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors min-h-[16rem]">
-                        <PlusIcon className="w-8 h-8 mb-2" />
-                        <span className="font-semibold">Add Resource</span>
-                    </button>
-                </div>
+                 {loading ? (
+                    <div className="text-center text-text-secondary p-8">Loading resources...</div>
+                ) : filteredResources.length === 0 ? (
+                    <div className="col-span-full bg-card-background rounded-2xl shadow-card p-8 flex flex-col items-center justify-center text-center">
+                        <div className="text-4xl mb-4">✨</div>
+                        <h3 className="text-xl font-semibold mb-2">Add your first resource</h3>
+                        <p className="text-text-secondary mb-4">Save links, articles, and inspiration.</p>
+                        <button onClick={onAddResource} className="px-6 py-2 bg-accent-yellow text-text-primary font-semibold rounded-full hover:opacity-90">Add</button>
+                    </div>
+                ) : (
+                    <>
+                        {viewMode === 'grid' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {filteredResources.map(res => (
+                                    <ResourceCard key={res.id} resource={res} onUpdate={updateResource} onDelete={deleteResource} projects={projects} projectGroups={projectGroups} />
+                                ))}
+                                <button onClick={onAddResource} className="border-2 border-dashed border-border-color rounded-2xl flex flex-col items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors min-h-[16rem]">
+                                    <PlusIcon className="w-8 h-8 mb-2" />
+                                    <span className="font-semibold">Add Resource</span>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-semibold text-text-secondary uppercase">
+                                    <div className="col-span-3">Resource</div>
+                                    <div className="col-span-3">Notes</div>
+                                    <div className="col-span-2">Group</div>
+                                    <div className="col-span-3">Projects</div>
+                                    <div className="col-span-1 text-right">Actions</div>
+                                </div>
+                                {filteredResources.map(res => (
+                                    <ResourceListItem key={res.id} resource={res} onUpdate={updateResource} onDelete={deleteResource} projects={projects} projectGroups={projectGroups} />
+                                ))}
+                                <button onClick={onAddResource} className="mt-4 w-full border-2 border-dashed border-border-color rounded-xl flex items-center justify-center text-text-secondary hover:bg-card-background hover:border-accent-blue transition-colors p-4">
+                                    <PlusIcon className="w-6 h-6 mr-2" />
+                                    <span className="font-semibold">Add New Resource</span>
+                                </button>
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
         </div>
     );
@@ -338,65 +457,91 @@ const ResourceCard: React.FC<{ resource: Resource, onUpdate: (r: Resource) => vo
     const group = projectGroups.find(g => g.id === resource.projectGroupId);
     const linkedProjects = useMemo(() => resource.projectIds.map(id => projects.find(p => p.id === id)).filter(Boolean), [resource.projectIds, projects]);
     
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditingNotes, setIsEditingNotes] = useState(false);
     const [notes, setNotes] = useState(resource.notes);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    const [isEditingLinks, setIsEditingLinks] = useState(false);
+
     useEffect(() => {
-        if (isEditing) {
+        if (isEditingNotes) {
             textareaRef.current?.focus();
             textareaRef.current?.select();
         }
-    }, [isEditing]);
+    }, [isEditingNotes]);
 
-    const handleSave = () => {
+    const handleSaveNotes = () => {
         if (notes.trim() !== resource.notes) {
             onUpdate({ ...resource, notes: notes.trim() });
         }
-        setIsEditing(false);
+        setIsEditingNotes(false);
     };
 
     return (
         <div className="bg-card-background rounded-2xl shadow-card p-5 flex flex-col justify-between">
             <div>
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-3 min-w-0">
                         <img src={resource.thumbnailUrl} alt={resource.title} className="w-12 h-12 rounded-full border-2 border-border-color p-1 object-contain shrink-0" onError={(e) => { const t = e.target as HTMLImageElement; t.onerror = null; t.src = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY4NzI4MCI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJNMTMuMTkgOC42ODhhNC41IDQuNSAwIDAxMS4yNDIgNy4yNDRsLTQuNSA0LjVhNC41IDQuNSAwIDAxLTYuMzY0LTYuMzY0bDEuNzU3LTEuNzU3bTEzLjM1LS42MjJsMS43NTctMS43NTdhNC41IDQuNSAwIDAwLTYuMzY0LTYuMzY0bC00LjUgNC41YTQuNSA0LjUgMCAwMDEuMjQyIDcuMjQ0IiAvPjwvc3ZnPg==`; t.classList.add('p-2', 'bg-app-background'); }} />
                         <div className="min-w-0">
                             <h3 className="font-semibold truncate">{resource.title}</h3>
-                             {isEditing ? (
-                                <textarea
-                                    ref={textareaRef}
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                    onBlur={handleSave}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave(); }
-                                        if (e.key === 'Escape') { setNotes(resource.notes); setIsEditing(false); }
-                                    }}
-                                    placeholder="Add notes..."
-                                    className="text-sm w-full bg-app-background border border-accent-blue rounded-md p-1 mt-1 focus:outline-none resize-none"
-                                    rows={3}
-                                />
-                            ) : (
-                                <p
-                                    onClick={() => setIsEditing(true)}
-                                    className="text-sm text-text-secondary truncate cursor-pointer hover:text-text-primary"
-                                >
-                                    {resource.notes || "Add notes..."}
-                                </p>
-                            )}
                         </div>
                     </div>
-                     <div className="flex items-center gap-2 shrink-0">
+                     <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => setIsEditingLinks(p => !p)} title="Edit links" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><PencilIcon className="w-5 h-5"/></button>
                         <a href={resource.url} target="_blank" rel="noopener noreferrer" title={resource.url} className="p-2 rounded-full hover:bg-app-background text-text-secondary"><LinkIcon className="w-5 h-5"/></a>
                         <button onClick={() => { if(window.confirm('Delete this resource?')) onDelete(resource.id); }} title="Delete" className="p-2 rounded-full hover:bg-app-background text-text-secondary"><TrashIcon className="w-5 h-5"/></button>
                     </div>
                 </div>
+                 {isEditingNotes ? (
+                    <textarea
+                        ref={textareaRef}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        onBlur={handleSaveNotes}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveNotes(); }
+                            if (e.key === 'Escape') { setNotes(resource.notes); setIsEditingNotes(false); }
+                        }}
+                        placeholder="Add notes..."
+                        className="text-sm w-full bg-app-background border border-accent-blue rounded-md p-1 mt-1 focus:outline-none resize-none"
+                        rows={3}
+                    />
+                ) : (
+                    <p
+                        onClick={() => setIsEditingNotes(true)}
+                        className="text-sm text-text-secondary cursor-pointer hover:text-text-primary min-h-[3.5rem]"
+                    >
+                        {resource.notes || <span className="text-gray-400">Add notes...</span>}
+                    </p>
+                )}
             </div>
-            <div className="flex items-center gap-2 flex-wrap mt-2">
-                {group && <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${group.color}`}>{group.name}</span>}
-                {linkedProjects.map(p => p && <span key={p.id} className="px-3 py-1 rounded-full text-xs font-medium bg-app-background text-text-secondary">{p.name}</span>)}
+            <div className="mt-2">
+                {isEditingLinks ? (
+                     <div className="space-y-2 p-2 bg-app-background rounded-lg border border-border-color">
+                        <div>
+                            <label className="text-xs font-medium text-text-secondary">Project Group</label>
+                            <select value={resource.projectGroupId} onChange={e => onUpdate({ ...resource, projectGroupId: e.target.value })} className="w-full mt-1 bg-card-background border border-border-color rounded-lg p-1 text-sm">
+                                <option value="" disabled>Select group</option>
+                                {projectGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-medium text-text-secondary">Projects</label>
+                            <ProjectMultiSelect selectedProjectIds={resource.projectIds} onSelectionChange={(ids) => onUpdate({ ...resource, projectIds: ids })} projects={projects} projectGroups={projectGroups}>
+                                <div className="w-full mt-1 bg-card-background border border-border-color rounded-lg p-1.5 text-sm text-left flex justify-between items-center">
+                                    <span className="truncate">{resource.projectIds.length} selected</span>
+                                    <ChevronDownIcon className="w-4 h-4" />
+                                </div>
+                            </ProjectMultiSelect>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {group && <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${group.color}`}>{group.name}</span>}
+                        {linkedProjects.map(p => p && <span key={p.id} className="px-3 py-1 rounded-full text-xs font-medium bg-app-background text-text-secondary">{p.name}</span>)}
+                    </div>
+                )}
             </div>
         </div>
     );
