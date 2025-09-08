@@ -3,6 +3,8 @@ import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { Project, Habit, Resource, InboxTask, ProjectGroup } from '../types';
+import { INITIAL_PROJECT_GROUPS, INITIAL_PROJECTS, INITIAL_RESOURCES, INITIAL_HABITS } from '../constants';
+
 
 export interface User {
   id: string;
@@ -46,6 +48,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               picture: firebaseUser.photoURL,
             });
           } else {
+            // This is a new user, create their profile and seed initial data
             const newUser: User = {
               id: firebaseUser.uid,
               name: firebaseUser.displayName || 'New User',
@@ -54,6 +57,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               plan: 'free',
             };
             await setDoc(userRef, newUser);
+
+            // Seed initial data safely, only once on creation
+            console.log("New user detected, seeding initial data...");
+            const batch = writeBatch(db);
+            INITIAL_PROJECT_GROUPS.forEach(group => {
+                const groupRef = doc(db, `users/${firebaseUser.uid}/projectGroups`, group.id);
+                batch.set(groupRef, group);
+            });
+            INITIAL_PROJECTS.forEach(project => {
+                const projectRef = doc(db, `users/${firebaseUser.uid}/projects`, project.id);
+                batch.set(projectRef, project);
+            });
+            INITIAL_RESOURCES.forEach(resource => {
+                const resourceRef = doc(db, `users/${firebaseUser.uid}/resources`, resource.id);
+                batch.set(resourceRef, resource);
+            });
+            INITIAL_HABITS.forEach(habit => {
+                const habitRef = doc(db, `users/${firebaseUser.uid}/habits`, habit.id);
+                batch.set(habitRef, habit);
+            });
+            await batch.commit();
+            console.log("Initial data seeded successfully.");
+            
             setUser(newUser);
           }
         } catch (error) {

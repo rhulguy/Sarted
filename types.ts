@@ -61,6 +61,14 @@ export interface Resource {
   createdAt: number; // timestamp
 }
 
+export interface DreamBoardImage {
+  id: string;
+  url: string;
+  projectGroupId: string;
+  createdAt: number; // timestamp
+  storagePath: string;
+}
+
 // --- Mind Map Layout Types ---
 // Base node structure used for building hierarchies before layout
 export interface BaseMindMapNode {

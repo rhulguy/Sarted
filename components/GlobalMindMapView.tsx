@@ -199,13 +199,13 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
 
     return (
         <div ref={downloadRef} className="w-full h-full relative bg-app-background rounded-xl border border-border-color">
-            <header className="absolute top-0 left-0 p-4 z-10">
-                <div className="flex items-center gap-4">
+            <header className="absolute top-0 left-0 p-4 z-10 w-full">
+                <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-text-primary">Global Mind Map</h1>
                         <p className="text-sm text-text-secondary">A unified view of all your projects.</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <button onClick={onNewProject} className="flex items-center space-x-2 px-3 py-1.5 bg-accent-blue text-white rounded-lg hover:opacity-90"><PlusIcon className="w-4 h-4" /><span>Add Project</span></button>
                         <button 
                             onClick={() => downloadImage(`global-mind-map.png`)} 

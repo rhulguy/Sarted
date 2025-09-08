@@ -96,8 +96,16 @@ const GlobalGanttView: React.FC = () => {
       findDateRangeAndFlatten(project.tasks);
     });
 
-    const mondayThisWeek = getMondayOfWeek(new Date());
-    let effectiveMin = min && min < mondayThisWeek ? min : mondayThisWeek;
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0); // Normalize to UTC midnight
+
+    let effectiveMin = today; // Default start date is today
+
+    // If the earliest task starts in the future, use that date as the start
+    // so the user doesn't have a huge empty space at the beginning.
+    if (min && min > today) {
+        effectiveMin = min;
+    }
     
     let effectiveMax = max;
     const futureDate = new Date();
@@ -259,7 +267,7 @@ const GlobalGanttView: React.FC = () => {
     const finalOffsetPx = e.clientX - startX;
     const dayDelta = Math.round(finalOffsetPx / dayWidth);
     
-    if (dayDelta === 0) return;
+    if (dayDelta === 0 && type === 'drag') return;
 
     const originalStart = parseDate(originalTask.startDate);
     const originalEnd = parseDate(originalTask.endDate);
@@ -325,7 +333,11 @@ const GlobalGanttView: React.FC = () => {
       const endX = e.clientX - timelineRect.left;
       
       const startDayIndex = Math.round(Math.min(startX, endX) / dayWidth);
-      const endDayIndex = Math.round(Math.max(startX, endX) / dayWidth);
+      const endDayIndex = Math.round(Math.max(startX, endX) / dayWidth) - 1; // Snap to end of day
+
+      if(endDayIndex < startDayIndex) {
+        setCreatingState(null); setTempCreatingBar(null); return;
+      }
 
       const newStartDate = new Date(chartStartDate);
       newStartDate.setUTCDate(newStartDate.getUTCDate() + startDayIndex);
@@ -431,6 +443,7 @@ const GlobalGanttView: React.FC = () => {
 
   const today = new Date();
   today.setUTCHours(0,0,0,0);
+  const rowHeight = 40;
 
   if (visibleProjects.length === 0) return <div className="text-center text-text-secondary p-8">No projects to display.</div>;
   
@@ -444,31 +457,14 @@ const GlobalGanttView: React.FC = () => {
              <button onClick={() => downloadImage(`global-gantt-chart.png`)} disabled={isDownloading} className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color transition-colors disabled:opacity-50"><DownloadIcon className="w-4 h-4" /><span>{isDownloading ? 'Exporting...' : 'Export'}</span></button>
         </div>
 
-        <div ref={scrollContainerRef} className="flex-grow overflow-auto">
-            <div className="relative" style={{ width: totalWidth + 288, minWidth: '100%' }}>
-                {/* Sticky Header */}
-                <div className="sticky top-0 z-20 h-16 bg-card-background flex">
-                    <div className="w-72 shrink-0 sticky left-0 z-10 bg-card-background border-r border-b border-border-color flex items-center p-2">
-                        <h3 className="font-semibold">Task Name</h3>
-                    </div>
-                    <div className="flex-grow relative border-b border-border-color">
-                        <div className="absolute top-0 left-0 w-full h-8 flex">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div>
-                        <div className="absolute bottom-0 left-0 w-full h-8 flex">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); return (<div key={i} className={`flex items-center justify-center border-r border-border-color text-xs text-text-secondary`} style={{ width: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div>
-                    </div>
+        <div ref={scrollContainerRef} className="flex-grow overflow-auto flex">
+             {/* Task List Column */}
+             <div className="w-72 shrink-0 sticky left-0 z-20 bg-card-background border-r border-border-color">
+                <div className="h-16 flex items-center p-2 border-b border-border-color">
+                    <h3 className="font-semibold">Task Name</h3>
                 </div>
-
-                {/* Body */}
-                <div className="relative timeline-body">
-                     {/* Vertical Grid Lines & Weekend Highlights */}
-                    <div className="absolute top-0 bottom-0 left-0" style={{ width: totalWidth }}>
-                      {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
-                    </div>
-                    {/* Today Marker */}
-                    {(() => { const todayOffset = dayDiff(chartStartDate, new Date()); if (todayOffset >= 0 && todayOffset < totalDays) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10" title="Today" style={{ left: todayOffset * dayWidth }}></div>; } return null; })()}
-                    
+                <div>
                     {itemsToRender.map((item, index) => {
-                        const rowHeight = 40;
-                        
                         if (item.type === 'task') {
                             let canIndent = false;
                             if (index > 0) {
@@ -478,133 +474,74 @@ const GlobalGanttView: React.FC = () => {
                                 }
                             }
                             const canOutdent = parentMap.get(item.data.id) !== null;
-
                             return (
-                                <div key={item.type + '-' + item.data.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
-                                    <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-card-background">
-                                        {item.data.id.startsWith('new-task-form') ? (
-                                            <form onSubmit={handleNewTaskSubmit} className="w-full flex items-center gap-1" style={{ paddingLeft: '1rem' }}>
-                                                <input
-                                                    type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)}
-                                                    onBlur={() => { if (newTaskName.trim() === '') setAddingTaskToProject(null); }}
-                                                    onKeyDown={e => { if (e.key === 'Escape') { setNewTaskName(''); setAddingTaskToProject(null); } }}
-                                                    placeholder="New task..." autoFocus
-                                                    className="flex-grow bg-app-background border border-accent-blue rounded-md px-2 py-1.5 text-sm focus:outline-none"
-                                                />
-                                                <input 
-                                                    type="date" 
-                                                    value={newTaskStartDate} 
-                                                    onChange={e => setNewTaskStartDate(e.target.value)} 
-                                                    aria-label="Start Date"
-                                                    className="bg-app-background border border-border-color rounded-md p-1.5 text-sm text-text-secondary text-[12px]" 
-                                                />
-                                                <input 
-                                                    type="date" 
-                                                    value={newTaskEndDate} 
-                                                    onChange={e => setNewTaskEndDate(e.target.value)} 
-                                                    aria-label="End Date"
-                                                    className="bg-app-background border border-border-color rounded-md p-1.5 text-sm text-text-secondary text-[12px]"
-                                                />
-                                            </form>
-                                        ) : (
-                                            <div className="flex items-center group w-full" style={{ paddingLeft: '1rem' }}>
-                                                <div className="flex-grow truncate text-sm" style={{ paddingLeft: `${item.level * 20}px` }}>
-                                                  {item.data.name}
-                                                </div>
-                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => handleIndent(item.data, index)} disabled={!canIndent} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongRightIcon className="w-5 h-5" /></button>
-                                                    <button onClick={() => handleOutdent(item.data)} disabled={!canOutdent} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongLeftIcon className="w-5 h-5" /></button>
-                                                    <button onClick={() => handleDelete(item.data.projectId, item.data.id)} title="Delete Task" className="p-1 text-red-500 hover:text-red-400"><TrashIcon className="w-5 h-5" /></button>
-                                                </div>
+                                <div key={item.type + '-' + item.data.id} className="flex h-10 items-center border-b border-border-color">
+                                    {item.data.id.startsWith('new-task-form') ? (
+                                        <form onSubmit={handleNewTaskSubmit} className="w-full h-full flex items-center gap-1 p-1" style={{ paddingLeft: '1rem' }}>
+                                            <input type="text" value={newTaskName} onChange={e => setNewTaskName(e.target.value)} onBlur={() => { if (newTaskName.trim() === '') setAddingTaskToProject(null); }} onKeyDown={e => { if (e.key === 'Escape') { setNewTaskName(''); setAddingTaskToProject(null); } }} placeholder="New task..." autoFocus className="flex-grow bg-app-background border border-accent-blue rounded-md px-2 py-1.5 text-sm focus:outline-none" />
+                                        </form>
+                                    ) : (
+                                        <div className="flex items-center group w-full p-2" style={{ paddingLeft: `${16 + item.level * 20}px` }}>
+                                            <span className="flex-grow truncate text-sm">{item.data.name}</span>
+                                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => handleIndent(item.data, index)} disabled={!canIndent} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongRightIcon className="w-5 h-5" /></button>
+                                                <button onClick={() => handleOutdent(item.data)} disabled={!canOutdent} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"><ArrowLongLeftIcon className="w-5 h-5" /></button>
+                                                <button onClick={() => handleDelete(item.data.projectId, item.data.id)} title="Delete Task" className="p-1 text-red-500 hover:text-red-400"><TrashIcon className="w-5 h-5" /></button>
                                             </div>
-                                        )}
-                                    </div>
-                                    <div className="flex-grow h-full relative border-b border-border-color">
-                                        {!item.data.id.startsWith('new-task-form') && (() => {
-                                            const task = item.data;
-                                            const taskPos = taskPositions.get(task.id);
-
-                                            if (!taskPos) {
-                                                return (
-                                                    <div className="absolute inset-0 group/creator cursor-cell" onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: item, startX: e.clientX - timelineRect.left }); }}>
-                                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent-blue/10 transition-colors flex items-center justify-center">
-                                                            <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }
-
-                                            const isInteracting = interaction?.taskId === task.id;
-                                            const currentPos = tempTaskBar?.id === task.id ? tempTaskBar : { left: taskPos.startX, width: taskPos.endX - taskPos.startX };
-                                            const endDate = parseDate(task.endDate);
-                                            const isOverdue = endDate && endDate < today && !task.completed;
-                                            
-                                            return (
-                                                <div 
-                                                    data-task-id={task.id} 
-                                                    className="absolute h-7 top-1/2 -translate-y-1/2 group" 
-                                                    style={{ left: `${currentPos.left}px`, width: `${currentPos.width}px`, zIndex: isInteracting ? 20 : 1 }}
-                                                    onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }}>
-                                                    <div title={`${task.name}\n${task.startDate} to ${task.endDate}`} className={`h-full w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : task.completed ? 'bg-gray-600' : task.projectColor} ${task.completed ? 'opacity-50' : ''}`}>
-                                                        {task.imageUrl && (<img src={task.imageUrl} alt={task.name} className="w-5 h-5 rounded-full object-cover mr-2 shrink-0"/>)}
-                                                        <span className="truncate pointer-events-none">{task.name}</span>
-                                                    </div>
-                                                    <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -left-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                                    <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -right-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         } else if (item.type === 'group') {
-                            const group = item.data;
-                            return (
-                                <div key={item.type + '-' + group.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
-                                    <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-sidebar-background font-bold text-text-primary">
-                                        <div className="flex items-center w-full">
-                                            <button onClick={() => toggleGroupCollapse(group.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
-                                                <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedGroups.has(group.id) ? 'rotate-90' : ''}`} />
-                                            </button>
-                                            <div className={`w-3 h-3 rounded-full ${group.color} mr-2`}></div>
-                                            <span className="truncate">{group.name}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex-grow h-full relative border-b border-border-color"><div className="w-full h-px bg-border-color absolute top-1/2"></div></div>
-                                </div>
-                            );
+                           return ( <div key={item.type + '-' + item.data.id} className="flex h-10 items-center p-2 border-b border-border-color bg-sidebar-background font-bold text-text-primary"> <button onClick={() => toggleGroupCollapse(item.data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary"><ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedGroups.has(item.data.id) ? 'rotate-90' : ''}`} /></button> <div className={`w-3 h-3 rounded-full ${item.data.color} mr-2`}></div> <span className="truncate">{item.data.name}</span> </div> );
                         } else if (item.type === 'project') {
-                            const project = item.data;
-                            const group = projectGroups.find(g => g.id === project.groupId);
+                           return ( <div key={item.type + '-' + item.data.id} className="flex h-10 items-center p-2 border-b border-border-color font-semibold group" style={{ paddingLeft: '1rem' }}> <button onClick={() => toggleProjectCollapse(item.data.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary"><ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedProjects.has(item.data.id) ? 'rotate-90' : ''}`} /></button> <span className="truncate">{item.data.name}</span> <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(item.data.id); }} className="ml-auto opacity-0 group-hover:opacity-100 text-accent-blue hover:text-blue-400 p-1"><PlusIcon className="w-5 h-5"/></button> </div> );
+                        }
+                    })}
+                </div>
+            </div>
+            
+            {/* Timeline Column */}
+            <div className="flex-grow relative">
+                <div className="sticky top-0 z-10 bg-card-background">
+                    <div className="h-8 flex">{months.map((month, index) => (<div key={index} className="flex items-center justify-center border-r border-b border-border-color text-sm font-semibold" style={{ width: month.days * dayWidth, minWidth: month.days * dayWidth }}>{month.name} {month.year}</div>))}</div>
+                    <div className="h-8 flex">{Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); return (<div key={i} className={`flex items-center justify-center border-r border-b border-border-color text-xs text-text-secondary`} style={{ width: dayWidth, minWidth: dayWidth }}>{dayWidth > 20 ? d.getUTCDate() : ''}</div>); })}</div>
+                </div>
+                <div className="relative timeline-body" style={{ width: totalWidth, minWidth: totalWidth, height: itemsToRender.length * rowHeight }}>
+                    {/* Vertical Grid Lines & Weekend Highlights */}
+                    {Array.from({ length: totalDays }).map((_, i) => { const d = new Date(chartStartDate); d.setUTCDate(d.getUTCDate() + i); const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6; return <div key={i} className={`absolute top-0 bottom-0 border-r border-border-color ${isWeekend ? 'bg-yellow-400/10' : ''}`} style={{ left: i * dayWidth, width: dayWidth }}></div> })}
+                    {/* Today Marker */}
+                    {(() => { const todayOffset = dayDiff(chartStartDate, new Date()); if (todayOffset >= 0 && todayOffset < totalDays) { return <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10" title="Today" style={{ left: todayOffset * dayWidth }}></div>; } return null; })()}
+                    {/* Horizontal Grid Lines */}
+                    {itemsToRender.map((_, index) => <div key={`row-${index}`} className="absolute w-full border-b border-border-color" style={{ top: (index + 1) * rowHeight, height: '1px' }}></div>)}
+                    
+                    {itemsToRender.map((item, index) => {
+                        if(item.type !== 'task' || item.data.id.startsWith('new-task-form')) return null;
+                        const task = item.data;
+                        const taskPos = taskPositions.get(task.id);
+                        if (!taskPos) {
                             return (
-                                <div key={item.type + '-' + project.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
-                                    <div className="w-72 shrink-0 sticky left-0 z-10 flex items-center p-2 border-b border-border-color bg-card-background font-semibold">
-                                        <div className="flex items-center justify-between w-full group" style={{ paddingLeft: '1rem' }}>
-                                            <div className="flex items-center truncate">
-                                                <button onClick={() => toggleProjectCollapse(project.id)} className="p-1 mr-1 text-text-secondary hover:text-text-primary">
-                                                    <ChevronRightIcon className={`w-4 h-4 transition-transform ${!collapsedProjects.has(project.id) ? 'rotate-90' : ''}`} />
-                                                </button>
-                                                <div className="flex flex-col -my-1">
-                                                    <span className="truncate leading-tight">{project.name}</span>
-                                                    {group && (
-                                                        <span className="text-xs text-text-secondary font-normal flex items-center gap-1.5 leading-tight">
-                                                            <div className={`w-2 h-2 rounded-full ${group.color} shrink-0`}></div>
-                                                            {group.name}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <button onClick={() => { setNewTaskName(''); setAddingTaskToProject(project.id); }} className="opacity-0 group-hover:opacity-100 text-accent-blue hover:text-blue-400 p-1"><PlusIcon className="w-5 h-5"/></button>
-                                        </div>
-                                    </div>
-                                    <div className="flex-grow h-full relative border-b border-border-color"><div className="w-full h-px bg-border-color absolute top-1/2"></div></div>
+                                <div key={`creator-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: index * rowHeight }} onMouseDown={(e) => { e.preventDefault(); const timelineRect = e.currentTarget.getBoundingClientRect(); setCreatingState({ task: item, startX: e.clientX - timelineRect.left }); }}>
+                                    <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent-blue/10 transition-colors flex items-center justify-center"><span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span></div>
                                 </div>
                             );
                         }
+                        const isInteracting = interaction?.taskId === task.id;
+                        const currentPos = tempTaskBar?.id === task.id ? tempTaskBar : { left: taskPos.startX, width: taskPos.endX - taskPos.startX };
+                        const endDate = parseDate(task.endDate);
+                        const isOverdue = endDate && endDate < today && !task.completed;
+                        return (
+                            <div key={task.id} data-task-id={task.id} className="absolute h-7 group" style={{ top: `${index * rowHeight + 6}px`, left: `${currentPos.left}px`, width: `${currentPos.width}px`, zIndex: isInteracting ? 20 : 1 }} onMouseDown={(e) => { e.preventDefault(); setInteraction({ type: 'drag', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }}>
+                                <div title={`${task.name}\n${task.startDate} to ${task.endDate}`} className={`h-full w-full rounded-md flex items-center px-2 text-white text-xs select-none cursor-grab relative ${isOverdue ? 'bg-accent-red' : task.completed ? 'bg-gray-600' : task.projectColor} ${task.completed ? 'opacity-50' : ''}`}>
+                                    {task.imageUrl && (<img src={task.imageUrl} alt={task.name} className="w-5 h-5 rounded-full object-cover mr-2 shrink-0"/>)}
+                                    <span className="truncate pointer-events-none">{task.name}</span>
+                                </div>
+                                <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-start', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -left-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                                <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setInteraction({ type: 'resize-end', taskId: task.id, startX: e.clientX, originalTask: task, originalLeft: taskPos.startX, originalWidth: taskPos.endX - taskPos.startX }); }} className="absolute -right-2 top-0 w-4 h-full cursor-ew-resize opacity-0 group-hover:opacity-100" />
+                            </div>
+                        );
                     })}
-                    {creatingState && tempCreatingBar && (
-                        <div className="absolute h-7 top-1/2 -translate-y-1/2 pointer-events-none bg-accent-blue/50 rounded-md" style={{ ...tempCreatingBar, top: `${itemsToRender.findIndex(i => i.data.id === creatingState.task.data.id) * 40 + 6}px` }}></div>
-                    )}
+                    {creatingState && tempCreatingBar && ( <div className="absolute h-7 pointer-events-none bg-accent-blue/50 rounded-md" style={{ ...tempCreatingBar, top: `${itemsToRender.findIndex(i => i.data.id === creatingState.task.data.id) * 40 + 6}px` }}></div> )}
                 </div>
             </div>
         </div>

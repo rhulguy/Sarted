@@ -69,23 +69,6 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (user) {
       setLoading(true);
 
-      const projectsRef = collection(db, `users/${user.id}/projects`);
-      getDocs(query(projectsRef, limit(1))).then(snapshot => {
-        if (snapshot.empty) {
-          console.log("New user project collection is empty. Seeding initial data.");
-          const batch = writeBatch(db);
-          INITIAL_PROJECT_GROUPS.forEach(group => {
-            const groupRef = doc(db, `users/${user.id}/projectGroups/${group.id}`);
-            batch.set(groupRef, group);
-          });
-          INITIAL_PROJECTS.forEach(project => {
-            const projectRef = doc(db, `users/${user.id}/projects/${project.id}`);
-            batch.set(projectRef, project);
-          });
-          batch.commit().catch(err => console.error("Failed to seed projects:", err));
-        }
-      });
-
       const projectsQuery = collection(db, `users/${user.id}/projects`);
       const groupsQuery = query(collection(db, `users/${user.id}/projectGroups`), orderBy('order'));
 
@@ -310,15 +293,6 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (authLoading) { setLoading(true); setFirebaseResources([]); return; }
     if (user) {
       setLoading(true);
-      const resourcesRef = collection(db, `users/${user.id}/resources`);
-      getDocs(query(resourcesRef, limit(1))).then(snapshot => {
-        if (snapshot.empty) {
-          console.log("New user resource collection is empty. Seeding initial data.");
-          const batch = writeBatch(db);
-          INITIAL_RESOURCES.forEach(resource => batch.set(doc(db, `users/${user.id}/resources/${resource.id}`), resource));
-          batch.commit().catch(err => console.error("Failed to seed resources:", err));
-        }
-      });
       const resourcesQuery = query(collection(db, `users/${user.id}/resources`), orderBy('createdAt', 'desc'));
       const unsubscribe = onSnapshot(resourcesQuery, (snapshot) => {
         const userResources = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Resource));

@@ -20,6 +20,7 @@ import GlobalMindMapView from './components/GlobalMindMapView';
 import { useAuth, User } from './contexts/AuthContext';
 import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
+import DreamBoardView from './components/DreamBoardView';
 // MyAccountView will be inlined in this file
 // import MyAccountView from './components/MyAccountView';
 import { Resource, Project, ProjectGroup, ProjectView } from './types';
@@ -625,7 +626,7 @@ const MyAccountView: React.FC = () => {
 
 
 // --- App Component ---
-type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account';
+type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account' | 'dreamboard';
 
 export default function App() {
   const { projects, selectedProject, selectedProjectId, selectProject } = useProject();
@@ -711,6 +712,8 @@ export default function App() {
         return <HabitTracker onNewHabit={() => setIsHabitModalOpen(true)} />;
       case 'resources':
         return <ResourceView onAddResource={() => handleOpenAddResourceModal()} />;
+      case 'dreamboard':
+        return <DreamBoardView />;
       case 'my-account':
         return <MyAccountView />;
       case 'projects':

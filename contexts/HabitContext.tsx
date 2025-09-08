@@ -29,19 +29,6 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
     if (user) {
-      const habitsRef = collection(db, `users/${user.id}/habits`);
-      getDocs(query(habitsRef, limit(1))).then(snapshot => {
-          if (snapshot.empty) {
-              console.log("New user habit collection is empty. Seeding initial data.");
-              const batch = writeBatch(db);
-              INITIAL_HABITS.forEach(habit => {
-                  const habitRef = doc(db, `users/${user.id}/habits/${habit.id}`);
-                  batch.set(habitRef, habit);
-              });
-              batch.commit().catch(err => console.error("Failed to seed habits:", err));
-          }
-      });
-      
       const habitsQuery = collection(db, `users/${user.id}/habits`);
       const unsubscribe = onSnapshot(habitsQuery, (snapshot) => {
         const userHabits = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Habit));

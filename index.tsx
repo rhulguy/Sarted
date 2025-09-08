@@ -7,6 +7,7 @@ import { HabitProvider } from './contexts/HabitContext';
 import { LoadingProvider } from './contexts/LoadingContext';
 import { InboxProvider } from './contexts/InboxContext';
 import { WeeklyReviewProvider } from './contexts/WeeklyReviewContext';
+import { DreamBoardProvider } from './contexts/DreamBoardContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -22,9 +23,11 @@ root.render(
           <HabitProvider>
             <InboxProvider>
               <WeeklyReviewProvider>
-                <LoadingProvider>
-                  <App />
-                </LoadingProvider>
+                <DreamBoardProvider>
+                  <LoadingProvider>
+                    <App />
+                  </LoadingProvider>
+                </DreamBoardProvider>
               </WeeklyReviewProvider>
             </InboxProvider>
           </HabitProvider>
