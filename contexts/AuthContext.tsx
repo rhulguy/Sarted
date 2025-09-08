@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc, query, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { Project, Habit, Resource, InboxTask, ProjectGroup } from '../types';
 import { INITIAL_PROJECT_GROUPS, INITIAL_PROJECTS, INITIAL_RESOURCES, INITIAL_HABITS } from '../constants';
@@ -41,63 +41,77 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const userDoc = await getDoc(userRef);
 
           if (userDoc.exists()) {
-            const profileData = userDoc.data() as User;
-            setUser({
-              ...profileData,
-              email: firebaseUser.email,
-              picture: firebaseUser.photoURL,
-            });
+            const profileData = userDoc.data();
+            // Case 1: Returning user, already correctly initialized.
+            if (profileData.initialDataSeeded) {
+              console.log("Returning user with seeded flag detected.");
+              setUser({
+                id: firebaseUser.uid,
+                name: profileData.name || firebaseUser.displayName || 'User',
+                email: firebaseUser.email,
+                picture: firebaseUser.photoURL,
+                // FIX: Ensure plan is correctly typed as 'free' | 'paid'.
+                plan: profileData.plan === 'paid' ? 'paid' : 'free',
+              });
+            } else {
+              // Case 2: Legacy user. Profile exists but no seeded flag.
+              // We assume their data exists and just add the flag to prevent future wipes.
+              console.log("Legacy user detected. Adding seeded flag without overwriting data.");
+              await updateDoc(userRef, { initialDataSeeded: true });
+              setUser({
+                 id: firebaseUser.uid,
+                name: profileData.name || firebaseUser.displayName || 'User',
+                email: firebaseUser.email,
+                picture: firebaseUser.photoURL,
+                // FIX: Ensure plan is correctly typed as 'free' | 'paid'.
+                plan: profileData.plan === 'paid' ? 'paid' : 'free',
+              });
+            }
           } else {
-            // This is a new user, or a user whose profile document was lost.
-            // Create their profile and seed initial data only if their collections are empty.
-            console.log("New user detected or profile missing. Verifying and seeding initial data if necessary...");
-
-            const newUser: User = {
+            // Case 3: Brand new user. Profile does not exist.
+            // This is the ONLY case where we seed data.
+            console.log("Brand new user detected. Seeding initial data.");
+            const batch = writeBatch(db);
+            const newUserProfile = {
               id: firebaseUser.uid,
               name: firebaseUser.displayName || 'New User',
-              email: firebaseUser.email,
-              picture: firebaseUser.photoURL,
               plan: 'free',
+              initialDataSeeded: true, // The critical flag
             };
+            batch.set(userRef, newUserProfile);
             
-            // The batch will contain all necessary writes.
-            const batch = writeBatch(db);
-
-            // Always create the profile document if it's missing.
-            batch.set(userRef, newUser);
-
-            // ROBUSTNESS FIX: Check each collection before seeding to prevent overwriting existing data.
             const collectionsToSeed = [
-                { name: 'projectGroups', initialData: INITIAL_PROJECT_GROUPS },
-                { name: 'projects', initialData: INITIAL_PROJECTS },
-                { name: 'resources', initialData: INITIAL_RESOURCES },
-                { name: 'habits', initialData: INITIAL_HABITS }
+              { name: 'projectGroups', initialData: INITIAL_PROJECT_GROUPS },
+              { name: 'projects', initialData: INITIAL_PROJECTS },
+              { name: 'resources', initialData: INITIAL_RESOURCES },
+              { name: 'habits', initialData: INITIAL_HABITS }
             ];
 
             for (const { name, initialData } of collectionsToSeed) {
                 const collectionRef = collection(db, `users/${firebaseUser.uid}/${name}`);
-                const snapshot = await getDocs(query(collectionRef, limit(1)));
-                if (snapshot.empty) {
-                    console.log(`Seeding initial data for collection: ${name}`);
-                    initialData.forEach((item: any) => {
-                        // Ensure items have IDs before trying to create docs with them
-                        if (item.id) {
-                            const itemRef = doc(collectionRef, item.id);
-                            batch.set(itemRef, item);
-                        }
-                    });
-                } else {
-                    console.log(`Collection ${name} already has data. Skipping seed.`);
-                }
+                initialData.forEach((item: any) => {
+                    if (item.id) {
+                        const itemRef = doc(collectionRef, item.id);
+                        batch.set(itemRef, item);
+                    }
+                });
             }
-            
+
             await batch.commit();
-            console.log("Data verification and seeding complete.");
-            
-            setUser(newUser);
+
+            // FIX: The object passed to setUser must conform to the User interface.
+            // Spreading newUserProfile included `initialDataSeeded`, which is not in the User type,
+            // and `plan` was inferred as `string` instead of the literal `'free'`.
+            setUser({
+              id: newUserProfile.id,
+              name: newUserProfile.name,
+              plan: 'free',
+              email: firebaseUser.email,
+              picture: firebaseUser.photoURL,
+            });
           }
         } catch (error) {
-          console.error("Firestore error getting/creating user profile. Using fallback data from auth provider.", error);
+          console.error("Firestore error getting/creating user profile:", error);
           // Fallback to auth data if Firestore fails, ensures user stays logged in visually
           setUser({
             id: firebaseUser.uid,
