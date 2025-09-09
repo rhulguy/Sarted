@@ -28,8 +28,7 @@ import { useDownloadImage } from './hooks/useDownloadImage';
 import { useHabit } from './contexts/HabitContext';
 import { useInbox } from './contexts/InboxContext';
 import { useLoading } from './contexts/LoadingContext';
-import Footer from './components/Footer';
-import DataManagementModal from './components/DataManagementModal';
+import SettingsView from './components/SettingsView';
 
 
 // --- HELPER HOOK (Moved to top-level for stability) ---
@@ -720,14 +719,10 @@ const DreamBoardView: React.FC = () => {
 };
 
 // --- App Component ---
-type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account' | 'dreamboard';
+type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'my-account' | 'dreamboard' | 'settings';
 
 export default function App() {
-  const { projects, selectedProject, selectedProjectId, selectProject, projectGroups, importAndOverwriteProjectsAndGroups } = useProject();
-  const { resources, importAndOverwriteResources } = useResource();
-  const { habits, importAndOverwriteHabits } = useHabit();
-  const { tasks: inboxTasks, importAndOverwriteInbox } = useInbox();
-  const { dispatch: loadingDispatch } = useLoading();
+  const { projects, selectedProject, selectedProjectId, selectProject } = useProject();
   const { shouldShowReview, setReviewShown } = useWeeklyReview();
   const { user, loading: authLoading } = useAuth();
   
@@ -738,90 +733,11 @@ export default function App() {
   const [isGroupEditorOpen, setIsGroupEditorOpen] = useState<boolean>(false);
   const [isAddResourceModalOpen, setIsAddResourceModalOpen] = useState<boolean>(false);
   const [resourceModalContext, setResourceModalContext] = useState<{ projectId?: string; groupId?: string } | null>(null);
-  const [isDataManagementModalOpen, setIsDataManagementModalOpen] = useState(false);
-  const [dataManagementMode, setDataManagementMode] = useState<'import' | 'export'>('export');
-  const [isImporting, setIsImporting] = useState(false);
 
   const [mainView, setMainView] = useState<MainView>('projects');
   const [projectView, setProjectView] = useState<ProjectView>('list');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
-
-  const handleExportData = useCallback(() => {
-    if (!user) {
-        alert("Please sign in to export your data.");
-        return;
-    }
-    try {
-        const backupData: BackupData = {
-            version: "1.0.0",
-            exportedAt: new Date().toISOString(),
-            projectGroups,
-            projects,
-            habits,
-            resources,
-            inboxTasks,
-        };
-        const jsonString = JSON.stringify(backupData, null, 2);
-        const blob = new Blob([jsonString], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `sarted-backup-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    } catch (error) {
-        console.error("Failed to export data:", error);
-        alert("An error occurred while exporting your data. Please check the console for details.");
-    }
-  }, [user, projectGroups, projects, habits, resources, inboxTasks]);
-
-  const handleImportData = useCallback(async (file: File) => {
-    if (!user) {
-      alert("Please sign in to import data.");
-      return;
-    }
-    setIsImporting(true);
-    loadingDispatch({ type: 'SET_LOADING', payload: true });
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-        try {
-            const result = event.target?.result;
-            if (typeof result !== 'string') throw new Error("File could not be read.");
-            
-            const data: BackupData = JSON.parse(result);
-
-            if (!data.version || !Array.isArray(data.projects) || !Array.isArray(data.projectGroups) || !Array.isArray(data.habits) || !Array.isArray(data.resources) || !Array.isArray(data.inboxTasks)) {
-                throw new Error("Invalid backup file format.");
-            }
-
-            await Promise.all([
-                importAndOverwriteProjectsAndGroups({ projects: data.projects, projectGroups: data.projectGroups }),
-                importAndOverwriteHabits({ habits: data.habits }),
-                importAndOverwriteResources({ resources: data.resources }),
-                importAndOverwriteInbox({ inboxTasks: data.inboxTasks }),
-            ]);
-
-            alert("Data imported successfully! The application will now reload.");
-            window.location.reload();
-        } catch (error) {
-            console.error("Failed to import data:", error);
-            alert(`An error occurred during import: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        } finally {
-            setIsImporting(false);
-            loadingDispatch({ type: 'SET_LOADING', payload: false });
-        }
-    };
-    reader.onerror = () => {
-        alert("Failed to read the backup file.");
-        setIsImporting(false);
-        loadingDispatch({ type: 'SET_LOADING', payload: false });
-    };
-    reader.readAsText(file);
-  }, [user, importAndOverwriteProjectsAndGroups, importAndOverwriteHabits, importAndOverwriteResources, importAndOverwriteInbox, loadingDispatch]);
 
   useEffect(() => {
     if (shouldShowReview) {
@@ -886,6 +802,8 @@ export default function App() {
         return <HabitTracker onNewHabit={() => setIsHabitModalOpen(true)} />;
       case 'resources':
         return <ResourceView onAddResource={() => handleOpenAddResourceModal()} />;
+      case 'settings':
+        return <SettingsView />;
       case 'my-account':
         return <MyAccountView />;
       case 'projects':
@@ -938,10 +856,6 @@ export default function App() {
               {renderMainContent()}
             </ErrorBoundary>
           </main>
-          <Footer
-            onExportClick={() => { setDataManagementMode('export'); setIsDataManagementModalOpen(true); }}
-            onImportClick={() => { setDataManagementMode('import'); setIsDataManagementModalOpen(true); }}
-          />
         </div>
       </div>
       {isProjectModalOpen && (
@@ -982,16 +896,6 @@ export default function App() {
                 setIsReviewModalOpen(false);
                 setReviewShown();
             }}
-        />
-      )}
-      {isDataManagementModalOpen && (
-        <DataManagementModal
-            isOpen={isDataManagementModalOpen}
-            onClose={() => setIsDataManagementModalOpen(false)}
-            mode={dataManagementMode}
-            onExport={handleExportData}
-            onImport={handleImportData}
-            isImporting={isImporting}
         />
       )}
     </div>
