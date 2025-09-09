@@ -62,15 +62,39 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
             }));
         };
 
-        const projectNodes = visibleProjects.map(p => ({
-            id: p.id, name: p.name, isProject: true, isCompleted: false,
-            color: groupColorMap.get(p.groupId) || 'bg-text-secondary', projectId: p.id,
-            children: buildTaskHierarchy(p.tasks || [], p.id),
-        }));
+        const groupNodes = projectGroups
+            // FIX: Explicitly type map return value to resolve type predicate error.
+            .map((group): EditableBaseMindMapNode | null => {
+                const projectsInGroup = visibleProjects
+                    .filter(p => p.groupId === group.id)
+                    .map((p): EditableBaseMindMapNode => ({
+                        id: p.id,
+                        name: p.name,
+                        isProject: true,
+                        isCompleted: false,
+                        color: groupColorMap.get(p.groupId) || 'bg-text-secondary',
+                        projectId: p.id,
+                        children: buildTaskHierarchy(p.tasks || [], p.id),
+                    }));
+                
+                if (projectsInGroup.length === 0) {
+                    return null;
+                }
+
+                return {
+                    id: group.id,
+                    name: group.name,
+                    isProject: true,
+                    isCompleted: false,
+                    color: group.color,
+                    children: projectsInGroup,
+                };
+            })
+            .filter((g): g is EditableBaseMindMapNode => g !== null);
 
         const rootNode: EditableBaseMindMapNode = {
             id: 'global-root', name: 'All Projects', isProject: true, isCompleted: false,
-            color: 'bg-accent-blue', children: projectNodes,
+            color: 'bg-accent-blue', children: groupNodes,
         };
         
         const laidOutRoot = layoutGlobalTree(rootNode);
@@ -91,7 +115,7 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject }) =
         }
 
         return { nodes: flattenedNodes, links: flattenedLinks };
-    }, [visibleProjects, groupColorMap]);
+    }, [visibleProjects, projectGroups, groupColorMap]);
     
     const projectIdsKey = useMemo(() => visibleProjects.map(p => p.id).sort().join(','), [visibleProjects]);
 
