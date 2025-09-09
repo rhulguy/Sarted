@@ -59,7 +59,7 @@ const SettingsView: React.FC = () => {
         }
     };
 
-    // Refined Export Logic using Blob for better reliability
+    // Refined Export Logic using data URI for better reliability
     const handleExportData = useCallback(() => {
         if (!user) {
             alert("Please sign in to export your data.");
@@ -76,19 +76,15 @@ const SettingsView: React.FC = () => {
                 inboxTasks,
             };
             const jsonString = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([jsonString], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
+            const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(jsonString);
+            
             const link = document.createElement("a");
-            link.href = url;
+            link.href = dataUri;
             link.download = `sarted-backup-${new Date().toISOString().split('T')[0]}.json`;
             
             document.body.appendChild(link);
             link.click();
-
-            setTimeout(() => {
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-            }, 100);
+            document.body.removeChild(link);
 
         } catch (error) {
             console.error("Failed to export data:", error);
