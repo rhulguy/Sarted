@@ -13,6 +13,9 @@ const Auth: React.FC = () => {
     const handleGoogleSignIn = async () => {
         // FIX: Use v8 compat syntax for GoogleAuthProvider.
         const provider = new firebase.auth.GoogleAuthProvider();
+        // Explicitly request profile and email scopes for robustness.
+        provider.addScope('profile');
+        provider.addScope('email');
         try {
             // FIX: Use v8 compat syntax for signInWithPopup.
             await auth.signInWithPopup(provider);
