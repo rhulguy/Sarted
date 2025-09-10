@@ -21,7 +21,6 @@ const ClickableAnimationStage: React.FC<{
 );
 
 
-// Fix: Added onManageGroups prop to restore functionality and fix type error in App.tsx.
 const HomePage: React.FC<{ onNavigate: (view: MainView) => void; onManageGroups: () => void; }> = ({ onNavigate, onManageGroups }) => {
     const [stage, setStage] = useState(0);
 
@@ -62,7 +61,6 @@ const HomePage: React.FC<{ onNavigate: (view: MainView) => void; onManageGroups:
                     Your central hub for total clarity. Click any view to get started. What you do in one place is instantly reflected everywhere else.
                 </p>
 
-                {/* Fix: Added button to manage project groups. */}
                 <div className="mt-6">
                     <button
                         onClick={onManageGroups}

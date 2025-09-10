@@ -17,7 +17,7 @@ import ProjectResourcesView from './ProjectResourcesView';
 
 // --- Main TaskList Component ---
 interface TaskListProps {
-  onAddResource: (context: { projectId: string; groupId: string }) => void;
+  onAddResource: () => void;
   initialView: ProjectView;
   previousView: MainView;
   onGoBack: () => void;
@@ -91,10 +91,7 @@ const TaskList: React.FC<TaskListProps> = ({ onAddResource, initialView, previou
         case 'gantt': return <GanttChartView ref={viewRef} {...viewProps} />;
         case 'mindmap': return <MindMapView ref={viewRef} {...viewProps} />;
         case 'calendar': return <CalendarView ref={viewRef} {...viewProps} />;
-        case 'resources': {
-            const handleAddResourceWithContext = () => onAddResource({ projectId: project.id, groupId: project.groupId });
-            return <ProjectResourcesView ref={viewRef} project={project} onAddResource={handleAddResourceWithContext} />;
-        }
+        case 'resources': return <ProjectResourcesView ref={viewRef} project={project} onAddResource={onAddResource} />;
         default: return <ListView ref={viewRef} {...viewProps} />;
     }
   }

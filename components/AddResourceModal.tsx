@@ -123,6 +123,10 @@ const AddResourceModal: React.FC<{
                             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="mt-1 block w-full bg-app-background border border-border-color rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                         </div>
                         
+                        <p className="text-sm text-text-secondary pt-2">
+                            A resource must belong to a group. You can optionally link it to specific projects within that group.
+                        </p>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-text-secondary">Project Group</label>

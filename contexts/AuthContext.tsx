@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
+import { User as FirebaseUser, onAuthStateChanged, signOut, getRedirectResult } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { useNotification } from './NotificationContext';
@@ -32,7 +32,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { showNotification } = useNotification();
 
   useEffect(() => {
+    // This consolidated effect handles both initial auth state and redirect results.
+    let isMounted = true;
+
+    // First, check for a redirect result. This is for notifications and error handling.
+    // The actual user state is managed by onAuthStateChanged.
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result && isMounted) {
+          showNotification({ message: 'Signed in successfully!', type: 'success' });
+        }
+      })
+      .catch((error) => {
+        console.error("Firebase redirect result error:", error);
+        let message = "An unknown error occurred during sign-in.";
+        if (error.code === 'auth/account-exists-with-different-credential') {
+          message = "An account already exists with the same email address but different sign-in credentials. Try signing in with the original method.";
+        }
+        if (isMounted) {
+            showNotification({ message, type: 'error' });
+        }
+      });
+
+    // onAuthStateChanged is the single source of truth for the user's sign-in state.
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (!isMounted) return;
+
       try {
         if (firebaseUser) {
           const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
@@ -40,48 +65,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           if (!userDoc.exists()) {
             let finalName = 'New User';
-            if (firebaseUser.displayName && typeof firebaseUser.displayName === 'string' && firebaseUser.displayName.trim()) {
+            if (firebaseUser.displayName?.trim()) {
                 finalName = firebaseUser.displayName.trim();
             }
             const newUser: User = {
               id: firebaseUser.uid,
               name: finalName,
-              email: (firebaseUser.email && typeof firebaseUser.email === 'string') ? firebaseUser.email : null,
-              picture: (firebaseUser.photoURL && typeof firebaseUser.photoURL === 'string') ? firebaseUser.photoURL : null,
+              email: firebaseUser.email,
+              picture: firebaseUser.photoURL,
               plan: 'free'
             };
             await setDoc(userRef, newUser);
-            setUser(newUser);
+            if (isMounted) setUser(newUser);
           } else {
             const profileData = userDoc.data();
-            
-            let finalName = 'User'; 
-            if (profileData && typeof profileData.name === 'string' && profileData.name.trim()) {
-                finalName = profileData.name.trim();
-            } else if (firebaseUser.displayName && typeof firebaseUser.displayName === 'string' && firebaseUser.displayName.trim()) {
-                finalName = firebaseUser.displayName.trim();
-            }
-
             setUser({
               id: firebaseUser.uid,
-              name: finalName,
-              email: (firebaseUser.email && typeof firebaseUser.email === 'string') ? firebaseUser.email : null,
-              picture: (firebaseUser.photoURL && typeof firebaseUser.photoURL === 'string') ? firebaseUser.photoURL : null,
-              plan: (profileData && profileData.plan === 'paid') ? 'paid' : 'free',
+              name: profileData.name || 'User',
+              email: firebaseUser.email,
+              picture: firebaseUser.photoURL,
+              plan: profileData.plan === 'paid' ? 'paid' : 'free',
             });
           }
         } else {
-          setUser(null);
+          if (isMounted) setUser(null);
         }
       } catch (error) {
-        showNotification({ message: 'Error during authentication.', type: 'error' });
-        setUser(null);
+        console.error("Error during authentication state change:", error);
+        if (isMounted) {
+            showNotification({ message: 'Error handling user session.', type: 'error' });
+            setUser(null);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [showNotification]);
 
   const updateUserProfile = async (updates: Partial<User>) => {

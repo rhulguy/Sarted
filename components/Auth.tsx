@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, signOut } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { GoogleIcon } from './IconComponents';
@@ -11,22 +11,16 @@ const Auth: React.FC = () => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const handleGoogleSignIn = async () => {
+    const handleGoogleSignIn = () => {
         const provider = new GoogleAuthProvider();
         provider.addScope('profile');
         provider.addScope('email');
-        try {
-            await signInWithPopup(auth, provider);
-        } catch (error: any) {
-            console.error("Error during Google sign-in:", error);
-            let message = "Failed to sign in. Please try again.";
-            if (error.code === 'auth/popup-blocked') {
-                message = "Sign-in popup was blocked by the browser. Please allow popups for this site.";
-            } else if (error.code === 'auth/popup-closed-by-user') {
-                message = "Sign-in was cancelled.";
-            }
-            showNotification({ message, type: 'error' });
-        }
+        // signInWithRedirect is more robust for production environments than signInWithPopup
+        signInWithRedirect(auth, provider).catch((error) => {
+            // This will catch immediate errors before the redirect begins, e.g., misconfiguration.
+            console.error("Error initiating Google sign-in redirect:", error);
+            showNotification({ message: "Failed to start sign-in process. Please try again.", type: 'error' });
+        });
     };
 
     const handleLogout = () => {

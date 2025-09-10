@@ -37,6 +37,36 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
     const isSubmittingRef = useRef(false); // Lock to prevent double submission
     const lastMousePos = useRef({ x: 0, y: 0 });
 
+    const [editDateData, setEditDateData] = useState<{ startDate: string, endDate: string }>({ startDate: '', endDate: '' });
+
+    const handleStartEditingDate = (node: LaidoutMindMapNode) => {
+        setAddingToNode(null); // Close other forms
+        setEditingNode(node);
+        setEditDateData({
+            startDate: node.task?.startDate || '',
+            endDate: node.task?.endDate || '',
+        });
+    };
+
+    const handleSaveDate = async () => {
+        if (!editingNode || !editingNode.task) return;
+
+        let finalStartDate = editDateData.startDate;
+        let finalEndDate = editDateData.endDate;
+
+        // If only start date is provided, use it for end date as well.
+        if (finalStartDate && !finalEndDate) {
+            finalEndDate = finalStartDate;
+        }
+
+        await onUpdateTask({
+            ...editingNode.task,
+            startDate: finalStartDate || undefined,
+            endDate: finalEndDate || undefined,
+        });
+        setEditingNode(null); // Close the editor
+    };
+
     useEffect(() => {
         if (addingToNode) {
             isSubmittingRef.current = false; // Reset lock when form appears
@@ -183,11 +213,6 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
         }
     };
 
-    const handleDateUpdate = async (node: LaidoutMindMapNode, dates: { startDate?: string, endDate?: string }) => {
-        if (!node.task) return;
-        await onUpdateTask({ ...node.task, ...dates });
-    };
-    
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.target === e.currentTarget) {
             setAddingToNode(null);
@@ -333,7 +358,7 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
                                 </g>
                                 {!node.isProject && (
                                     <>
-                                    <g onClick={(e) => { e.stopPropagation(); setEditingNode(node); }} transform={`translate(28, 0)`} className="cursor-pointer">
+                                    <g onClick={(e) => { e.stopPropagation(); handleStartEditingDate(node); }} transform={`translate(28, 0)`} className="cursor-pointer">
                                         <rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" />
                                         <EditIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/>
                                     </g>
@@ -388,29 +413,32 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
                         </form>
                     </foreignObject>
                 )}
-                 {editingNode && editingNode.task && (
-                    <foreignObject x={editingNode.x - NODE_WIDTH/2} y={editingNode.y - NODE_HEIGHT/2} width={NODE_WIDTH} height={NODE_HEIGHT}>
+                {editingNode && editingNode.task && (
+                    <foreignObject x={editingNode.x - NODE_WIDTH/2} y={editingNode.y + NODE_HEIGHT/2 + 5} width={NODE_WIDTH} height={130}>
                         <div 
-                            className="w-full h-full bg-card-background/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-2 gap-1"
+                            className="w-full h-full bg-card-background/95 backdrop-blur-sm rounded-2xl flex flex-col p-3 gap-1 shadow-lg border border-border-color"
                             onClick={(e) => e.stopPropagation()}
                         >
+                            <label className="text-xs font-medium text-text-secondary">Start Date</label>
                             <input
                                 type="date"
-                                aria-label="Start Date"
-                                defaultValue={editingNode.task.startDate}
-                                onBlur={(e) => handleDateUpdate(editingNode, { startDate: e.target.value })}
-                                onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}}
+                                value={editDateData.startDate}
+                                onChange={(e) => setEditDateData(prev => ({ ...prev, startDate: e.target.value }))}
+                                max={editDateData.endDate || undefined}
                                 className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
                             />
+                            <label className="text-xs font-medium text-text-secondary">End Date</label>
                             <input
                                 type="date"
-                                aria-label="End Date"
-                                defaultValue={editingNode.task.endDate}
-                                onBlur={(e) => handleDateUpdate(editingNode, { endDate: e.target.value })}
-                                onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}}
-                                min={editingNode.task.startDate}
+                                value={editDateData.endDate}
+                                onChange={(e) => setEditDateData(prev => ({ ...prev, endDate: e.target.value }))}
+                                min={editDateData.startDate || undefined}
                                 className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
                             />
+                            <div className="flex justify-end gap-2 mt-auto">
+                                <button onClick={() => setEditingNode(null)} className="px-2 py-1 text-xs rounded-md bg-app-background hover:bg-border-color">Cancel</button>
+                                <button onClick={handleSaveDate} className="px-2 py-1 text-xs rounded-md text-white bg-accent-blue hover:opacity-90">Save</button>
+                            </div>
                         </div>
                     </foreignObject>
                 )}

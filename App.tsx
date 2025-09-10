@@ -117,7 +117,7 @@ export default function App() {
     if (selectedProject) {
       return <TaskList 
         key={selectedProject.id} 
-        onAddResource={handleOpenAddResourceModal} 
+        onAddResource={() => handleOpenAddResourceModal({ projectId: selectedProject.id, groupId: selectedProject.groupId })}
         initialView={initialProjectView}
         previousView={previousMainView}
         onGoBack={handleGoBack}

@@ -200,37 +200,41 @@ const GlobalListView: React.FC = () => {
                                     <div className={`w-3 h-3 rounded-full ${group.color} shrink-0`}></div>
                                     <span className="font-semibold text-text-primary">{group.name}</span>
                                 </button>
-                                <div className={`pl-4 mt-2 space-y-3 transition-all duration-300 ease-in-out ${collapsedGroups.has(group.id) ? 'max-h-0 opacity-0' : 'max-h-[10000px] opacity-100'}`}>
-                                    {group.projects.map(project => (
-                                        <div 
-                                            key={project.id}
-                                            onDragOver={(e) => { e.preventDefault(); setDragOverProjectId(project.id); }}
-                                            onDragEnter={() => setDragOverProjectId(project.id)}
-                                            onDragLeave={() => setDragOverProjectId(null)}
-                                            onDrop={(e) => handleDrop(e, project)}
-                                            className={`rounded-lg transition-colors ${dragOverProjectId === project.id ? 'bg-accent-blue/10' : ''}`}
-                                        >
-                                            <button onClick={() => toggleProject(project.id)} className="w-full flex items-center gap-2 p-1 text-left hover:bg-app-background rounded-lg">
-                                                <ChevronRightIcon className={`w-3 h-3 transition-transform ${!collapsedProjects.has(project.id) && 'rotate-90'}`} />
-                                                <span className="text-lg">{project.icon || '📁'}</span>
-                                                <span className="text-sm font-medium text-text-secondary">{project.name}</span>
-                                            </button>
-                                            <div className={`pl-6 mt-1 space-y-2 transition-all duration-300 ease-in-out ${collapsedProjects.has(project.id) ? 'max-h-0 opacity-0' : 'max-h-[10000px] opacity-100'}`}>
-                                                {project.tasks.length > 0 ? project.tasks.map(task => (
-                                                    <TaskItem 
-                                                        key={task.id} task={task} level={0}
-                                                        onUpdate={onUpdateTask(project.id)}
-                                                        onDelete={onDeleteTask(project.id)}
-                                                        onAddSubtask={onAddSubtask(project.id)}
-                                                        projects={projects} currentProjectId={project.id}
-                                                        onMoveProject={(targetProjectId) => onMoveProject(project.id)(targetProjectId, task)}
-                                                    />
-                                                )) : (
-                                                    <p className="text-xs text-text-secondary pl-2 pb-2">No tasks yet. Drag an inbox item here to add one.</p>
-                                                )}
+                                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${collapsedGroups.has(group.id) ? 'max-h-0 opacity-0' : 'max-h-[10000px] opacity-100'}`}>
+                                    <div className="pl-4 mt-2 space-y-3">
+                                        {group.projects.map(project => (
+                                            <div 
+                                                key={project.id}
+                                                onDragOver={(e) => { e.preventDefault(); setDragOverProjectId(project.id); }}
+                                                onDragEnter={() => setDragOverProjectId(project.id)}
+                                                onDragLeave={() => setDragOverProjectId(null)}
+                                                onDrop={(e) => handleDrop(e, project)}
+                                                className={`rounded-lg transition-colors ${dragOverProjectId === project.id ? 'bg-accent-blue/10' : ''}`}
+                                            >
+                                                <button onClick={() => toggleProject(project.id)} className="w-full flex items-center gap-2 p-1 text-left hover:bg-app-background rounded-lg">
+                                                    <ChevronRightIcon className={`w-3 h-3 transition-transform ${!collapsedProjects.has(project.id) && 'rotate-90'}`} />
+                                                    <span className="text-lg">{project.icon || '📁'}</span>
+                                                    <span className="text-sm font-medium text-text-secondary">{project.name}</span>
+                                                </button>
+                                                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${collapsedProjects.has(project.id) ? 'max-h-0 opacity-0' : 'max-h-[10000px] opacity-100'}`}>
+                                                    <div className="pl-6 mt-1 space-y-2">
+                                                        {project.tasks.length > 0 ? project.tasks.map(task => (
+                                                            <TaskItem 
+                                                                key={task.id} task={task} level={0}
+                                                                onUpdate={onUpdateTask(project.id)}
+                                                                onDelete={onDeleteTask(project.id)}
+                                                                onAddSubtask={onAddSubtask(project.id)}
+                                                                projects={projects} currentProjectId={project.id}
+                                                                onMoveProject={(targetProjectId) => onMoveProject(project.id)(targetProjectId, task)}
+                                                            />
+                                                        )) : (
+                                                            <p className="text-xs text-text-secondary pl-2 pb-2">No tasks yet. Drag an inbox item here to add one.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         ))}

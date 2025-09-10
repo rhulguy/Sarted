@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -17,11 +17,3 @@ const app = initializeApp(firebaseConfig);
 // Get Firestore and Auth services
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-
-// Set auth persistence to 'local' for better cross-origin/incognito support
-// This helps ensure the sign-in state is remembered after the Google sign-in popup.
-setPersistence(auth, browserLocalPersistence)
-  .catch((error) => {
-    // This can happen in restricted environments like browser extensions.
-    console.error("Firebase auth persistence error:", error.code, error.message);
-  });

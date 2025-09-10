@@ -80,8 +80,13 @@ const SettingsView: React.FC = () => {
             
             document.body.appendChild(link);
             link.click();
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 100);
+            
+            // Clean up the link and blob URL after a short delay to ensure the download has time to start.
+            setTimeout(() => {
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }, 100);
+
             showNotification({ message: "Data export started.", type: 'success' });
 
         } catch (error) {

@@ -45,37 +45,45 @@ export const layoutTree = (node: BaseMindMapNode, level: number, yOffset: number
     return { laidOutNode, height: nodeHeight };
 };
 
-
-const RADIUS_STEP = 130;
-
 /**
- * A recursive helper to arrange nodes in a circular/radial pattern.
- */
-const radialLayoutRecursive = (node: BaseMindMapNode, depth: number, startAngle: number, endAngle: number): LaidoutMindMapNode => {
-    const angleRange = endAngle - startAngle;
-    const angle = startAngle + angleRange / 2;
-
-    const radius = depth * RADIUS_STEP;
-    const x = radius * Math.cos(angle - Math.PI / 2);
-    const y = radius * Math.sin(angle - Math.PI / 2);
-
-    const totalChildren = node.children.length;
-    const angleStep = totalChildren > 0 ? angleRange / totalChildren : 0;
-
-    const laidOutChildren = node.children.map((child, i) => {
-        const childStartAngle = startAngle + i * angleStep;
-        const childEndAngle = childStartAngle + angleStep;
-        return radialLayoutRecursive(child, depth + 1, childStartAngle, childEndAngle);
-    });
-
-    return { ...node, x, y, angle, depth, children: laidOutChildren };
-};
-
-/**
- * Kicks off the radial layout process starting from the root node.
+ * Kicks off the radial layout process starting from the root node. This new version dynamically
+ * adjusts the angle and radius for children to prevent overlaps.
  */
 export const layoutRadial = (root: BaseMindMapNode): LaidoutMindMapNode => {
-    return radialLayoutRecursive(root, 0, 0, 2 * Math.PI);
+    const recursiveLayout = (node: BaseMindMapNode, depth: number, startAngle: number, angleSpan: number): LaidoutMindMapNode => {
+        const angle = startAngle + angleSpan / 2;
+        
+        // Dynamically adjust radius based on depth and number of children to prevent crowding
+        const radius = depth * (200 + node.children.length * 5);
+
+        const laidOutNode: LaidoutMindMapNode = {
+            ...node,
+            x: radius * Math.cos(angle - Math.PI / 2),
+            y: radius * Math.sin(angle - Math.PI / 2),
+            angle,
+            depth,
+            children: [],
+        };
+        
+        const numChildren = node.children.length;
+        if (numChildren > 0) {
+            // Give children more or less of an angle depending on grand-children count (weight)
+            const weights = node.children.map(c => 1 + (c.children?.length ?? 0) * 0.1);
+            const totalWeight = weights.reduce((a, b) => a + b, 0);
+            
+            let currentAngle = startAngle;
+            laidOutNode.children = node.children.map((child, i) => {
+                const childAngleSpan = (angleSpan * weights[i]) / totalWeight;
+                const childNode = recursiveLayout(child, depth + 1, currentAngle, childAngleSpan);
+                currentAngle += childAngleSpan;
+                return childNode;
+            });
+        }
+        
+        return laidOutNode;
+    };
+    
+    return recursiveLayout(root, 0, 0, 2 * Math.PI);
 };
 
 /**
