@@ -12,6 +12,7 @@ interface InboxState {
 
 interface InboxContextType extends InboxState {
   addTask: (taskName: string) => Promise<void>;
+  addMultipleTasks: (taskNames: string[]) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
   importAndOverwriteInbox: (data: { inboxTasks: InboxTask[] }) => Promise<void>;
 }
@@ -72,6 +73,26 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         showNotification({ message: "Could not add task to Inbox.", type: 'error' });
     }
   }, [user, showNotification]);
+  
+  const addMultipleTasks = useCallback(async (taskNames: string[]) => {
+      if (!user || taskNames.length === 0) return;
+      try {
+          const batch = writeBatch(db);
+          const inboxCollection = collection(db, `users/${user.id}/inbox`);
+          taskNames.forEach(name => {
+              if (name.trim()) {
+                  const newTaskRef = doc(inboxCollection);
+                  batch.set(newTaskRef, {
+                      name: name.trim(),
+                      createdAt: serverTimestamp()
+                  });
+              }
+          });
+          await batch.commit();
+      } catch (error) {
+          showNotification({ message: "Could not add tasks to Inbox.", type: 'error' });
+      }
+  }, [user, showNotification]);
 
   const deleteTask = useCallback(async (taskId: string) => {
     if (!user) return;
@@ -115,9 +136,10 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     tasks,
     loading,
     addTask,
+    addMultipleTasks,
     deleteTask,
     importAndOverwriteInbox,
-  }), [tasks, loading, addTask, deleteTask, importAndOverwriteInbox]);
+  }), [tasks, loading, addTask, addMultipleTasks, deleteTask, importAndOverwriteInbox]);
 
   return (
     <InboxContext.Provider value={contextValue}>

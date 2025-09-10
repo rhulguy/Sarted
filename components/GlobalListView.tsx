@@ -8,6 +8,8 @@ import { parseTextToTasks } from '../services/geminiService';
 import Spinner from './Spinner';
 import TaskItem from './TaskItem';
 import { Skeleton } from './Skeleton';
+import { useNotification } from '../contexts/NotificationContext';
+import { ApiError } from '../types';
 
 const InboxItem: React.FC<{ task: InboxTask }> = ({ task }) => {
     const { deleteTask } = useInbox();
@@ -63,30 +65,73 @@ const GlobalListViewSkeleton: React.FC = () => (
 );
 
 const GlobalListView: React.FC = () => {
-    const { tasks: inboxTasks, addTask, loading: inboxLoading } = useInbox();
-    const { visibleProjects, projectGroups, updateTask, deleteTask, addSubtask, moveTask, projects, loading: projectLoading } = useProject();
+    const { tasks: inboxTasks, addTask: addInboxTask, addMultipleTasks, deleteTask: deleteInboxTask, loading: inboxLoading } = useInbox();
+    const { visibleProjects, projectGroups, updateTask, deleteTask, addSubtask, moveTask, projects, loading: projectLoading, addTask: addProjectTask } = useProject();
+    const { showNotification } = useNotification();
     
     const [textInput, setTextInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+    const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
 
-    const handleAddTaskFromVoice = (taskName: string) => { if (taskName) addTask(taskName); };
-    const { isListening, transcript, startListening, stopListening } = useSpeechToText({ onTranscriptFinalized: handleAddTaskFromVoice });
+    const handleVoiceError = useCallback((error: string) => {
+        showNotification({ message: error, type: 'error' });
+    }, [showNotification]);
+
+    const handleAddTaskFromVoice = (taskName: string) => { if (taskName) addInboxTask(taskName); };
+    const { isListening, transcript, startListening, stopListening } = useSpeechToText({ 
+        onTranscriptFinalized: handleAddTaskFromVoice,
+        onError: handleVoiceError,
+    });
 
     const handleProcessText = async () => {
         if (!textInput.trim()) return;
         setIsProcessing(true);
         try {
             const taskNames = await parseTextToTasks(textInput);
-            for (const name of taskNames) await addTask(name);
+            if (taskNames.length === 0) {
+                showNotification({ message: "No actionable tasks found in the text.", type: 'info' });
+            } else {
+                await addMultipleTasks(taskNames);
+                showNotification({ message: `${taskNames.length} task(s) added to inbox.`, type: 'success' });
+            }
             setTextInput('');
         } catch (error) {
-            // Error is handled by a toast in the service/context
+            const message = error instanceof ApiError ? error.message : "Could not process text.";
+            showNotification({ message, type: 'error' });
         } finally {
             setIsProcessing(false);
         }
     };
+    
+    const handleDrop = (e: React.DragEvent, project: Project) => {
+        e.preventDefault();
+        setDragOverProjectId(null);
+        const inboxTaskData = e.dataTransfer.getData("inboxTask");
+        if (inboxTaskData) {
+            try {
+                const inboxTask: InboxTask = JSON.parse(inboxTaskData);
+                
+                deleteInboxTask(inboxTask.id);
+                
+                const newTask: Task = {
+                    id: `task-${Date.now()}`,
+                    name: inboxTask.name,
+                    description: '',
+                    completed: false,
+                    subtasks: [],
+                };
+                addProjectTask(project.id, newTask);
+
+                showNotification({ message: `"${inboxTask.name}" moved to "${project.name}".`, type: 'success' });
+
+            } catch (error) {
+                showNotification({ message: "Could not move task.", type: 'error' });
+            }
+        }
+    };
+
 
     const toggleGroup = (groupId: string) => setCollapsedGroups(prev => {
         const newSet = new Set(prev);
@@ -112,7 +157,7 @@ const GlobalListView: React.FC = () => {
 
     const projectsByGroup = useMemo(() => {
         return projectGroups
-            .map(group => ({ ...group, projects: visibleProjects.filter(p => p.groupId === group.id && p.tasks.length > 0) }))
+            .map(group => ({ ...group, projects: visibleProjects.filter(p => p.groupId === group.id) })) // Keep projects even if they have no tasks
             .filter(g => g.projects.length > 0)
             .sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
     }, [visibleProjects, projectGroups]);
@@ -146,7 +191,7 @@ const GlobalListView: React.FC = () => {
                 </section>
                 
                 <section>
-                    <h2 className="text-xl font-semibold mb-3">All Project Tasks</h2>
+                    <h2 className="text-xl font-semibold mb-3">List</h2>
                     <div className="space-y-4">
                         {projectsByGroup.map(group => (
                             <div key={group.id}>
@@ -155,16 +200,23 @@ const GlobalListView: React.FC = () => {
                                     <div className={`w-3 h-3 rounded-full ${group.color} shrink-0`}></div>
                                     <span className="font-semibold text-text-primary">{group.name}</span>
                                 </button>
-                                <div className={`pl-4 mt-2 space-y-3 overflow-hidden transition-all duration-300 ease-in-out ${collapsedGroups.has(group.id) ? 'max-h-0' : 'max-h-[10000px]'}`}>
+                                <div className={`pl-4 mt-2 space-y-3 transition-all duration-300 ease-in-out ${collapsedGroups.has(group.id) ? 'max-h-0 opacity-0' : 'max-h-[10000px] opacity-100'}`}>
                                     {group.projects.map(project => (
-                                        <div key={project.id}>
+                                        <div 
+                                            key={project.id}
+                                            onDragOver={(e) => { e.preventDefault(); setDragOverProjectId(project.id); }}
+                                            onDragEnter={() => setDragOverProjectId(project.id)}
+                                            onDragLeave={() => setDragOverProjectId(null)}
+                                            onDrop={(e) => handleDrop(e, project)}
+                                            className={`rounded-lg transition-colors ${dragOverProjectId === project.id ? 'bg-accent-blue/10' : ''}`}
+                                        >
                                             <button onClick={() => toggleProject(project.id)} className="w-full flex items-center gap-2 p-1 text-left hover:bg-app-background rounded-lg">
                                                 <ChevronRightIcon className={`w-3 h-3 transition-transform ${!collapsedProjects.has(project.id) && 'rotate-90'}`} />
                                                 <span className="text-lg">{project.icon || '📁'}</span>
                                                 <span className="text-sm font-medium text-text-secondary">{project.name}</span>
                                             </button>
-                                            <div className={`pl-6 mt-1 space-y-2 overflow-hidden transition-all duration-300 ease-in-out ${collapsedProjects.has(project.id) ? 'max-h-0' : 'max-h-[10000px]'}`}>
-                                                {project.tasks.map(task => (
+                                            <div className={`pl-6 mt-1 space-y-2 transition-all duration-300 ease-in-out ${collapsedProjects.has(project.id) ? 'max-h-0 opacity-0' : 'max-h-[10000px] opacity-100'}`}>
+                                                {project.tasks.length > 0 ? project.tasks.map(task => (
                                                     <TaskItem 
                                                         key={task.id} task={task} level={0}
                                                         onUpdate={onUpdateTask(project.id)}
@@ -173,7 +225,9 @@ const GlobalListView: React.FC = () => {
                                                         projects={projects} currentProjectId={project.id}
                                                         onMoveProject={(targetProjectId) => onMoveProject(project.id)(targetProjectId, task)}
                                                     />
-                                                ))}
+                                                )) : (
+                                                    <p className="text-xs text-text-secondary pl-2 pb-2">No tasks yet. Drag an inbox item here to add one.</p>
+                                                )}
                                             </div>
                                         </div>
                                     ))}

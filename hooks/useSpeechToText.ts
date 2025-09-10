@@ -69,9 +69,10 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 
 interface UseSpeechToTextOptions {
   onTranscriptFinalized: (transcript: string) => void;
+  onError?: (error: string) => void;
 }
 
-export const useSpeechToText = ({ onTranscriptFinalized }: UseSpeechToTextOptions) => {
+export const useSpeechToText = ({ onTranscriptFinalized, onError }: UseSpeechToTextOptions) => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -90,9 +91,11 @@ export const useSpeechToText = ({ onTranscriptFinalized }: UseSpeechToTextOption
   }, []);
 
   const startListening = useCallback(() => {
-    if (isListening || !SpeechRecognition) {
-      if (!SpeechRecognition) {
-        alert("Speech recognition is not supported in this browser. Please try Chrome or Safari.");
+    if (isListening) return;
+
+    if (!SpeechRecognition) {
+      if (onError) {
+        onError("Speech recognition is not supported in this browser. Please try Chrome or Safari.");
       }
       return;
     }
@@ -152,23 +155,30 @@ export const useSpeechToText = ({ onTranscriptFinalized }: UseSpeechToTextOption
                 errorMessage = 'Network error during speech recognition. Please check your internet connection and try again.';
                 break;
             case 'no-speech':
-                errorMessage = 'No speech was detected. Please try again.';
+                // This can be annoying if it fires too often, so we can optionally ignore it
+                // For now, let's keep it silent.
                 break;
             case 'audio-capture':
                 errorMessage = 'Could not capture audio. Please check your microphone.';
                 break;
             case 'aborted':
-                console.warn('Speech recognition aborted.');
-                setIsListening(false);
-                return;
+                // User-initiated stop, not an error.
+                break;
+            default:
+                if (onError) onError(errorMessage);
+                break;
         }
-        alert(errorMessage);
+        
+        if (event.error !== 'no-speech' && event.error !== 'aborted' && onError) {
+            onError(errorMessage);
+        }
+
         setIsListening(false);
     };
 
     recognition.start();
     setIsListening(true);
-  }, [isListening, onTranscriptFinalized]);
+  }, [isListening, onTranscriptFinalized, onError]);
 
   useEffect(() => {
     return () => {

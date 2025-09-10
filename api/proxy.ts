@@ -74,10 +74,7 @@ const handleParseTextToTasks = async (payload: any) => {
 TEXT:
 """
 ${text}
-"""
-
-SCHEMA:
-{"type":"OBJECT","properties":{"tasks":{"type":"ARRAY","items":{"type":"STRING"}}}}`;
+"""`;
 
     const geminiResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash",
