@@ -26,13 +26,16 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
     const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 1000, h: 800 });
     const [isPanning, setIsPanning] = useState(false);
     const [addingToNode, setAddingToNode] = useState<LaidoutMindMapNode | null>(null);
-    const [editingNode, setEditingNode] = useState<LaidoutMindMapNode | null>(null);
+    const [editingDatesNode, setEditingDatesNode] = useState<LaidoutMindMapNode | null>(null);
+    const [editingTextNodeId, setEditingTextNodeId] = useState<string | null>(null);
+    const [editingText, setEditingText] = useState('');
     const [generatingImageFor, setGeneratingImageFor] = useState<string | null>(null);
     
     const [newNodeName, setNewNodeName] = useState('');
     const [newNodeStartDate, setNewNodeStartDate] = useState('');
     const [newNodeEndDate, setNewNodeEndDate] = useState('');
     const newNodeInputRef = useRef<HTMLInputElement>(null);
+    const editTextInputRef = useRef<HTMLTextAreaElement>(null);
 
     const isSubmittingRef = useRef(false); // Lock to prevent double submission
     const lastMousePos = useRef({ x: 0, y: 0 });
@@ -41,7 +44,8 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
 
     const handleStartEditingDate = (node: LaidoutMindMapNode) => {
         setAddingToNode(null); // Close other forms
-        setEditingNode(node);
+        setEditingTextNodeId(null);
+        setEditingDatesNode(node);
         setEditDateData({
             startDate: node.task?.startDate || '',
             endDate: node.task?.endDate || '',
@@ -49,22 +53,37 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
     };
 
     const handleSaveDate = async () => {
-        if (!editingNode || !editingNode.task) return;
+        if (!editingDatesNode || !editingDatesNode.task) return;
 
-        let finalStartDate = editDateData.startDate;
-        let finalEndDate = editDateData.endDate;
+        let { startDate, endDate } = editDateData;
 
-        // If only start date is provided, use it for end date as well.
-        if (finalStartDate && !finalEndDate) {
-            finalEndDate = finalStartDate;
+        // If start is set but end isn't, set end to start.
+        if (startDate && !endDate) {
+            endDate = startDate;
+        } 
+        // If end is set but start isn't, set start to end.
+        else if (!startDate && endDate) {
+            startDate = endDate;
+        }
+        // If start is after end, swap them.
+        else if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+            [startDate, endDate] = [endDate, startDate];
         }
 
         await onUpdateTask({
-            ...editingNode.task,
-            startDate: finalStartDate || undefined,
-            endDate: finalEndDate || undefined,
+            ...editingDatesNode.task,
+            startDate: startDate || undefined,
+            endDate: endDate || undefined,
         });
-        setEditingNode(null); // Close the editor
+        setEditingDatesNode(null); // Close the editor
+    };
+    
+    const handleSaveName = async (node: LaidoutMindMapNode) => {
+        if (node.task && editingText.trim() && editingText.trim() !== node.name) {
+            await onUpdateTask({ ...node.task, name: editingText.trim() });
+        }
+        setEditingTextNodeId(null);
+        setEditingText('');
     };
 
     useEffect(() => {
@@ -75,10 +94,18 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
     }, [addingToNode]);
     
     useEffect(() => {
-        if (editingNode) {
+        if (editingDatesNode || editingTextNodeId) {
             setAddingToNode(null);
         }
-    }, [editingNode]);
+    }, [editingDatesNode, editingTextNodeId]);
+
+    useEffect(() => {
+        if (editingTextNodeId) {
+            editTextInputRef.current?.focus();
+            editTextInputRef.current?.select();
+        }
+    }, [editingTextNodeId]);
+
 
     const { nodes, links } = useMemo(() => {
         const buildHierarchy = (tasks: Task[]): BaseMindMapNode[] => {
@@ -170,13 +197,14 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
             });
         }
         setAddingToNode(null);
-        setEditingNode(null);
+        setEditingDatesNode(null);
     }, [project.id, layout, nodes]);
 
 
     const handleCreateSubNode = (e: React.MouseEvent, node: LaidoutMindMapNode) => {
         e.stopPropagation();
-        setEditingNode(null);
+        setEditingDatesNode(null);
+        setEditingTextNodeId(null);
         setAddingToNode(node);
     };
 
@@ -216,7 +244,8 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.target === e.currentTarget) {
             setAddingToNode(null);
-            setEditingNode(null);
+            setEditingDatesNode(null);
+            setEditingTextNodeId(null);
             setIsPanning(true);
             lastMousePos.current = { x: e.clientX, y: e.clientY };
             svgRef.current?.classList.add('cursor-grabbing');
@@ -321,25 +350,49 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
                                     clipPath="inset(0% round 8px)"
                                 />
                             )}
-                            <text
-                                x={node.imageUrl ? 20 : 0}
-                                y={node.task?.startDate ? -8 : 0}
-                                textAnchor="middle"
-                                dominantBaseline="middle"
-                                fill={node.isProject ? "#FFFFFF" : "#1F2937"}
-                                fontSize="14"
-                                style={{ 
-                                    textDecoration: node.isCompleted ? 'line-through' : 'none', 
-                                    opacity: node.isCompleted ? 0.6 : 1,
-                                    pointerEvents: 'none',
-                                    userSelect: 'none'
-                                }}
-                            >
-                                {node.name.length > (node.imageUrl ? 15 : 20) 
-                                    ? `${node.name.slice(0, node.imageUrl ? 14 : 19)}…` 
-                                    : node.name}
-                            </text>
-                             {node.task?.startDate && (
+                            {editingTextNodeId === node.id && !node.isProject ? (
+                                <foreignObject x={-NODE_WIDTH/2 + 5} y={-NODE_HEIGHT/2 + 5} width={NODE_WIDTH - 10} height={NODE_HEIGHT - 10}>
+                                    <textarea
+                                        ref={editTextInputRef}
+                                        value={editingText}
+                                        onChange={(e) => setEditingText(e.target.value)}
+                                        onBlur={() => handleSaveName(node)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveName(node); }
+                                            if (e.key === 'Escape') { setEditingTextNodeId(null); setEditingText(''); }
+                                        }}
+                                        className="w-full h-full text-center bg-white/90 rounded-lg focus:outline-none p-1 text-sm text-text-primary resize-none flex items-center justify-center"
+                                    />
+                                </foreignObject>
+                            ) : (
+                                <text
+                                    x={node.imageUrl ? 20 : 0}
+                                    y={node.task?.startDate && editingTextNodeId !== node.id ? -8 : 0}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                    fill={node.isProject ? "#FFFFFF" : "#1F2937"}
+                                    fontSize="14"
+                                    onClick={() => {
+                                        if (!node.isProject) {
+                                            setEditingDatesNode(null);
+                                            setAddingToNode(null);
+                                            setEditingText(node.name);
+                                            setEditingTextNodeId(node.id);
+                                        }
+                                    }}
+                                    style={{ 
+                                        textDecoration: node.isCompleted ? 'line-through' : 'none', 
+                                        opacity: node.isCompleted ? 0.6 : 1,
+                                        userSelect: 'none'
+                                    }}
+                                >
+                                    {node.name.length > (node.imageUrl ? 15 : 20) 
+                                        ? `${node.name.slice(0, node.imageUrl ? 14 : 19)}…` 
+                                        : node.name}
+                                </text>
+                            )}
+
+                             {node.task?.startDate && editingTextNodeId !== node.id && (
                                 <text
                                     x={node.imageUrl ? 20 : 0}
                                     y={15}
@@ -413,8 +466,8 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
                         </form>
                     </foreignObject>
                 )}
-                {editingNode && editingNode.task && (
-                    <foreignObject x={editingNode.x - NODE_WIDTH/2} y={editingNode.y + NODE_HEIGHT/2 + 5} width={NODE_WIDTH} height={130}>
+                {editingDatesNode && editingDatesNode.task && (
+                    <foreignObject x={editingDatesNode.x - NODE_WIDTH/2} y={editingDatesNode.y + NODE_HEIGHT/2 + 5} width={NODE_WIDTH} height={130}>
                         <div 
                             className="w-full h-full bg-card-background/95 backdrop-blur-sm rounded-2xl flex flex-col p-3 gap-1 shadow-lg border border-border-color"
                             onClick={(e) => e.stopPropagation()}
@@ -436,7 +489,7 @@ const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewPro
                                 className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
                             />
                             <div className="flex justify-end gap-2 mt-auto">
-                                <button onClick={() => setEditingNode(null)} className="px-2 py-1 text-xs rounded-md bg-app-background hover:bg-border-color">Cancel</button>
+                                <button onClick={() => setEditingDatesNode(null)} className="px-2 py-1 text-xs rounded-md bg-app-background hover:bg-border-color">Cancel</button>
                                 <button onClick={handleSaveDate} className="px-2 py-1 text-xs rounded-md text-white bg-accent-blue hover:opacity-90">Save</button>
                             </div>
                         </div>

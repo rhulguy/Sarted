@@ -29,15 +29,20 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
     const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 1000, h: 800 });
     const [isPanning, setIsPanning] = useState(false);
     const [addingToNode, setAddingToNode] = useState<EditableLaidoutMindMapNode | null>(null);
-    const [editingNode, setEditingNode] = useState<EditableLaidoutMindMapNode | null>(null);
+    const [editingDatesNode, setEditingDatesNode] = useState<EditableLaidoutMindMapNode | null>(null);
+    const [editingTextNodeId, setEditingTextNodeId] = useState<string | null>(null);
+    const [editingText, setEditingText] = useState('');
     const [generatingImageFor, setGeneratingImageFor] = useState<string | null>(null);
     const [newNodeName, setNewNodeName] = useState('');
     const [newNodeStartDate, setNewNodeStartDate] = useState('');
     const [newNodeEndDate, setNewNodeEndDate] = useState('');
     const newNodeInputRef = useRef<HTMLInputElement>(null);
+    const editTextInputRef = useRef<HTMLTextAreaElement>(null);
     const isSubmittingRef = useRef(false);
     const lastMousePos = useRef({ x: 0, y: 0 });
     const viewStateRef = useRef(viewBox);
+
+    const [editDateData, setEditDateData] = useState<{ startDate: string, endDate: string }>({ startDate: '', endDate: '' });
 
     useEffect(() => {
         viewStateRef.current = viewBox;
@@ -51,8 +56,18 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
     }, [addingToNode]);
 
     useEffect(() => {
-        if (editingNode) setAddingToNode(null);
-    }, [editingNode]);
+        if (editingDatesNode || editingTextNodeId) {
+            setAddingToNode(null);
+        }
+    }, [editingDatesNode, editingTextNodeId]);
+
+    useEffect(() => {
+        if (editingTextNodeId) {
+            editTextInputRef.current?.focus();
+            editTextInputRef.current?.select();
+        }
+    }, [editingTextNodeId]);
+
 
     const groupColorMap = useMemo(() => new Map(projectGroups.map(g => [g.id, g.color])), [projectGroups]);
 
@@ -165,7 +180,7 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
             });
         }
         setAddingToNode(null);
-        setEditingNode(null);
+        setEditingDatesNode(null);
     }, [nodes, projectIdsKey]);
 
     const handleNewNodeCommit = async () => {
@@ -187,9 +202,34 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
         setNewNodeName(''); setNewNodeStartDate(''); setNewNodeEndDate('');
     };
 
-    const handleDateUpdate = async (node: EditableLaidoutMindMapNode, dates: { startDate?: string, endDate?: string }) => {
-        if (!node.task || !node.projectId) return;
-        await updateTask(node.projectId, { ...node.task, ...dates });
+    const handleSaveDateUpdate = async () => {
+        if (!editingDatesNode || !editingDatesNode.task || !editingDatesNode.projectId) return;
+        
+        let { startDate, endDate } = editDateData;
+
+        // If start is set but end isn't, set end to start.
+        if (startDate && !endDate) {
+            endDate = startDate;
+        } 
+        // If end is set but start isn't, set start to end.
+        else if (!startDate && endDate) {
+            startDate = endDate;
+        }
+        // If start is after end, swap them.
+        else if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+            [startDate, endDate] = [endDate, startDate];
+        }
+
+        await updateTask(editingDatesNode.projectId, { ...editingDatesNode.task, startDate: startDate || undefined, endDate: endDate || undefined });
+        setEditingDatesNode(null);
+    };
+
+     const handleSaveName = async (node: EditableLaidoutMindMapNode) => {
+        if (node.task && node.projectId && editingText.trim() && editingText.trim() !== node.name) {
+            await updateTask(node.projectId, { ...node.task, name: editingText.trim() });
+        }
+        setEditingTextNodeId(null);
+        setEditingText('');
     };
 
     const handleGenerateImage = async (node: EditableLaidoutMindMapNode) => {
@@ -203,8 +243,8 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
     
     const handleAddClick = (e: React.MouseEvent, node: EditableLaidoutMindMapNode) => {
         e.stopPropagation();
-        setEditingNode(null);
-        // A project node is one that is a project but not a group
+        setEditingDatesNode(null);
+        setEditingTextNodeId(null);
         const isProjectNode = node.isProject && node.projectId && node.id === node.projectId;
         if (node.id === 'global-root') {
             onNewProject();
@@ -224,7 +264,7 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
 
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.target === e.currentTarget) {
-            setAddingToNode(null); setEditingNode(null); setIsPanning(true);
+            setAddingToNode(null); setEditingDatesNode(null); setEditingTextNodeId(null); setIsPanning(true);
             lastMousePos.current = { x: e.clientX, y: e.clientY };
             svgRef.current?.classList.add('cursor-grabbing');
         }
@@ -304,8 +344,46 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
                 <g>{nodes.map(node => (
                     <g key={node.id} transform={`translate(${node.x}, ${node.y})`} className="cursor-pointer group" onDoubleClick={(e) => handleDoubleClick(e, node)} onMouseDown={(e) => e.stopPropagation()}>
                         <rect x={-NODE_WIDTH / 2} y={-NODE_HEIGHT / 2} width={NODE_WIDTH} height={NODE_HEIGHT} rx={20} fill={node.isProject ? getHexColor(node.color!) : "#FFFFFF"} stroke={"#E5E7EB"} strokeWidth="1" />
-                        <text x={0} y={node.task?.startDate ? -8 : 0} textAnchor="middle" dominantBaseline="middle" fill={node.isProject ? "#FFFFFF" : "#1F2937"} fontSize="14" fontWeight={node.isProject ? "bold" : "normal"} style={{ pointerEvents: 'none', userSelect: 'none', textDecoration: node.isCompleted ? 'line-through' : 'none', opacity: node.isCompleted ? 0.6 : 1, }}>{node.name.length > 25 ? `${node.name.slice(0, 24)}…` : node.name}</text>
-                        {node.task?.startDate && <text x={0} y={15} textAnchor="middle" dominantBaseline="middle" fill={node.isProject ? "#FFFFFF" : "#6B7280"} fontSize="11">{node.task.startDate} → {node.task.endDate}</text>}
+                        
+                        {editingTextNodeId === node.id && !node.isProject ? (
+                            <foreignObject x={-NODE_WIDTH/2 + 5} y={-NODE_HEIGHT/2 + 5} width={NODE_WIDTH - 10} height={NODE_HEIGHT - 10}>
+                                <textarea
+                                    ref={editTextInputRef}
+                                    value={editingText}
+                                    onChange={(e) => setEditingText(e.target.value)}
+                                    onBlur={() => handleSaveName(node)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveName(node); }
+                                        if (e.key === 'Escape') { setEditingTextNodeId(null); setEditingText(''); }
+                                    }}
+                                    className="w-full h-full text-center bg-white/90 rounded-lg focus:outline-none p-1 text-sm text-text-primary resize-none flex items-center justify-center"
+                                />
+                            </foreignObject>
+                        ) : (
+                            <text 
+                                x={0} 
+                                y={node.task?.startDate && editingTextNodeId !== node.id ? -8 : 0} 
+                                textAnchor="middle" 
+                                dominantBaseline="middle" 
+                                fill={node.isProject ? "#FFFFFF" : "#1F2937"} 
+                                fontSize="14" 
+                                fontWeight={node.isProject ? "bold" : "normal"} 
+                                onClick={() => {
+                                    if (!node.isProject) {
+                                        setEditingDatesNode(null);
+                                        setAddingToNode(null);
+                                        setEditingText(node.name);
+                                        setEditingTextNodeId(node.id);
+                                    }
+                                }}
+                                style={{ userSelect: 'none', textDecoration: node.isCompleted ? 'line-through' : 'none', opacity: node.isCompleted ? 0.6 : 1, }}
+                            >
+                                {node.name.length > 25 ? `${node.name.slice(0, 24)}…` : node.name}
+                            </text>
+                        )}
+                        
+                        {node.task?.startDate && editingTextNodeId !== node.id && <text x={0} y={15} textAnchor="middle" dominantBaseline="middle" fill={node.isProject ? "#FFFFFF" : "#6B7280"} fontSize="11">{node.task.startDate} → {node.task.endDate}</text>}
+                        
                         <g className="opacity-0 group-hover:opacity-100 transition-opacity" transform={`translate(95, -12)`}>
                             {canAddNode(node) && (
                                 <g onClick={(e) => handleAddClick(e, node)} className="cursor-pointer">
@@ -314,7 +392,7 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
                                 </g>
                             )}
                             {!node.isProject && (<>
-                                <g onClick={(e) => { e.stopPropagation(); setEditingNode(node); }} transform={`translate(28, 0)`}><rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" /><EditIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/></g>
+                                <g onClick={(e) => { e.stopPropagation(); setEditingDatesNode(node); setEditingTextNodeId(null); setEditDateData({ startDate: node.task?.startDate || '', endDate: node.task?.endDate || '' }); }} transform={`translate(28, 0)`}><rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" /><EditIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/></g>
                                 <g onClick={(e) => { e.stopPropagation(); handleGenerateImage(node); }} transform={`translate(56, 0)`}>{generatingImageFor === node.id ? (<foreignObject x="0" y="0" width="24" height="24"><Spinner /></foreignObject>) : (<><rect x="0" y="0" width="24" height="24" rx="4" fill="#FFFFFF" /><ImageIcon x="4" y="4" className="w-4 h-4 text-text-secondary"/></>)}</g>
                             </>)}
                         </g>
@@ -328,11 +406,29 @@ const GlobalMindMapView: React.FC<GlobalMindMapViewProps> = ({ onNewProject, onN
                         </form>
                     </foreignObject>
                 )}
-                {editingNode && editingNode.task && (
-                    <foreignObject x={editingNode.x - NODE_WIDTH/2} y={editingNode.y - NODE_HEIGHT/2} width={NODE_WIDTH} height={NODE_HEIGHT}>
-                        <div className="w-full h-full bg-card-background/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-2 gap-1" onClick={(e) => e.stopPropagation()}>
-                            <input type="date" aria-label="Start Date" defaultValue={editingNode.task.startDate} onBlur={(e) => handleDateUpdate(editingNode, { startDate: e.target.value })} onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}} className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue" />
-                            <input type="date" aria-label="End Date" defaultValue={editingNode.task.endDate} onBlur={(e) => handleDateUpdate(editingNode, { endDate: e.target.value })} onKeyDown={(e) => {if(e.key === 'Enter' || e.key === 'Escape') setEditingNode(null)}} min={editingNode.task.startDate} className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue" />
+                {editingDatesNode && editingDatesNode.task && (
+                    <foreignObject x={editingDatesNode.x - NODE_WIDTH/2} y={editingDatesNode.y + NODE_HEIGHT/2 + 5} width={NODE_WIDTH} height={130}>
+                        <div className="w-full h-full bg-card-background/95 backdrop-blur-sm rounded-2xl flex flex-col p-3 gap-1 shadow-lg border border-border-color" onClick={(e) => e.stopPropagation()}>
+                           <label className="text-xs font-medium text-text-secondary">Start Date</label>
+                            <input
+                                type="date"
+                                value={editDateData.startDate}
+                                onChange={(e) => setEditDateData(prev => ({ ...prev, startDate: e.target.value }))}
+                                max={editDateData.endDate || undefined}
+                                className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
+                            />
+                            <label className="text-xs font-medium text-text-secondary">End Date</label>
+                            <input
+                                type="date"
+                                value={editDateData.endDate}
+                                onChange={(e) => setEditDateData(prev => ({ ...prev, endDate: e.target.value }))}
+                                min={editDateData.startDate || undefined}
+                                className="w-full bg-app-background border border-border-color rounded-md p-1 text-xs text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-blue"
+                            />
+                            <div className="flex justify-end gap-2 mt-auto">
+                                <button onClick={() => setEditingDatesNode(null)} className="px-2 py-1 text-xs rounded-md bg-app-background hover:bg-border-color">Cancel</button>
+                                <button onClick={handleSaveDateUpdate} className="px-2 py-1 text-xs rounded-md text-white bg-accent-blue hover:opacity-90">Save</button>
+                            </div>
                         </div>
                     </foreignObject>
                 )}
