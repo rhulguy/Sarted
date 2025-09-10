@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, forwardRef } from 'react';
 import { Task } from '../types';
-import { ChevronRightIcon, ChevronLeftIcon, PlusIcon, DownloadIcon, ViewDayIcon, CalendarDaysIcon, ViewWeekIcon } from './IconComponents';
+import { ChevronRightIcon, ChevronLeftIcon, PlusIcon, ViewDayIcon, CalendarDaysIcon, ViewWeekIcon } from './IconComponents';
 import TaskItem from './TaskItem';
 import { useProject } from '../contexts/ProjectContext';
 
@@ -53,7 +53,7 @@ const normalizeDate = (date: Date): Date => {
 };
 
 // --- Main Component ---
-const CalendarView: React.FC<CalendarViewProps> = ({ onAddTask, onUpdateTask, onDeleteTask, onAddSubtask }) => {
+const CalendarView: React.ForwardRefRenderFunction<HTMLDivElement, CalendarViewProps> = ({ onAddTask, onUpdateTask, onDeleteTask, onAddSubtask }, ref) => {
     const { selectedProject, projects } = useProject();
     const project = selectedProject!;
 
@@ -90,7 +90,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onAddTask, onUpdateTask, on
     };
 
     return (
-        <div className="h-full flex flex-col bg-card-background rounded-lg">
+        <div ref={ref} className="h-full flex flex-col bg-card-background rounded-lg">
             {displayMode === 'month' && (
                 <MonthView 
                     allTasks={allTasks}
@@ -466,4 +466,4 @@ const MonthView: React.FC<MonthViewProps> = ({ allTasks, currentDate, setCurrent
 };
 
 
-export default CalendarView;
+export default forwardRef(CalendarView);

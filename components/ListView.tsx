@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef } from 'react';
 import { Task } from '../types';
 import TaskItem from './TaskItem';
-import { PlusIcon, DownloadIcon } from './IconComponents';
+import { PlusIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
-import { useDownloadImage } from '../hooks/useDownloadImage';
 
 interface ListViewProps {
   onAddTask: (taskName: string, startDate?: string, endDate?: string) => Promise<void>;
@@ -12,8 +11,7 @@ interface ListViewProps {
   onAddSubtask: (parentId: string, subtaskName: string, startDate?: string, endDate?: string) => Promise<void>;
 }
 
-
-const ListView: React.FC<ListViewProps> = ({ onAddTask, onUpdateTask, onDeleteTask, onAddSubtask }) => {
+const ListView: React.ForwardRefRenderFunction<HTMLDivElement, ListViewProps> = ({ onAddTask, onUpdateTask, onDeleteTask, onAddSubtask }, ref) => {
   const [newTaskName, setNewTaskName] = useState('');
   const [newStartDate, setNewStartDate] = useState('');
   const [newEndDate, setNewEndDate] = useState('');
@@ -29,7 +27,7 @@ const ListView: React.FC<ListViewProps> = ({ onAddTask, onUpdateTask, onDeleteTa
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div ref={ref} className="h-full flex flex-col">
       <div className="max-w-4xl mx-auto w-full flex-grow overflow-y-auto p-1">
         <div className="space-y-2">
           <TaskItemRenderer tasks={selectedProject!.tasks} level={0} onUpdate={onUpdateTask} onDelete={onDeleteTask} onAddSubtask={onAddSubtask} />
@@ -66,7 +64,6 @@ const ListView: React.FC<ListViewProps> = ({ onAddTask, onUpdateTask, onDeleteTa
   );
 };
 
-// Helper component to avoid passing project tasks directly, which might not be updated yet
 const TaskItemRenderer: React.FC<{
   tasks: Task[],
   level: number,
@@ -93,5 +90,4 @@ const TaskItemRenderer: React.FC<{
     );
 }
 
-
-export default ListView;
+export default forwardRef(ListView);

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Header from './components/Header';
-import ProjectList from './components/ProjectList';
 import TaskList from './components/TaskList';
 import CreateProjectModal from './components/CreateProjectModal';
 import { WelcomePlaceholder } from './components/WelcomePlaceholder';
@@ -20,15 +19,17 @@ import GlobalMindMapView from './components/GlobalMindMapView';
 import { useAuth } from './contexts/AuthContext';
 import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
-// FIX: Add Task and Resource types
 import { Project, ProjectGroup, ProjectView, Task, Resource } from './types';
-// FIX: Add missing Icon components
-import { PlusIcon, ChevronDownIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon, UploadIcon, SparklesIcon, TrashIcon, LinkIcon, ViewListIcon } from './components/IconComponents';
+// FIX: Added TagIcon to imports.
+import { PlusIcon, ChevronDownIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon, UploadIcon, SparklesIcon, TrashIcon, LinkIcon, ViewListIcon, TagIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import SettingsView from './components/SettingsView';
-// FIX: Add missing imports
 import { useLoading } from './contexts/LoadingContext';
 import { generateImage } from './services/geminiService';
+import { useDownloadImage } from './hooks/useDownloadImage';
+import ExportDropdown from './components/ExportDropdown';
+import { exportResourcesToCsv, exportResourcesToDoc } from './utils/exportUtils';
+import HomePage from './components/HomePage';
 
 
 // --- HELPER HOOK & FUNCTION (Moved to top-level for stability) ---
@@ -47,7 +48,6 @@ const useClickOutside = (ref: React.RefObject<HTMLElement>, handler: (event: Mou
     }, [ref, handler]);
 };
 
-// FIX: Add calculateProgress helper function to be used by ProjectsDashboardView
 const calculateProgress = (tasks: Task[]): { completed: number, total: number } => {
     let completed = 0;
     let total = 0;
@@ -223,36 +223,6 @@ const AddResourceModal: React.FC<{ isOpen: boolean; onClose: () => void; initial
     );
 };
 
-const ExportDropdown: React.FC<{
-    onExportImage: () => void;
-    onExportCsv: () => void;
-    onExportDoc: () => void;
-}> = ({ onExportImage, onExportCsv, onExportDoc }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const wrapperRef = useRef<HTMLDivElement>(null);
-    useClickOutside(wrapperRef, () => setIsOpen(false));
-
-    return (
-        <div className="relative" ref={wrapperRef}>
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color transition-colors"
-            >
-                <DownloadIcon className="w-4 h-4" />
-                <span>Export</span>
-                <ChevronDownIcon className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {isOpen && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-card-background border border-border-color rounded-xl shadow-soft z-20 p-1">
-                    <button onClick={() => { onExportImage(); setIsOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-app-background rounded-lg"><ImageIcon className="w-4 h-4"/>As Image (.png)</button>
-                    <button onClick={() => { onExportCsv(); setIsOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-app-background rounded-lg"><ViewGridIcon className="w-4 h-4"/>As CSV (Excel)</button>
-                    <button onClick={() => { onExportDoc(); setIsOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-app-background rounded-lg"><DocumentTextIcon className="w-4 h-4"/>As Word (.doc)</button>
-                </div>
-            )}
-        </div>
-    );
-};
-
 const SlideshowModal: React.FC<{
     images: string[];
     isOpen: boolean;
@@ -294,13 +264,13 @@ const SlideshowModal: React.FC<{
     );
 };
 
-// FIX: Implement DreamBoardView component
 const DreamBoardView: React.FC = () => {
     const { visibleProjects, updateProject } = useProject();
     const { dispatch: loadingDispatch } = useLoading();
     const [prompt, setPrompt] = useState('');
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [slideshowOpen, setSlideshowOpen] = useState(false);
+    const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
 
     const allImages = useMemo(() => {
         return visibleProjects.flatMap(p => p.dreamBoardImages || []);
@@ -334,9 +304,19 @@ const DreamBoardView: React.FC = () => {
     
     return (
         <div className="h-full flex flex-col p-4 md:p-6">
-            <header className="mb-6">
+            <header className="mb-6 flex justify-between items-start">
+              <div>
                 <h1 className="text-3xl font-bold text-text-primary">Dream Board</h1>
                 <p className="text-text-secondary">Visualize your goals and dreams. Generate images to inspire you.</p>
+              </div>
+              <button 
+                  onClick={() => downloadImage('dream-board.png')} 
+                  disabled={isDownloading} 
+                  className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color transition-colors disabled:opacity-50"
+              >
+                  <DownloadIcon className="w-4 h-4" />
+                  <span>{isDownloading ? 'Exporting...' : 'Export as Image'}</span>
+              </button>
             </header>
             <div className="mb-4 p-4 bg-card-background rounded-xl border border-border-color">
                 <div className="flex flex-col md:flex-row gap-2">
@@ -360,7 +340,7 @@ const DreamBoardView: React.FC = () => {
                     </button>
                 </div>
             </div>
-            <div className="flex-grow overflow-y-auto">
+            <div ref={downloadRef} className="flex-grow overflow-y-auto bg-app-background p-4 rounded-lg">
                 {allImages.length === 0 ? (
                     <div className="text-center py-10 text-text-secondary">
                         <ImageIcon className="w-12 h-12 mx-auto mb-4" />
@@ -369,7 +349,7 @@ const DreamBoardView: React.FC = () => {
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                         {allImages.map((img, index) => (
-                            <div key={index} className="aspect-video bg-app-background rounded-lg overflow-hidden cursor-pointer group relative" onClick={() => setSlideshowOpen(true)}>
+                            <div key={index} className="aspect-video bg-card-background rounded-lg overflow-hidden cursor-pointer group relative" onClick={() => setSlideshowOpen(true)}>
                                 <img src={img} alt="Dream board" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <span className="text-white font-bold">View</span>
@@ -384,7 +364,6 @@ const DreamBoardView: React.FC = () => {
     );
 };
 
-// FIX: Implement ResourceView component
 const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }) => {
     const { resources, loading, deleteResource } = useResource();
     const { projectGroups } = useProject();
@@ -413,6 +392,14 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
         
         return Array.from(groups.values()).filter(g => g.resources.length > 0);
     }, [filteredResources, projectGroups]);
+    
+    const handleExport = (type: 'csv' | 'doc') => {
+        if (type === 'csv') {
+            exportResourcesToCsv(filteredResources);
+        } else {
+            exportResourcesToDoc(filteredResources);
+        }
+    };
     
     const ResourceCard: React.FC<{ resource: Resource }> = ({ resource }) => (
         <div className="bg-app-background rounded-xl p-4 flex flex-col justify-between group h-full">
@@ -462,6 +449,11 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
                     <p className="text-text-secondary">A central library for all your links and references.</p>
                 </div>
                 <div className="flex items-center gap-2">
+                     <ExportDropdown 
+                        onExportCsv={() => handleExport('csv')}
+                        onExportDoc={() => handleExport('doc')}
+                        onExportImage={() => { /* Not available */ }}
+                     />
                      <button onClick={onAddResource} className="flex items-center space-x-2 px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90">
                         <PlusIcon className="w-5 h-5" />
                         <span>Add Resource</span>
@@ -515,9 +507,12 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
     );
 };
 
-// FIX: Implement ProjectsDashboardView component
-const ProjectsDashboardView: React.FC = () => {
-    const { visibleProjects, projectGroups, selectProject } = useProject();
+const ProjectsDashboardView: React.FC<{
+    onNavigateToProject: (projectId: string, view: ProjectView) => void;
+    onNewProject: () => void;
+    onEditGroups: () => void;
+}> = ({ onNavigateToProject, onNewProject, onEditGroups }) => {
+    const { visibleProjects, projectGroups } = useProject();
     
     const { completed, total } = useMemo(() => {
         let totalCompleted = 0;
@@ -547,7 +542,7 @@ const ProjectsDashboardView: React.FC = () => {
         const progress = total > 0 ? (completed / total) * 100 : 0;
 
         return (
-            <div onClick={() => selectProject(project.id)} className="bg-app-background p-4 rounded-xl border border-border-color hover:border-accent-blue cursor-pointer transition-colors group">
+            <div onClick={() => onNavigateToProject(project.id, 'list')} className="bg-app-background p-4 rounded-xl border border-border-color hover:border-accent-blue cursor-pointer transition-colors group">
                 <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                         <span className="text-2xl">{project.icon || '📁'}</span>
@@ -568,9 +563,15 @@ const ProjectsDashboardView: React.FC = () => {
 
     return (
         <div className="h-full flex flex-col p-4 md:p-6 overflow-y-auto">
-            <header className="mb-6">
-                 <h1 className="text-3xl font-bold text-text-primary">Dashboard</h1>
-                 <p className="text-text-secondary">An overview of all your active projects.</p>
+            <header className="mb-6 flex justify-between items-center">
+                 <div>
+                    <h1 className="text-3xl font-bold text-text-primary">Dashboard</h1>
+                    <p className="text-text-secondary">An overview of all your active projects.</p>
+                 </div>
+                 <div className="flex items-center space-x-2">
+                    <button onClick={onEditGroups} title="Manage Project Groups" className="text-text-secondary hover:text-text-primary p-2 bg-card-background border border-border-color rounded-lg"><TagIcon className="w-5 h-5"/></button>
+                    <button onClick={onNewProject} className="flex items-center space-x-2 px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90"><PlusIcon className="w-5 h-5" /><span>New Project</span></button>
+                </div>
             </header>
             <div className="bg-card-background p-4 rounded-xl border border-border-color mb-6">
                 <h2 className="text-lg font-semibold">Overall Progress</h2>
@@ -599,13 +600,13 @@ const ProjectsDashboardView: React.FC = () => {
 
 
 // --- App Component ---
-// FIX: Moved MainView type definition outside of App component so it's accessible by other components.
-type MainView = 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'dreamboard' | 'settings';
+type MainView = 'home' | 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'dreamboard' | 'settings';
 
 export default function App() {
-  const { projects, selectedProject, selectedProjectId, selectProject } = useProject();
+  const { projects, selectedProject, selectProject } = useProject();
   const { shouldShowReview, setReviewShown } = useWeeklyReview();
   const { user, loading: authLoading } = useAuth();
+  const prevUser = useRef(user);
   
   const [isProjectModalOpen, setIsProjectModalOpen] = useState<boolean>(false);
   const [isHabitModalOpen, setIsHabitModalOpen] = useState<boolean>(false);
@@ -614,11 +615,21 @@ export default function App() {
   const [isGroupEditorOpen, setIsGroupEditorOpen] = useState<boolean>(false);
   const [isAddResourceModalOpen, setIsAddResourceModalOpen] = useState<boolean>(false);
   const [resourceModalContext, setResourceModalContext] = useState<{ projectId?: string; groupId?: string } | null>(null);
+  const [initialProjectView, setInitialProjectView] = useState<ProjectView>('list');
 
   const [mainView, setMainView] = useState<MainView>('projects');
-  const [projectView, setProjectView] = useState<ProjectView>('list');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
+  
+  useEffect(() => {
+    if (authLoading) return;
+    if (!prevUser.current && user) {
+        setMainView('projects');
+    } else if (!user) {
+        setMainView('home');
+    }
+    prevUser.current = user;
+  }, [user, authLoading]);
 
   useEffect(() => {
     if (shouldShowReview) {
@@ -642,25 +653,21 @@ export default function App() {
       setIsSidebarOpen(false);
     }
   }, [isMobile]);
-
-  useEffect(() => {
-    if (selectedProjectId) {
-      setMainView('projects');
-      if (isMobile) {
-        setIsSidebarOpen(false);
-      }
-    } else {
-      setProjectView('list');
-    }
-  }, [selectedProjectId, isMobile]);
   
   const handleSetMainView = (view: MainView) => {
     setMainView(view);
-    if (view !== 'projects') {
+    if (selectedProject) {
         selectProject(null);
     }
+    setInitialProjectView('list');
     if (isMobile) setIsSidebarOpen(false);
   }
+  
+  const handleNavigateToProject = (projectId: string, view: ProjectView) => {
+    setInitialProjectView(view);
+    setMainView('projects'); 
+    selectProject(projectId);
+  };
 
   const handleOpenAddResourceModal = (context?: { projectId?: string; groupId?: string }) => {
     setResourceModalContext(context || null);
@@ -668,7 +675,13 @@ export default function App() {
   };
 
   const renderMainContent = () => {
+    if (selectedProject) {
+      return <TaskList key={selectedProject.id} onAddResource={handleOpenAddResourceModal} initialView={initialProjectView} />;
+    }
+
     switch (mainView) {
+      case 'home':
+        return <HomePage />;
       case 'inbox':
         return <InboxView />;
       case 'calendar':
@@ -676,9 +689,9 @@ export default function App() {
       case 'dreamboard':
         return <DreamBoardView />;
       case 'global-mindmap':
-        return <GlobalMindMapView onNewProject={() => setIsProjectModalOpen(true)} />;
+        return <GlobalMindMapView onNewProject={() => setIsProjectModalOpen(true)} onNavigateToProject={handleNavigateToProject} />;
       case 'global-gantt':
-        return <GlobalGanttView />;
+        return <GlobalGanttView onNavigateToProject={handleNavigateToProject} />;
       case 'habits':
         return <HabitTracker onNewHabit={() => setIsHabitModalOpen(true)} />;
       case 'resources':
@@ -687,13 +700,14 @@ export default function App() {
         return <SettingsView />;
       case 'projects':
       default:
-        if (selectedProject) {
-          return <TaskList key={selectedProject.id} projectView={projectView} setProjectView={setProjectView} onAddResource={handleOpenAddResourceModal} />;
-        }
-        if (projects.length === 0) {
+        if (projects.length === 0 && user) { 
             return <WelcomePlaceholder onNewProject={() => setIsProjectModalOpen(true)} />;
         }
-        return <ProjectsDashboardView />;
+        return user ? <ProjectsDashboardView 
+            onNavigateToProject={handleNavigateToProject} 
+            onNewProject={() => setIsProjectModalOpen(true)}
+            onEditGroups={() => setIsGroupEditorOpen(true)}
+          /> : <HomePage />;
     }
   };
 
@@ -712,9 +726,6 @@ export default function App() {
         onNewProject={() => setIsProjectModalOpen(true)}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         isMobile={isMobile}
-        selectedProject={selectedProject}
-        projectView={projectView}
-        setProjectView={setProjectView}
       />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar 
@@ -723,12 +734,7 @@ export default function App() {
           isMobile={isMobile}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
-        >
-          <ProjectList 
-            onNewProject={() => setIsProjectModalOpen(true)}
-            onEditGroups={() => setIsGroupEditorOpen(true)}
-          />
-        </Sidebar>
+        />
         <div className="flex-1 flex flex-col overflow-hidden">
           <main className="flex-1 bg-card-background md:p-0 overflow-y-auto min-h-0">
             <ErrorBoundary>

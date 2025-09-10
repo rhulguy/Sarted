@@ -4,6 +4,8 @@ import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, TrashIcon, CheckCircleIcon
 import { useHabit } from '../contexts/HabitContext';
 import { useProject } from '../contexts/ProjectContext';
 import { COLOR_MAP } from '../constants';
+import ExportDropdown from './ExportDropdown';
+import { exportHabitsToCsv, exportHabitsToDoc } from '../utils/exportUtils';
 
 interface HabitTrackerProps {
   onNewHabit: () => void;
@@ -11,6 +13,7 @@ interface HabitTrackerProps {
 
 // --- Date Helper Functions (UTC-based for consistency) ---
 const getWeekStartDate = (date: Date): Date => {
+  // FIX: Corrected typo from getUTCFullMonth to getUTCMonth.
   const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const day = d.getUTCDay();
   const diff = d.getUTCDate() - day; // Adjust to Sunday
@@ -112,6 +115,14 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
       }
       return false;
   }
+  
+  const handleExport = (type: 'csv' | 'doc') => {
+      if (type === 'csv') {
+          exportHabitsToCsv(habits, weekDates);
+      } else if (type === 'doc') {
+          exportHabitsToDoc(habits, weekDates);
+      }
+  };
 
   return (
     <div className="h-full flex flex-col p-4 md:p-6">
@@ -126,13 +137,20 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
           </span>
           <button onClick={() => changeWeek(1)} aria-label="Next week" className="p-1 rounded text-text-secondary hover:bg-app-background"><ChevronRightIcon className="w-5 h-5"/></button>
         </div>
-        <button 
-          onClick={onNewHabit}
-          className="flex items-center space-x-2 px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90 transition-colors duration-200"
-        >
-          <PlusIcon className="w-5 h-5" />
-          <span className="hidden md:inline">New Habit</span>
-        </button>
+        <div className="flex items-center gap-2">
+            <ExportDropdown 
+                onExportCsv={() => handleExport('csv')}
+                onExportDoc={() => handleExport('doc')}
+                onExportImage={() => { /* Not Available */ }}
+            />
+            <button 
+              onClick={onNewHabit}
+              className="flex items-center space-x-2 px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90 transition-colors duration-200"
+            >
+              <PlusIcon className="w-5 h-5" />
+              <span className="hidden md:inline">New Habit</span>
+            </button>
+        </div>
       </header>
       
       <div className="flex-grow overflow-auto bg-card-background rounded-2xl border border-border-color shadow-card">

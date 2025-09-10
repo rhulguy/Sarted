@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, forwardRef } from 'react';
 import { Task, BaseMindMapNode, LaidoutMindMapNode } from '../types';
 import { useProject } from '../contexts/ProjectContext';
-import { PlusIcon, ImageIcon, DownloadIcon, MindMapIcon, RadialMindMapIcon, EditIcon } from './IconComponents';
+import { PlusIcon, ImageIcon, MindMapIcon, RadialMindMapIcon, EditIcon } from './IconComponents';
 import Spinner from './Spinner';
 import { generateImage } from '../services/geminiService';
-import { useDownloadImage } from '../hooks/useDownloadImage';
 import { layoutTree, layoutRadial } from '../utils/mindMapLayouts';
 
 type LayoutType = 'tree' | 'radial';
@@ -18,10 +17,9 @@ interface MindMapViewProps {
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 70;
 
-const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUpdateTask }) => {
+const MindMapView: React.ForwardRefRenderFunction<HTMLDivElement, MindMapViewProps> = ({ onAddTask, onAddSubtask, onUpdateTask }, ref) => {
     const { selectedProject } = useProject();
     const project = selectedProject!; // Assert non-null
-    const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
     
     const svgRef = useRef<SVGSVGElement>(null);
     const [layout, setLayout] = useState<LayoutType>('tree');
@@ -244,7 +242,7 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
     }, [viewBox]);
 
     return (
-        <div ref={downloadRef} className="w-full h-full relative bg-app-background rounded-xl border border-border-color">
+        <div ref={ref} className="w-full h-full relative bg-app-background rounded-xl border border-border-color">
             <svg
                 ref={svgRef}
                 className="w-full h-full cursor-grab"
@@ -428,14 +426,6 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
                     <PlusIcon className="w-5 h-5" />
                     <span>Add Task</span>
                 </button>
-                 <button 
-                    onClick={() => downloadImage(`${project?.name}-mind-map.png`)} 
-                    disabled={isDownloading} 
-                    className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-card-background text-text-secondary rounded-lg border border-border-color hover:bg-app-background transition-colors disabled:opacity-50"
-                  >
-                    <DownloadIcon className="w-4 h-4" />
-                    <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
-                </button>
                 <div className="bg-card-background p-1 rounded-lg flex space-x-1 border border-border-color">
                     <button onClick={() => setLayout('tree')} className={`p-1.5 rounded-md ${layout === 'tree' ? 'bg-accent-blue text-white' : 'hover:bg-app-background'}`} title="Tree Layout">
                         <MindMapIcon className={`w-5 h-5 ${layout === 'tree' ? '' : 'text-text-primary'}`} />
@@ -449,4 +439,4 @@ const MindMapView: React.FC<MindMapViewProps> = ({ onAddTask, onAddSubtask, onUp
     );
 };
 
-export default MindMapView;
+export default forwardRef(MindMapView);

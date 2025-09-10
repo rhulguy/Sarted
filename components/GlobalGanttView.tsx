@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Task, Project, ProjectGroup } from '../types';
+import { Task, Project, ProjectGroup, ProjectView } from '../types';
 import { PlusIcon, MinusIcon, DownloadIcon, ChevronRightIcon, ImageIcon, FolderIcon, ArrowLongLeftIcon, ArrowLongRightIcon, TrashIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
 import { useDownloadImage } from '../hooks/useDownloadImage';
 import { int, dateToIndexUTC, indexToDateUTC, pixelToIndex, inclusiveWidth } from '../utils/taskUtils';
+
+interface GlobalGanttViewProps {
+    onNavigateToProject: (projectId: string, view: 'gantt') => void;
+}
 
 interface InteractionState {
     type: 'drag' | 'resize-start' | 'resize-end';
@@ -58,7 +62,7 @@ const getMondayOfWeek = (d: Date): Date => {
   return new Date(date.setUTCDate(diff));
 };
 
-const GlobalGanttView: React.FC = () => {
+const GlobalGanttView: React.FC<GlobalGanttViewProps> = ({ onNavigateToProject }) => {
   const { visibleProjects, projectGroups, addTask, updateTask, updateMultipleTasks, deleteTask, reparentTask } = useProject();
   const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
   
@@ -475,7 +479,7 @@ const GlobalGanttView: React.FC = () => {
                                     content = <div className="flex items-center gap-2"><button onClick={() => toggleGroupCollapse(item.data.id)}><ChevronRightIcon className={`w-4 h-4 transition-transform ${collapsedGroups.has(item.data.id) ? '' : 'rotate-90'}`} /></button><div className={`w-3 h-3 rounded-full ${item.data.color}`}></div><span className="font-bold">{item.data.name}</span></div>;
                                     break;
                                 case 'project':
-                                    content = <div className="flex items-center gap-2" style={{ paddingLeft: '1.5rem' }}><button onClick={() => toggleProjectCollapse(item.data.id)}><ChevronRightIcon className={`w-4 h-4 transition-transform ${collapsedProjects.has(item.data.id) ? '' : 'rotate-90'}`} /></button><FolderIcon className="w-4 h-4" /><span>{item.data.name}</span></div>;
+                                    content = <div onClick={() => onNavigateToProject(item.data.id, 'gantt')} className="flex items-center gap-2 cursor-pointer hover:text-accent-blue" style={{ paddingLeft: '1.5rem' }}><button onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(item.data.id); }}><ChevronRightIcon className={`w-4 h-4 transition-transform ${collapsedProjects.has(item.data.id) ? '' : 'rotate-90'}`} /></button><FolderIcon className="w-4 h-4" /><span>{item.data.name}</span></div>;
                                     break;
                                 case 'task':
                                     if (item.data.id.startsWith('new-task-form')) {
@@ -493,7 +497,22 @@ const GlobalGanttView: React.FC = () => {
                              if (item.type !== 'task' || item.data.id.startsWith('new-task-form')) return null;
                             const task = item.data;
                             const taskPos = taskPositions.get(task.id);
-                            if (!taskPos) return null;
+                            if (!taskPos) {
+                                return (
+                                    <div key={`creator-${task.id}`} className="absolute w-full h-10 group/creator" style={{ top: index * rowHeight }} 
+                                        onMouseDown={(e) => { 
+                                            if (item.type === 'task') {
+                                                e.preventDefault(); 
+                                                const timelineRect = e.currentTarget.getBoundingClientRect(); 
+                                                setCreatingState({ task: item, startX: e.clientX - timelineRect.left }); 
+                                            }
+                                        }}>
+                                        <div className="absolute inset-0 bg-transparent group-hover/creator:bg-accent-blue/10 transition-colors flex items-center justify-center">
+                                            <span className="text-xs text-text-secondary opacity-0 group-hover/creator:opacity-100 pointer-events-none">Click and drag to schedule</span>
+                                        </div>
+                                    </div>
+                                );
+                            }
                             const isInteracting = interaction?.taskId === task.id;
                             const left = taskPos.startX;
                             const width = taskPos.endX - taskPos.startX;

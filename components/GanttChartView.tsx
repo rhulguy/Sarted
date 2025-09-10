@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, forwardRef } from 'react';
 import { Task } from '../types';
-import { PlusIcon, MinusIcon, ImageIcon, DownloadIcon, ArrowLongRightIcon, ArrowLongLeftIcon } from './IconComponents';
+import { PlusIcon, MinusIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
-import Spinner from './Spinner';
-import { useDownloadImage } from '../hooks/useDownloadImage';
 import { int, dateToIndexUTC, indexToDateUTC, pixelToIndex, inclusiveWidth } from '../utils/taskUtils';
 
 interface GanttChartViewProps {
@@ -61,9 +59,8 @@ const getMondayOfWeek = (d: Date): Date => {
 
 
 // --- Component ---
-const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask: onUpdateTaskProp, onDeleteTask, onAddSubtask }) => {
+const GanttChartView: React.ForwardRefRenderFunction<HTMLDivElement, GanttChartViewProps> = ({ onAddTask, onUpdateTask: onUpdateTaskProp, onDeleteTask, onAddSubtask }, ref) => {
   const { selectedProject, updateTask, updateMultipleTasks, reparentTask } = useProject();
-  const { ref: downloadRef, downloadImage, isDownloading } = useDownloadImage<HTMLDivElement>();
   const project = selectedProject!; // Assert non-null
   
   const [dayWidth, setDayWidth] = useState(30);
@@ -361,20 +358,12 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
   const rowHeight = 40;
   
   return (
-    <div ref={downloadRef} className="flex flex-col h-full bg-card-background rounded-xl border border-border-color">
-        <div className="p-2 border-b border-border-color flex items-center justify-between">
+    <div ref={ref} className="flex flex-col h-full bg-card-background rounded-xl border border-border-color">
+        <div className="p-2 border-b border-border-color flex items-center justify-start">
             <div className="flex items-center space-x-1">
                 <button onClick={() => handleZoom('out')} className="p-1 rounded text-text-secondary hover:bg-app-background"><MinusIcon className="w-5 h-5" /></button>
                 <button onClick={() => handleZoom('in')} className="p-1 rounded text-text-secondary hover:bg-app-background"><PlusIcon className="w-5 h-5" /></button>
             </div>
-             <button 
-                onClick={() => downloadImage(`${project?.name}-gantt-chart.png`)} 
-                disabled={isDownloading} 
-                className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-app-background text-text-secondary rounded-lg hover:bg-border-color transition-colors disabled:opacity-50"
-             >
-                <DownloadIcon className="w-4 h-4" />
-                <span>{isDownloading ? 'Exporting...' : 'Export'}</span>
-            </button>
         </div>
         <div ref={scrollContainerRef} className="flex-grow overflow-auto">
             <div className="relative" style={{ width: totalWidth + 256, minWidth: '100%' }}>
@@ -405,10 +394,6 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
                            <div key={task.id} className="flex h-10 items-center w-full" style={{ height: `${rowHeight}px` }}>
                                 <div className="w-64 shrink-0 sticky left-0 z-10 flex items-center p-2 border-r border-b border-border-color bg-card-background group" style={{ paddingLeft: `${10 + task.level * 20}px` }}>
                                     <span className="flex-grow truncate text-sm">{task.name}</span>
-                                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
-                                        <button onClick={() => handleIndent(task, index)} title="Indent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongRightIcon className="w-5 h-5" /></button>
-                                        <button onClick={() => handleOutdent(task)} title="Outdent Task" className="p-1 text-text-secondary hover:text-text-primary"><ArrowLongLeftIcon className="w-5 h-5" /></button>
-                                    </div>
                                 </div>
                            </div>
                         ))}
@@ -472,4 +457,4 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ onAddTask, onUpdateTask
   );
 };
 
-export default GanttChartView;
+export default forwardRef(GanttChartView);

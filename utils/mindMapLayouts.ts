@@ -1,26 +1,26 @@
 import { BaseMindMapNode, LaidoutMindMapNode } from '../types';
 
-const TREE_NODE_WIDTH = 220;
-const TREE_NODE_HEIGHT = 80;
+const TREE_NODE_WIDTH = 180;
+const TREE_NODE_HEIGHT = 70;
+const HORIZONTAL_SPACING = 80;
+const VERTICAL_SPACING = 20;
 
 /**
  * Arranges nodes in a classic horizontal tree structure.
- * @param node The root node of the tree/subtree to lay out.
- * @param level The current depth of the node in the tree.
- * @param yOffset The starting Y position for this subtree.
- * @param direction The direction of expansion (-1 for left, 1 for right).
- * @returns An object containing the laid-out node and the total height of the subtree.
  */
 export const layoutTree = (node: BaseMindMapNode, level: number, yOffset: number, direction: 1 | -1 = 1): { laidOutNode: LaidoutMindMapNode, height: number } => {
     let childY = yOffset;
     const laidOutChildren: LaidoutMindMapNode[] = [];
     let childrenHeight = 0;
 
-    node.children.forEach(child => {
+    node.children.forEach((child, index) => {
+        if (index > 0) {
+            childY += VERTICAL_SPACING;
+        }
         const { laidOutNode: laidOutChild, height: childHeight } = layoutTree(child, level + 1, childY, direction);
         laidOutChildren.push(laidOutChild);
         childY += childHeight;
-        childrenHeight += childHeight;
+        childrenHeight = childY - yOffset;
     });
 
     const nodeHeight = Math.max(TREE_NODE_HEIGHT, childrenHeight);
@@ -37,7 +37,7 @@ export const layoutTree = (node: BaseMindMapNode, level: number, yOffset: number
     const laidOutNode: LaidoutMindMapNode = {
         ...node,
         children: laidOutChildren,
-        x: direction * level * (TREE_NODE_WIDTH + 40),
+        x: direction * level * (TREE_NODE_WIDTH + HORIZONTAL_SPACING),
         y: yPos,
         depth: level,
     };
@@ -50,11 +50,6 @@ const RADIUS_STEP = 130;
 
 /**
  * A recursive helper to arrange nodes in a circular/radial pattern.
- * @param node The node to position.
- * @param depth The radial distance from the center.
- * @param startAngle The beginning of the angular segment available for this node and its children.
- * @param endAngle The end of the angular segment.
- * @returns The laid-out node with its children also laid out.
  */
 const radialLayoutRecursive = (node: BaseMindMapNode, depth: number, startAngle: number, endAngle: number): LaidoutMindMapNode => {
     const angleRange = endAngle - startAngle;
@@ -78,50 +73,53 @@ const radialLayoutRecursive = (node: BaseMindMapNode, depth: number, startAngle:
 
 /**
  * Kicks off the radial layout process starting from the root node.
- * @param root The root node of the entire mind map.
- * @returns The fully laid-out tree with radial coordinates.
  */
 export const layoutRadial = (root: BaseMindMapNode): LaidoutMindMapNode => {
     return radialLayoutRecursive(root, 0, 0, 2 * Math.PI);
 };
 
 /**
- * A specialized layout for the global view that arranges projects radially
- * and ensures their subtrees expand outwards to prevent overlapping.
- * @param root The 'All Projects' root node.
- * @returns The laid-out global tree.
+ * A specialized layout for the global view that creates a balanced tree.
  */
-export const layoutGlobalTree = (root: BaseMindMapNode): LaidoutMindMapNode => {
+export const layoutGlobalTree = (root: BaseMindMapNode): LaidoutMindMapNode | null => {
+    if (!root) return null;
+
     const laidOutRoot: LaidoutMindMapNode = { ...root, x: 0, y: 0, depth: 0, children: [] };
-    const totalProjects = root.children.length;
-    const angleStep = totalProjects > 0 ? (2 * Math.PI) / totalProjects : 0;
+    
+    const leftGroups = root.children.slice(0, Math.ceil(root.children.length / 2));
+    const rightGroups = root.children.slice(Math.ceil(root.children.length / 2));
 
-    laidOutRoot.children = root.children.map((projectNode, i) => {
-        const angle = i * angleStep;
-        const radius = RADIUS_STEP * 2.5;
-        const projectX = radius * Math.cos(angle - Math.PI / 2);
-        const projectY = radius * Math.sin(angle - Math.PI / 2);
-
-        // Determine layout direction based on angle.
-        // Projects on the left hemisphere of the circle (PI to 2*PI) expand left (-1).
-        // Others (right hemisphere) expand right (1).
-        const direction = (angle >= Math.PI) ? -1 : 1;
-
-        // Layout the project's task tree with the correct direction, starting at level 0 for the project node.
-        const { laidOutNode: laidOutProject } = layoutTree(projectNode, 0, 0, direction);
-
-        // This helper translates the entire generated subtree.
-        const translateTree = (node: LaidoutMindMapNode, dx: number, dy: number): LaidoutMindMapNode => ({
-            ...node,
-            x: node.x + dx,
-            y: node.y + dy,
-            children: node.children.map(child => translateTree(child, dx, dy))
+    const layoutBranch = (groups: BaseMindMapNode[], direction: 1 | -1): { nodes: LaidoutMindMapNode[], totalHeight: number } => {
+        let y = 0;
+        const nodes: LaidoutMindMapNode[] = [];
+        groups.forEach((group, index) => {
+            if (index > 0) {
+                y += VERTICAL_SPACING * 2; // Extra spacing between groups
+            }
+            // Each group starts at level 1 relative to the root
+            const { laidOutNode, height } = layoutTree(group, 1, y, direction);
+            nodes.push(laidOutNode);
+            y += height;
         });
-        
-        // The layout returns a tree with the project node at x=0 and a calculated y.
-        // We translate the tree so the project node's final position is (projectX, projectY).
-        return translateTree(laidOutProject, projectX, projectY - laidOutProject.y);
+        return { nodes, totalHeight: y };
+    };
+
+    const rightBranch = layoutBranch(rightGroups, 1);
+    const leftBranch = layoutBranch(leftGroups, -1);
+
+    const rightYShift = -rightBranch.totalHeight / 2;
+    const leftYShift = -leftBranch.totalHeight / 2;
+
+    const translateTree = (node: LaidoutMindMapNode, dy: number): LaidoutMindMapNode => ({
+        ...node,
+        y: node.y + dy,
+        children: node.children.map(child => translateTree(child, dy))
     });
+
+    const finalRightChildren = rightBranch.nodes.map(node => translateTree(node, rightYShift));
+    const finalLeftChildren = leftBranch.nodes.map(node => translateTree(node, leftYShift));
+    
+    laidOutRoot.children = [...finalRightChildren, ...finalLeftChildren];
 
     return laidOutRoot;
 };
