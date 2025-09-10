@@ -4,9 +4,9 @@ import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProjectProvider, ResourceProvider } from './contexts/ProjectContext';
 import { HabitProvider } from './contexts/HabitContext';
-import { LoadingProvider } from './contexts/LoadingContext';
 import { InboxProvider } from './contexts/InboxContext';
 import { WeeklyReviewProvider } from './contexts/WeeklyReviewContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,20 +16,20 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <AuthProvider>
-      <ProjectProvider>
-        <ResourceProvider>
-          <HabitProvider>
-            <InboxProvider>
-              <WeeklyReviewProvider>
-                <LoadingProvider>
+    <NotificationProvider>
+      <AuthProvider>
+        <ProjectProvider>
+          <ResourceProvider>
+            <HabitProvider>
+              <InboxProvider>
+                <WeeklyReviewProvider>
                   <App />
-                </LoadingProvider>
-              </WeeklyReviewProvider>
-            </InboxProvider>
-          </HabitProvider>
-        </ResourceProvider>
-      </ProjectProvider>
-    </AuthProvider>
+                </WeeklyReviewProvider>
+              </InboxProvider>
+            </HabitProvider>
+          </ResourceProvider>
+        </ProjectProvider>
+      </AuthProvider>
+    </NotificationProvider>
   </React.StrictMode>
 );

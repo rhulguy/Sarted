@@ -98,3 +98,22 @@ export interface LaidoutMindMapNode extends BaseMindMapNode {
 
 // --- View Types ---
 export type ProjectView = 'list' | 'gantt' | 'mindmap' | 'calendar' | 'resources';
+
+
+// --- Notification System Types ---
+export type NotificationType = 'success' | 'error' | 'info';
+
+export interface Notification {
+  id: string;
+  message: string;
+  type: NotificationType;
+  duration?: number;
+}
+
+// --- Custom Error Type ---
+export class ApiError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ApiError';
+    }
+}

@@ -38,7 +38,8 @@ describe('HabitTracker component', () => {
   // Helper to render the component with a mock context
   const renderComponent = (habits: Habit[] = mockHabits) => {
     return render(
-      <HabitContext.Provider value={{ habits, addHabit: mockAddHabit, updateHabit: mockUpdateHabit, deleteHabit: mockDeleteHabit, importAndOverwriteHabits: mockImportAndOverwriteHabits }}>
+      // FIX: Add missing 'loading' property to the mock context value.
+      <HabitContext.Provider value={{ habits, loading: false, addHabit: mockAddHabit, updateHabit: mockUpdateHabit, deleteHabit: mockDeleteHabit, importAndOverwriteHabits: mockImportAndOverwriteHabits }}>
         <HabitTracker onNewHabit={mockOnNewHabit} />
       </HabitContext.Provider>
     );

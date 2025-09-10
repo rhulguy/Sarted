@@ -6,14 +6,58 @@ import { useProject } from '../contexts/ProjectContext';
 import { COLOR_MAP } from '../constants';
 import ExportDropdown from './ExportDropdown';
 import { exportHabitsToCsv, exportHabitsToDoc } from '../utils/exportUtils';
+import { Skeleton } from './Skeleton';
 
 interface HabitTrackerProps {
   onNewHabit: () => void;
 }
 
+const HabitTrackerSkeleton: React.FC = () => (
+    <div className="h-full flex flex-col p-4 md:p-6 animate-pulse">
+        <header className="flex flex-col md:flex-row items-center justify-between pb-6 shrink-0 gap-4">
+            <Skeleton className="h-9 w-48" />
+            <div className="flex items-center space-x-2">
+                <Skeleton className="h-5 w-5 rounded" />
+                <Skeleton className="h-7 w-64 rounded" />
+                <Skeleton className="h-5 w-5 rounded" />
+            </div>
+            <div className="flex items-center gap-2">
+                <Skeleton className="h-9 w-24 rounded-lg" />
+                <Skeleton className="h-10 w-36 rounded-lg" />
+            </div>
+        </header>
+        <div className="flex-grow overflow-auto bg-card-background rounded-2xl border border-border-color shadow-card">
+            <div className="min-w-[700px]">
+                <div className="grid grid-cols-[2fr_repeat(7,1fr)] gap-2 sticky top-0 p-2 border-b">
+                    <Skeleton className="h-12 w-3/4" />
+                    {[...Array(7)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+                <div className="grid grid-cols-[2fr_repeat(7,1fr)] gap-2 p-2">
+                    {[...Array(3)].map((_, i) => (
+                        <React.Fragment key={i}>
+                            <div className="flex items-center space-x-3 pr-4 h-16">
+                                <Skeleton className="w-2 h-10 rounded" />
+                                <div className="flex-grow space-y-2">
+                                    <Skeleton className="h-4 w-full" />
+                                    <Skeleton className="h-3 w-1/2" />
+                                </div>
+                            </div>
+                            {[...Array(7)].map((_, j) => (
+                                <div key={j} className="flex items-center justify-center h-16">
+                                    <Skeleton className="h-12 w-12 rounded-lg" />
+                                </div>
+                            ))}
+                        </React.Fragment>
+                    ))}
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
+
 // --- Date Helper Functions (UTC-based for consistency) ---
 const getWeekStartDate = (date: Date): Date => {
-  // FIX: Corrected typo from getUTCFullMonth to getUTCMonth.
   const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const day = d.getUTCDay();
   const diff = d.getUTCDate() - day; // Adjust to Sunday
@@ -25,74 +69,59 @@ const formatDate = (date: Date): string => {
 };
 
 const calculateStreak = (habit: Habit): number => {
+    if (habit.frequency === 'weekly') {
+        return Object.values(habit.completions).filter(Boolean).length;
+    }
+    
     let streak = 0;
     const today = new Date();
-    today.setUTCHours(0, 0, 0, 0); // Normalize today to UTC midnight
+    today.setUTCHours(0, 0, 0, 0); 
     
-    // Get sorted completion dates
     const completedDates = Object.keys(habit.completions)
       .filter(dateStr => habit.completions[dateStr])
-      .sort((a, b) => b.localeCompare(a)); // Newest first
+      .sort((a, b) => b.localeCompare(a));
 
     if (completedDates.length === 0) return 0;
     
-    let currentDate = new Date(today);
-    
-    // Check if today or yesterday counts for the streak
     const mostRecentCompletion = new Date(completedDates[0] + 'T00:00:00Z');
-    const diffFromToday = (currentDate.getTime() - mostRecentCompletion.getTime()) / (1000 * 3600 * 24);
+    const diffFromToday = (today.getTime() - mostRecentCompletion.getTime()) / (1000 * 3600 * 24);
 
-    if (diffFromToday > 1) {
-        // Streak is broken if the last completion was more than a day ago
-        return 0;
-    }
+    if (diffFromToday > 1) return 0;
 
-    // Iterate backwards from the most recent completion
+    let currentDate = new Date(mostRecentCompletion);
+    
     for (const dateStr of completedDates) {
         const completionDate = new Date(dateStr + 'T00:00:00Z');
         const diff = (currentDate.getTime() - completionDate.getTime()) / (1000 * 3600 * 24);
         
-        if (habit.frequency === 'daily') {
-            if (diff < 2) { // Allow for a one-day gap (e.g., today and yesterday)
-                streak++;
-                currentDate = completionDate;
-            } else {
-                break; // Gap is too large, streak is broken
-            }
+        if (diff <= 1) { // It's either the same day or the previous day
+            streak++;
+            currentDate = completionDate;
+        } else {
+            break; 
         }
-        // Weekly streak logic is complex, so we'll stick to a simpler "total completions" for now.
     }
-
-    if (habit.frequency === 'weekly') {
-        return completedDates.length;
-    }
-    
     return streak;
 };
 
 
 const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
-  const { habits, updateHabit, deleteHabit } = useHabit();
+  const { habits, loading, updateHabit, deleteHabit } = useHabit();
   const { projects, projectGroups } = useProject();
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const { weekDates, weekStartDate, weekEndDate } = useMemo(() => {
     const start = getWeekStartDate(currentDate);
-    const dates = [];
-    for (let i = 0; i < 7; i++) {
+    const dates = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(start);
       d.setUTCDate(d.getUTCDate() + i);
-      dates.push(d);
-    }
+      return d;
+    });
     return { weekDates: dates, weekStartDate: start, weekEndDate: dates[6] };
   }, [currentDate]);
 
   const habitStreaks = useMemo(() => {
-    const streaks = new Map<string, number>();
-    habits.forEach(habit => {
-        streaks.set(habit.id, calculateStreak(habit));
-    });
-    return streaks;
+    return new Map(habits.map(habit => [habit.id, calculateStreak(habit)]));
   }, [habits]);
 
   const changeWeek = (amount: number) => {
@@ -103,17 +132,13 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
 
   const handleToggleCompletion = (habit: Habit, date: Date) => {
     const dateString = formatDate(date);
-    const currentStatus = habit.completions[dateString] || false;
-    const newCompletions = { ...habit.completions, [dateString]: !currentStatus };
+    const newCompletions = { ...habit.completions, [dateString]: !habit.completions[dateString] };
     updateHabit({ ...habit, completions: newCompletions });
   };
   
   const isHabitScheduledForDay = (habit: Habit, date: Date): boolean => {
       if (habit.frequency === 'daily') return true;
-      if (habit.frequency === 'weekly' && habit.daysOfWeek) {
-          return habit.daysOfWeek.includes(date.getUTCDay());
-      }
-      return false;
+      return habit.daysOfWeek?.includes(date.getUTCDay()) ?? false;
   }
   
   const handleExport = (type: 'csv' | 'doc') => {
@@ -123,6 +148,10 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
           exportHabitsToDoc(habits, weekDates);
       }
   };
+
+  if (loading) {
+      return <HabitTrackerSkeleton />;
+  }
 
   return (
     <div className="h-full flex flex-col p-4 md:p-6">
@@ -167,16 +196,15 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
                 </div>
 
                 <div className="grid grid-cols-[2fr_repeat(7,1fr)] gap-2 p-2">
-                  {habits.length === 0 && (
+                  {habits.length === 0 ? (
                       <div className="col-span-8 text-center text-text-secondary py-16">
                           <h3 className="text-lg font-semibold">No habits yet.</h3>
                           <p>Click "New Habit" to start building a new routine.</p>
                       </div>
-                  )}
-
-                  {habits.map(habit => {
+                  ) : habits.map(habit => {
                     const project = habit.projectId ? projects.find(p => p.id === habit.projectId) : null;
                     const group = habit.projectGroupId ? projectGroups.find(g => g.id === habit.projectGroupId) : null;
+                    const streakLabel = habit.frequency === 'weekly' ? 'completions' : 'day streak';
 
                     return (
                       <React.Fragment key={habit.id}>
@@ -190,7 +218,7 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ onNewHabit }) => {
                                     <span>{project?.name || group?.name}</span>
                                 </div>
                               )}
-                              <p className="text-sm text-text-secondary">{habitStreaks.get(habit.id) || 0} day streak</p>
+                              <p className="text-sm text-text-secondary">{habitStreaks.get(habit.id) || 0} {streakLabel}</p>
                           </div>
                           <button onClick={() => deleteHabit(habit.id)} title={`Delete habit: ${habit.name}`} className="text-accent-red opacity-0 group-hover:opacity-100 transition-opacity">
                               <TrashIcon className="w-4 h-4" />

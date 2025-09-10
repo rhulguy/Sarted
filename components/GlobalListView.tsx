@@ -7,6 +7,7 @@ import { useSpeechToText } from '../hooks/useSpeechToText';
 import { parseTextToTasks } from '../services/geminiService';
 import Spinner from './Spinner';
 import TaskItem from './TaskItem';
+import { Skeleton } from './Skeleton';
 
 const InboxItem: React.FC<{ task: InboxTask }> = ({ task }) => {
     const { deleteTask } = useInbox();
@@ -34,19 +35,44 @@ const InboxItem: React.FC<{ task: InboxTask }> = ({ task }) => {
     );
 };
 
+const GlobalListViewSkeleton: React.FC = () => (
+    <div className="max-w-4xl mx-auto h-full flex flex-col p-4 md:p-6 animate-pulse">
+        <header className="mb-6 shrink-0">
+            <Skeleton className="h-9 w-3/4 mb-2" />
+            <Skeleton className="h-5 w-full" />
+        </header>
+        <div className="flex-grow overflow-y-auto pr-2 space-y-8">
+            <section>
+                <Skeleton className="h-7 w-1/4 mb-3" />
+                <Skeleton className="h-24 w-full mb-2" />
+                <Skeleton className="h-10 w-full" />
+                <div className="space-y-2 mt-4">
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                </div>
+            </section>
+            <section>
+                <Skeleton className="h-7 w-1/3 mb-3" />
+                <div className="space-y-4">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                </div>
+            </section>
+        </div>
+    </div>
+);
+
 const GlobalListView: React.FC = () => {
-    // --- Inbox Section Logic ---
-    const { tasks: inboxTasks, addTask } = useInbox();
+    const { tasks: inboxTasks, addTask, loading: inboxLoading } = useInbox();
+    const { visibleProjects, projectGroups, updateTask, deleteTask, addSubtask, moveTask, projects, loading: projectLoading } = useProject();
+    
     const [textInput, setTextInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
-    const handleAddTaskFromVoice = (taskName: string) => {
-        if (taskName) addTask(taskName);
-    };
-
-    const { isListening, transcript, startListening, stopListening } = useSpeechToText({
-        onTranscriptFinalized: handleAddTaskFromVoice,
-    });
+    const handleAddTaskFromVoice = (taskName: string) => { if (taskName) addTask(taskName); };
+    const { isListening, transcript, startListening, stopListening } = useSpeechToText({ onTranscriptFinalized: handleAddTaskFromVoice });
 
     const handleProcessText = async () => {
         if (!textInput.trim()) return;
@@ -56,17 +82,11 @@ const GlobalListView: React.FC = () => {
             for (const name of taskNames) await addTask(name);
             setTextInput('');
         } catch (error) {
-            console.error(error);
-            alert(error instanceof Error ? error.message : "An unknown error occurred.");
+            // Error is handled by a toast in the service/context
         } finally {
             setIsProcessing(false);
         }
     };
-
-    // --- Global List Section Logic ---
-    const { visibleProjects, projectGroups, updateTask, deleteTask, addSubtask, moveTask, projects } = useProject();
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-    const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
     const toggleGroup = (groupId: string) => setCollapsedGroups(prev => {
         const newSet = new Set(prev);
@@ -92,14 +112,14 @@ const GlobalListView: React.FC = () => {
 
     const projectsByGroup = useMemo(() => {
         return projectGroups
-            .map(group => ({
-                ...group,
-                projects: visibleProjects.filter(p => p.groupId === group.id && p.tasks.length > 0)
-            }))
+            .map(group => ({ ...group, projects: visibleProjects.filter(p => p.groupId === group.id && p.tasks.length > 0) }))
             .filter(g => g.projects.length > 0)
             .sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
     }, [visibleProjects, projectGroups]);
 
+    if (inboxLoading || projectLoading) {
+        return <GlobalListViewSkeleton />;
+    }
 
     return (
         <div className="max-w-4xl mx-auto h-full flex flex-col p-4 md:p-6">
@@ -109,7 +129,6 @@ const GlobalListView: React.FC = () => {
             </header>
 
             <div className="flex-grow overflow-y-auto pr-2 space-y-8">
-                {/* --- Inbox Section --- */}
                 <section>
                     <h2 className="text-xl font-semibold mb-3">Inbox</h2>
                     <div className="mb-4">
@@ -126,7 +145,6 @@ const GlobalListView: React.FC = () => {
                     {inboxTasks.length === 0 && <p className="text-sm text-center text-text-secondary py-4">Your inbox is empty.</p>}
                 </section>
                 
-                {/* --- Global List Section --- */}
                 <section>
                     <h2 className="text-xl font-semibold mb-3">All Project Tasks</h2>
                     <div className="space-y-4">
@@ -137,33 +155,29 @@ const GlobalListView: React.FC = () => {
                                     <div className={`w-3 h-3 rounded-full ${group.color} shrink-0`}></div>
                                     <span className="font-semibold text-text-primary">{group.name}</span>
                                 </button>
-                                {!collapsedGroups.has(group.id) && (
-                                    <div className="pl-4 mt-2 space-y-3">
-                                        {group.projects.map(project => (
-                                            <div key={project.id}>
-                                                <button onClick={() => toggleProject(project.id)} className="w-full flex items-center gap-2 p-1 text-left hover:bg-app-background rounded-lg">
-                                                    <ChevronRightIcon className={`w-3 h-3 transition-transform ${!collapsedProjects.has(project.id) && 'rotate-90'}`} />
-                                                    <span className="text-lg">{project.icon || '📁'}</span>
-                                                    <span className="text-sm font-medium text-text-secondary">{project.name}</span>
-                                                </button>
-                                                {!collapsedProjects.has(project.id) && (
-                                                    <div className="pl-6 mt-1 space-y-2">
-                                                        {project.tasks.map(task => (
-                                                            <TaskItem 
-                                                                key={task.id} task={task} level={0}
-                                                                onUpdate={onUpdateTask(project.id)}
-                                                                onDelete={onDeleteTask(project.id)}
-                                                                onAddSubtask={onAddSubtask(project.id)}
-                                                                projects={projects} currentProjectId={project.id}
-                                                                onMoveProject={(targetProjectId) => onMoveProject(project.id)(targetProjectId, task)}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                )}
+                                <div className={`pl-4 mt-2 space-y-3 overflow-hidden transition-all duration-300 ease-in-out ${collapsedGroups.has(group.id) ? 'max-h-0' : 'max-h-[10000px]'}`}>
+                                    {group.projects.map(project => (
+                                        <div key={project.id}>
+                                            <button onClick={() => toggleProject(project.id)} className="w-full flex items-center gap-2 p-1 text-left hover:bg-app-background rounded-lg">
+                                                <ChevronRightIcon className={`w-3 h-3 transition-transform ${!collapsedProjects.has(project.id) && 'rotate-90'}`} />
+                                                <span className="text-lg">{project.icon || '📁'}</span>
+                                                <span className="text-sm font-medium text-text-secondary">{project.name}</span>
+                                            </button>
+                                            <div className={`pl-6 mt-1 space-y-2 overflow-hidden transition-all duration-300 ease-in-out ${collapsedProjects.has(project.id) ? 'max-h-0' : 'max-h-[10000px]'}`}>
+                                                {project.tasks.map(task => (
+                                                    <TaskItem 
+                                                        key={task.id} task={task} level={0}
+                                                        onUpdate={onUpdateTask(project.id)}
+                                                        onDelete={onDeleteTask(project.id)}
+                                                        onAddSubtask={onAddSubtask(project.id)}
+                                                        projects={projects} currentProjectId={project.id}
+                                                        onMoveProject={(targetProjectId) => onMoveProject(project.id)(targetProjectId, task)}
+                                                    />
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         ))}
                     </div>

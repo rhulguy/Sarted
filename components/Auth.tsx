@@ -1,33 +1,36 @@
 import React, { useEffect, useRef, useState } from 'react';
-// FIX: Import firebase v8 compat library and remove modular auth imports to fix missing member errors.
-import firebase from 'firebase/compat/app';
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { GoogleIcon } from './IconComponents';
+import { useNotification } from '../contexts/NotificationContext';
 
 const Auth: React.FC = () => {
     const { user } = useAuth();
+    const { showNotification } = useNotification();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const handleGoogleSignIn = async () => {
-        // FIX: Use v8 compat syntax for GoogleAuthProvider.
-        const provider = new firebase.auth.GoogleAuthProvider();
-        // Explicitly request profile and email scopes for robustness.
+        const provider = new GoogleAuthProvider();
         provider.addScope('profile');
         provider.addScope('email');
         try {
-            // FIX: Use v8 compat syntax for signInWithPopup.
-            await auth.signInWithPopup(provider);
-        } catch (error) {
+            await signInWithPopup(auth, provider);
+        } catch (error: any) {
             console.error("Error during Google sign-in:", error);
-            alert("Failed to sign in. Please ensure popups are enabled and try again. Check the console for more details.");
+            let message = "Failed to sign in. Please try again.";
+            if (error.code === 'auth/popup-blocked') {
+                message = "Sign-in popup was blocked by the browser. Please allow popups for this site.";
+            } else if (error.code === 'auth/popup-closed-by-user') {
+                message = "Sign-in was cancelled.";
+            }
+            showNotification({ message, type: 'error' });
         }
     };
 
     const handleLogout = () => {
-        // FIX: Use v8 compat syntax for signOut.
-        auth.signOut();
+        signOut(auth);
         setIsDropdownOpen(false);
     };
 

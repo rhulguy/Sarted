@@ -4,30 +4,27 @@ import { useProject } from '../contexts/ProjectContext';
 import { useResource } from '../contexts/ProjectContext';
 import { useHabit } from '../contexts/HabitContext';
 import { useInbox } from '../contexts/InboxContext';
-import { useLoading } from '../contexts/LoadingContext';
 import { BackupData } from '../types';
 import Spinner from './Spinner';
 import { DownloadIcon, UploadIcon, EditIcon } from './IconComponents';
+import { useNotification } from '../contexts/NotificationContext';
 
 const SettingsView: React.FC = () => {
-    // Hooks from original SettingsView and MyAccountView
     const { user, updateUserProfile, deleteUserAccount, loading: authLoading } = useAuth();
     const { projects, projectGroups, importAndOverwriteProjectsAndGroups } = useProject();
     const { resources, importAndOverwriteResources } = useResource();
     const { habits, importAndOverwriteHabits } = useHabit();
     const { tasks: inboxTasks, importAndOverwriteInbox } = useInbox();
-    const { dispatch: loadingDispatch } = useLoading();
+    const { showNotification } = useNotification();
 
     const [isImporting, setIsImporting] = useState(false);
     const [importConfirmation, setImportConfirmation] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // State from MyAccountView
     const [isEditingName, setIsEditingName] = useState(false);
     const [displayName, setDisplayName] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
     
-    // Logic from MyAccountView
     const safeUser = useMemo(() => ({
         name: user?.name || 'User',
         email: user?.email || 'No email provided',
@@ -52,8 +49,7 @@ const SettingsView: React.FC = () => {
             try {
                 await deleteUserAccount();
             } catch (error) {
-                console.error("Failed to delete account:", error);
-                alert("Could not delete account. Please try again.");
+                showNotification({ message: "Could not delete account. Please try again.", type: 'error' });
                 setIsDeleting(false);
             }
         }
@@ -61,7 +57,7 @@ const SettingsView: React.FC = () => {
 
     const handleExportData = useCallback(() => {
         if (!user) {
-            alert("Please sign in to export your data.");
+            showNotification({ message: "Please sign in to export your data.", type: 'error' });
             return;
         }
         try {
@@ -85,27 +81,22 @@ const SettingsView: React.FC = () => {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
-            // Clean up the object URL after a short delay
             setTimeout(() => URL.revokeObjectURL(url), 100);
+            showNotification({ message: "Data export started.", type: 'success' });
 
         } catch (error) {
-            console.error("Failed to export data:", error);
-            alert("An error occurred while exporting your data. Please check the console for details.");
+            showNotification({ message: "An error occurred while exporting your data.", type: 'error' });
         }
-    }, [user, projectGroups, projects, habits, resources, inboxTasks]);
+    }, [user, projectGroups, projects, habits, resources, inboxTasks, showNotification]);
 
-    // Import Logic
     const handleImportData = useCallback(async () => {
         const file = fileInputRef.current?.files?.[0];
         if (!file || !user) {
-          alert("Please select a file and sign in to import data.");
+          showNotification({ message: "Please select a file and sign in to import data.", type: 'error' });
           return;
         }
         
         setIsImporting(true);
-        loadingDispatch({ type: 'SET_LOADING', payload: true });
-
         const reader = new FileReader();
         reader.onload = async (event) => {
             try {
@@ -125,23 +116,21 @@ const SettingsView: React.FC = () => {
                     importAndOverwriteInbox({ inboxTasks: data.inboxTasks }),
                 ]);
 
-                alert("Data imported successfully! The application will now reload.");
-                window.location.reload();
+                showNotification({ message: "Data imported successfully! The app will now reload.", type: 'success', duration: 4000 });
+                setTimeout(() => window.location.reload(), 4000);
             } catch (error) {
-                console.error("Failed to import data:", error);
-                alert(`An error occurred during import: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                const message = error instanceof Error ? error.message : 'Unknown error';
+                showNotification({ message: `Import failed: ${message}`, type: 'error' });
             } finally {
                 setIsImporting(false);
-                loadingDispatch({ type: 'SET_LOADING', payload: false });
             }
         };
         reader.onerror = () => {
-            alert("Failed to read the backup file.");
+            showNotification({ message: "Failed to read the backup file.", type: 'error' });
             setIsImporting(false);
-            loadingDispatch({ type: 'SET_LOADING', payload: false });
         };
         reader.readAsText(file);
-    }, [user, importAndOverwriteProjectsAndGroups, importAndOverwriteHabits, importAndOverwriteResources, importAndOverwriteInbox, loadingDispatch]);
+    }, [user, importAndOverwriteProjectsAndGroups, importAndOverwriteHabits, importAndOverwriteResources, importAndOverwriteInbox, showNotification]);
 
     if (authLoading) {
         return (
@@ -151,7 +140,6 @@ const SettingsView: React.FC = () => {
         );
     }
     
-    // Merged JSX
     return (
         <div className="h-full flex flex-col p-4 md:p-6 lg:p-8">
             <header className="mb-8">
@@ -160,7 +148,6 @@ const SettingsView: React.FC = () => {
             </header>
 
             <div className="flex-grow overflow-y-auto max-w-3xl mx-auto w-full space-y-8">
-                {/* Profile Section from MyAccountView */}
                 <div className="bg-card-background rounded-2xl shadow-card border border-border-color p-6">
                     <h2 className="text-xl font-semibold mb-4 text-text-primary">Profile</h2>
                     <div className="flex items-center space-x-6">
@@ -189,7 +176,6 @@ const SettingsView: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Data Management Section */}
                 <div className="bg-card-background rounded-2xl shadow-card border border-border-color p-6">
                     <h2 className="text-xl font-semibold mb-2 text-text-primary">Data Management</h2>
                     <p className="text-text-secondary mb-4">
@@ -204,11 +190,9 @@ const SettingsView: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Danger Zone Section (merged) */}
                 <div className="bg-card-background rounded-2xl shadow-card border border-accent-red/50 p-6">
                     <h2 className="text-xl font-semibold text-accent-red mb-2">Danger Zone</h2>
                     
-                    {/* Import */}
                     <div className="space-y-4 pt-4">
                         <h3 className="text-lg font-semibold text-text-primary">Import Data</h3>
                         <p className="text-text-secondary"><strong className="text-accent-red">Warning:</strong> Importing a backup file will permanently delete and overwrite all current data. This action cannot be undone.</p>
@@ -223,7 +207,6 @@ const SettingsView: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Delete Account */}
                     <div className="border-t border-border-color mt-6 pt-4 space-y-4">
                         <h3 className="text-lg font-semibold text-text-primary">Delete Account</h3>
                         <p className="text-text-secondary">

@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, Task } from '../types';
+import { Project, Task, ApiError } from '../types';
 import { generateProjectPlan, AIGeneratedTask } from '../services/geminiService';
 import { SparklesIcon } from './IconComponents';
 import Spinner from './Spinner';
 import { useProject } from '../contexts/ProjectContext';
-import { useLoading } from '../contexts/LoadingContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -50,7 +50,6 @@ const IconPicker: React.FC<{ selectedIcon: string; onSelect: (icon: string) => v
     );
 };
 
-// Helper to recursively add IDs and default properties to tasks from AI
 const processTasks = (tasks: AIGeneratedTask[]): Task[] => {
   return tasks.map((task, index) => ({
     id: `task-${Date.now()}-${index}`,
@@ -65,12 +64,12 @@ const processTasks = (tasks: AIGeneratedTask[]): Task[] => {
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose }) => {
   const { projectGroups, addProject } = useProject();
-  const { isLoading, dispatch: loadingDispatch } = useLoading();
+  const { showNotification } = useNotification();
   const [projectName, setProjectName] = useState('');
   const [groupId, setGroupId] = useState(projectGroups[0]?.id || '');
   const [icon, setIcon] = useState('🎯');
   const [aiGoal, setAiGoal] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleCreateProject = (projectData: Omit<Project, 'id' | 'isArchived'>) => {
     addProject(projectData);
@@ -79,8 +78,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
 
   const handleGenerateWithAI = async () => {
     if (!aiGoal.trim()) return;
-    loadingDispatch({ type: 'SET_LOADING', payload: true });
-    setError(null);
+    setIsGenerating(true);
     try {
       const generatedTasks = await generateProjectPlan(aiGoal);
       const newProjectData = {
@@ -91,9 +89,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
       };
       handleCreateProject(newProjectData);
     } catch (err: any) {
-      setError(err.message || 'An unknown error occurred.');
+      const message = err instanceof ApiError ? err.message : 'An unknown error occurred.';
+      showNotification({ message, type: 'error' });
     } finally {
-      loadingDispatch({ type: 'SET_LOADING', payload: false });
+      setIsGenerating(false);
     }
   };
 
@@ -107,6 +106,17 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
     };
     handleCreateProject(newProjectData);
   };
+  
+  useEffect(() => {
+    if (isOpen) {
+        setProjectName('');
+        setAiGoal('');
+        setIcon('🎯');
+        if (projectGroups.length > 0 && !groupId) {
+            setGroupId(projectGroups[0].id);
+        }
+    }
+  }, [isOpen, projectGroups, groupId]);
 
   if (!isOpen) return null;
 
@@ -164,21 +174,20 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
               rows={3}
             />
           </div>
-          {error && <p className="text-accent-red text-sm">{error}</p>}
         </div>
         
         <div className="mt-6 flex flex-col-reverse md:flex-row justify-end md:space-x-4 gap-2">
           <button 
             onClick={handleGenerateWithAI} 
-            disabled={!aiGoal.trim() || isLoading}
+            disabled={!aiGoal.trim() || isGenerating}
             className="flex items-center justify-center space-x-2 px-4 py-3 md:py-2 rounded-lg text-white bg-accent-blue hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
           >
-            {isLoading ? <Spinner /> : <SparklesIcon className="w-5 h-5" />}
-            <span>{isLoading ? 'Generating...' : 'Generate with AI'}</span>
+            {isGenerating ? <Spinner /> : <SparklesIcon className="w-5 h-5" />}
+            <span>{isGenerating ? 'Generating...' : 'Generate with AI'}</span>
           </button>
           <button 
             onClick={handleCreateManually} 
-            disabled={!projectName.trim() || isLoading}
+            disabled={!projectName.trim() || isGenerating}
             className="px-4 py-3 md:py-2 rounded-lg text-text-primary bg-border-color hover:opacity-90 disabled:opacity-50 w-full md:w-auto"
           >
             Create Manually

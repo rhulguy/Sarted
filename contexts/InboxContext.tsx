@@ -3,9 +3,11 @@ import { InboxTask } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, deleteDoc, Timestamp, getDocs, writeBatch } from 'firebase/firestore';
+import { useNotification } from './NotificationContext';
 
 interface InboxState {
   tasks: InboxTask[];
+  loading: boolean;
 }
 
 interface InboxContextType extends InboxState {
@@ -17,11 +19,20 @@ interface InboxContextType extends InboxState {
 const InboxContext = createContext<InboxContextType | undefined>(undefined);
 
 export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { showNotification } = useNotification();
   const [tasks, setTasks] = useState<InboxTask[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      setTasks([]);
+      return;
+    }
+
     if (user) {
+      setLoading(true);
       const inboxQuery = query(collection(db, `users/${user.id}/inbox`), orderBy('createdAt', 'desc'));
       const unsubscribe = onSnapshot(inboxQuery, (snapshot) => {
         const userTasks = snapshot.docs.map(d => {
@@ -34,12 +45,17 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             } as InboxTask
         });
         setTasks(userTasks);
-      }, (error) => console.error("Error fetching inbox:", error));
+        setLoading(false);
+      }, (error) => {
+          showNotification({ message: 'Error fetching inbox tasks.', type: 'error' });
+          setLoading(false);
+      });
       return () => unsubscribe();
     } else {
       setTasks([]);
+      setLoading(false);
     }
-  }, [user]);
+  }, [user, authLoading, showNotification]);
 
   const addTask = useCallback(async (taskName: string) => {
     if (!user || !taskName.trim()) {
@@ -51,11 +67,11 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             name: taskName.trim(),
             createdAt: serverTimestamp()
         });
+        showNotification({ message: `"${taskName}" added to Inbox.`, type: 'success' });
     } catch(error) {
-        console.error("Error adding task to inbox:", error);
-        alert("Could not add task. Please check your connection and try again.");
+        showNotification({ message: "Could not add task to Inbox.", type: 'error' });
     }
-  }, [user]);
+  }, [user, showNotification]);
 
   const deleteTask = useCallback(async (taskId: string) => {
     if (!user) return;
@@ -63,10 +79,9 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
         await deleteDoc(doc(db, `users/${user.id}/inbox/${taskId}`));
     } catch (error) {
-        console.error("Error deleting task from inbox:", error);
-        alert("Failed to delete task. Please try again.");
+        showNotification({ message: 'Failed to delete task from Inbox.', type: 'error' });
     }
-  }, [user]);
+  }, [user, showNotification]);
 
   const importAndOverwriteInbox = useCallback(async (data: { inboxTasks: InboxTask[] }) => {
     if (!user) return;
@@ -75,27 +90,22 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const inboxRef = collection(db, `users/${user.id}/inbox`);
     const snapshot = await getDocs(inboxRef);
     
-    // Delete existing tasks in chunks
     for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
-        const chunk = snapshot.docs.slice(i, i + CHUNK_SIZE);
         const batch = writeBatch(db);
-        chunk.forEach(doc => batch.delete(doc.ref));
+        snapshot.docs.slice(i, i + CHUNK_SIZE).forEach(doc => batch.delete(doc.ref));
         await batch.commit();
     }
 
-    // Add new tasks from backup in chunks, converting timestamp
     const tasksWithTimestamps = data.inboxTasks.map(task => ({
         ...task,
         createdAt: Timestamp.fromMillis(task.createdAt),
     }));
 
     for (let i = 0; i < tasksWithTimestamps.length; i += CHUNK_SIZE) {
-        const chunk = tasksWithTimestamps.slice(i, i + CHUNK_SIZE);
         const batch = writeBatch(db);
-        chunk.forEach(task => {
+        tasksWithTimestamps.slice(i, i + CHUNK_SIZE).forEach(task => {
             const { id, ...taskData } = task;
-            const newDocRef = doc(db, `users/${user.id}/inbox/${id}`);
-            batch.set(newDocRef, taskData);
+            batch.set(doc(db, `users/${user.id}/inbox/${id}`), taskData);
         });
         await batch.commit();
     }
@@ -103,10 +113,11 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const contextValue = useMemo(() => ({
     tasks,
+    loading,
     addTask,
     deleteTask,
     importAndOverwriteInbox,
-  }), [tasks, addTask, deleteTask, importAndOverwriteInbox]);
+  }), [tasks, loading, addTask, deleteTask, importAndOverwriteInbox]);
 
   return (
     <InboxContext.Provider value={contextValue}>

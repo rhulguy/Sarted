@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ListIcon, GanttIcon, MindMapIcon, CalendarIcon, BookmarkSquareIcon, TrendingUpIcon, ImageIcon } from './IconComponents';
+import { ListIcon, GanttIcon, MindMapIcon, CalendarIcon, BookmarkSquareIcon, TrendingUpIcon, ImageIcon, TagIcon } from './IconComponents';
 import { MainView } from '../App';
 
 const ClickableAnimationStage: React.FC<{
@@ -21,7 +21,8 @@ const ClickableAnimationStage: React.FC<{
 );
 
 
-const HomePage: React.FC<{ onNavigate: (view: MainView) => void }> = ({ onNavigate }) => {
+// Fix: Added onManageGroups prop to restore functionality and fix type error in App.tsx.
+const HomePage: React.FC<{ onNavigate: (view: MainView) => void; onManageGroups: () => void; }> = ({ onNavigate, onManageGroups }) => {
     const [stage, setStage] = useState(0);
 
     const stages = [
@@ -61,7 +62,18 @@ const HomePage: React.FC<{ onNavigate: (view: MainView) => void }> = ({ onNaviga
                     Your central hub for total clarity. Click any view to get started. What you do in one place is instantly reflected everywhere else.
                 </p>
 
-                <div className="mt-12 flex flex-col items-center gap-8">
+                {/* Fix: Added button to manage project groups. */}
+                <div className="mt-6">
+                    <button
+                        onClick={onManageGroups}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-text-secondary bg-card-background border border-border-color rounded-lg hover:bg-app-background hover:text-text-primary transition-colors"
+                    >
+                        <TagIcon className="w-4 h-4" />
+                        Manage Project Groups
+                    </button>
+                </div>
+
+                <div className="mt-6 flex flex-col items-center gap-8">
                     {/* Core Hub */}
                     <div className="relative">
                         <div className={`relative w-28 h-28 bg-card-background border-2 rounded-full flex items-center justify-center transition-all duration-300 ${currentStage.core ? 'border-accent-blue shadow-soft scale-110' : 'border-border-color'}`}>

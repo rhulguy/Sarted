@@ -1,9 +1,8 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-// FIX: Import firebase v8 compat library and remove modular auth imports to fix missing member errors.
-import firebase from 'firebase/compat/app';
+import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
-import { Project, Habit, Resource, InboxTask, ProjectGroup } from '../types';
+import { useNotification } from './NotificationContext';
 
 export interface User {
   id: string;
@@ -30,17 +29,16 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const { showNotification } = useNotification();
 
   useEffect(() => {
-    // FIX: Use v8 compat syntax for onAuthStateChanged and User type.
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: firebase.User | null) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       try {
         if (firebaseUser) {
           const userRef = doc(db, `users/${firebaseUser.uid}/profile/main`);
           const userDoc = await getDoc(userRef);
 
           if (!userDoc.exists()) {
-            // First time sign-in, create a profile document
             let finalName = 'New User';
             if (firebaseUser.displayName && typeof firebaseUser.displayName === 'string' && firebaseUser.displayName.trim()) {
                 finalName = firebaseUser.displayName.trim();
@@ -55,10 +53,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             await setDoc(userRef, newUser);
             setUser(newUser);
           } else {
-            // Existing user, robustly create user object
             const profileData = userDoc.data();
             
-            let finalName = 'User'; // Start with a safe default
+            let finalName = 'User'; 
             if (profileData && typeof profileData.name === 'string' && profileData.name.trim()) {
                 finalName = profileData.name.trim();
             } else if (firebaseUser.displayName && typeof firebaseUser.displayName === 'string' && firebaseUser.displayName.trim()) {
@@ -77,7 +74,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(null);
         }
       } catch (error) {
-        console.error("Error during authentication state change:", error);
+        showNotification({ message: 'Error during authentication.', type: 'error' });
         setUser(null);
       } finally {
         setLoading(false);
@@ -85,21 +82,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [showNotification]);
 
   const updateUserProfile = async (updates: Partial<User>) => {
       if (!user) return;
       
+      const originalUser = { ...user };
       const updatedUser = { ...user, ...updates };
-      setUser(updatedUser); // Optimistic update
+      setUser(updatedUser);
 
       try {
           const userRef = doc(db, `users/${user.id}/profile/main`);
           await updateDoc(userRef, updates);
+          showNotification({ message: 'Profile updated successfully.', type: 'success' });
       } catch (error) {
-          console.error("Failed to update user profile:", error);
-          setUser(user); // Revert on failure
-          alert("Could not save changes. Please try again.");
+          showNotification({ message: 'Could not save changes. Please try again.', type: 'error' });
+          setUser(originalUser); // Revert on failure
       }
   };
 
@@ -125,12 +123,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ]);
 
           await deleteDoc(doc(db, `users/${user.id}/profile/main`));
-          // FIX: Use v8 compat syntax for signOut.
-          await auth.signOut();
+          await signOut(auth);
           setUser(null);
-
+          showNotification({ message: 'Account deleted successfully.', type: 'success' });
       } catch (error) {
-          console.error("Error deleting user account data:", error);
+          showNotification({ message: 'Error deleting account data.', type: 'error' });
           throw error;
       }
   };
