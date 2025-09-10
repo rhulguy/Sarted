@@ -1,9 +1,7 @@
 import React from 'react';
-import { HomeIcon, FolderIcon, TrendingUpIcon, InboxIcon, CalendarIcon, MindMapIcon, GanttIcon, BookmarkSquareIcon, UserCircleIcon, ImageIcon, CogIcon } from './IconComponents';
-// FIX: Import useProject to correctly get selectedProject state
+import { FolderIcon, TrendingUpIcon, CalendarIcon, MindMapIcon, GanttIcon, BookmarkSquareIcon, ImageIcon, CogIcon, ListIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
-
-type MainView = 'home' | 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'dreamboard' | 'settings';
+import { MainView } from '../App';
 
 interface SidebarProps {
   mainView: MainView;
@@ -13,15 +11,12 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-// FIX: Added a return statement and proper mobile/desktop rendering logic to fix the component's return type.
 export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMobile, isOpen, onClose }) => {
-  // FIX: Use the project context to determine if a project is selected, removing the incorrect local variable.
   const { selectedProject } = useProject();
 
   const navItems = [
-    { id: 'home', name: 'Home', icon: HomeIcon },
     { id: 'projects', name: 'Dashboard', icon: FolderIcon },
-    { id: 'inbox', name: 'Inbox', icon: InboxIcon },
+    { id: 'list-inbox', name: 'List & Inbox', icon: ListIcon },
     { id: 'calendar', name: 'Global Calendar', icon: CalendarIcon },
     { id: 'dreamboard', name: 'Dream Board', icon: ImageIcon },
     { id: 'global-mindmap', name: 'Global Map', icon: MindMapIcon },

@@ -10,7 +10,6 @@ import { useProject, useResource } from './contexts/ProjectContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import GlobalLoader from './components/GlobalLoader';
 import { useIsMobile } from './hooks/useIsMobile';
-import InboxView from './components/InboxView';
 import CommandBar from './components/CommandBar';
 import WeeklyReviewModal from './components/WeeklyReviewModal';
 import { useWeeklyReview } from './contexts/WeeklyReviewContext';
@@ -20,7 +19,6 @@ import { useAuth } from './contexts/AuthContext';
 import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 import { Project, ProjectGroup, ProjectView, Task, Resource } from './types';
-// FIX: Added TagIcon to imports.
 import { PlusIcon, ChevronDownIcon, SartedLogoIcon, DownloadIcon, ImageIcon, DocumentTextIcon, ViewGridIcon, UploadIcon, SparklesIcon, TrashIcon, LinkIcon, ViewListIcon, TagIcon } from './components/IconComponents';
 import Spinner from './components/Spinner';
 import SettingsView from './components/SettingsView';
@@ -30,6 +28,7 @@ import { useDownloadImage } from './hooks/useDownloadImage';
 import ExportDropdown from './components/ExportDropdown';
 import { exportResourcesToCsv, exportResourcesToDoc } from './utils/exportUtils';
 import HomePage from './components/HomePage';
+import GlobalListView from './components/GlobalListView';
 
 
 // --- HELPER HOOK & FUNCTION (Moved to top-level for stability) ---
@@ -47,26 +46,6 @@ const useClickOutside = (ref: React.RefObject<HTMLElement>, handler: (event: Mou
         };
     }, [ref, handler]);
 };
-
-const calculateProgress = (tasks: Task[]): { completed: number, total: number } => {
-    let completed = 0;
-    let total = 0;
-    
-    tasks.forEach(task => {
-        total++;
-        if (task.completed) {
-            completed++;
-        }
-        if (task.subtasks?.length) {
-            const subtaskProgress = calculateProgress(task.subtasks);
-            completed += subtaskProgress.completed;
-            total += subtaskProgress.total;
-        }
-    });
-
-    return { completed, total };
-}
-
 
 // --- STABLE TOP-LEVEL COMPONENT DEFINITIONS ---
 
@@ -507,100 +486,8 @@ const ResourceView: React.FC<{ onAddResource: () => void }> = ({ onAddResource }
     );
 };
 
-const ProjectsDashboardView: React.FC<{
-    onNavigateToProject: (projectId: string, view: ProjectView) => void;
-    onNewProject: () => void;
-    onEditGroups: () => void;
-}> = ({ onNavigateToProject, onNewProject, onEditGroups }) => {
-    const { visibleProjects, projectGroups } = useProject();
-    
-    const { completed, total } = useMemo(() => {
-        let totalCompleted = 0;
-        let totalTasks = 0;
-        visibleProjects.forEach(p => {
-            const progress = calculateProgress(p.tasks);
-            totalCompleted += progress.completed;
-            totalTasks += progress.total;
-        });
-        return { completed: totalCompleted, total: totalTasks };
-    }, [visibleProjects]);
-
-    const overallProgress = total > 0 ? (completed / total) * 100 : 0;
-    
-    const projectsByGroup = useMemo(() => {
-        return projectGroups
-            .map(group => ({
-                ...group,
-                projects: visibleProjects.filter(p => p.groupId === group.id)
-            }))
-            .filter(g => g.projects.length > 0)
-            .sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
-    }, [visibleProjects, projectGroups]);
-    
-    const ProjectCard: React.FC<{ project: Project }> = ({ project }) => {
-        const { completed, total } = calculateProgress(project.tasks);
-        const progress = total > 0 ? (completed / total) * 100 : 0;
-
-        return (
-            <div onClick={() => onNavigateToProject(project.id, 'list')} className="bg-app-background p-4 rounded-xl border border-border-color hover:border-accent-blue cursor-pointer transition-colors group">
-                <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                        <span className="text-2xl">{project.icon || '📁'}</span>
-                        <h3 className="font-semibold text-text-primary group-hover:text-accent-blue">{project.name}</h3>
-                    </div>
-                </div>
-                <div className="mt-4">
-                    <div className="flex justify-between items-center text-xs text-text-secondary mb-1">
-                        <span>Progress</span>
-                        <span>{Math.round(progress)}%</span>
-                    </div>
-                    <div className="w-full bg-border-color rounded-full h-1.5"><div className="bg-accent-blue h-1.5 rounded-full" style={{ width: `${progress}%` }}></div></div>
-                    <div className="text-xs text-text-secondary mt-1">{completed} / {total} tasks</div>
-                </div>
-            </div>
-        );
-    };
-
-    return (
-        <div className="h-full flex flex-col p-4 md:p-6 overflow-y-auto">
-            <header className="mb-6 flex justify-between items-center">
-                 <div>
-                    <h1 className="text-3xl font-bold text-text-primary">Dashboard</h1>
-                    <p className="text-text-secondary">An overview of all your active projects.</p>
-                 </div>
-                 <div className="flex items-center space-x-2">
-                    <button onClick={onEditGroups} title="Manage Project Groups" className="text-text-secondary hover:text-text-primary p-2 bg-card-background border border-border-color rounded-lg"><TagIcon className="w-5 h-5"/></button>
-                    <button onClick={onNewProject} className="flex items-center space-x-2 px-4 py-2 bg-accent-blue text-white rounded-lg hover:opacity-90"><PlusIcon className="w-5 h-5" /><span>New Project</span></button>
-                </div>
-            </header>
-            <div className="bg-card-background p-4 rounded-xl border border-border-color mb-6">
-                <h2 className="text-lg font-semibold">Overall Progress</h2>
-                <div className="flex justify-between items-center text-sm text-text-secondary mb-1 mt-2">
-                    <span>{completed} / {total} tasks completed across all projects</span>
-                    <span>{Math.round(overallProgress)}%</span>
-                </div>
-                <div className="w-full bg-border-color rounded-full h-2.5"><div className="bg-accent-blue h-2.5 rounded-full" style={{ width: `${overallProgress}%` }}></div></div>
-            </div>
-            <div className="space-y-6">
-                {projectsByGroup.map(group => (
-                    <div key={group.id}>
-                        <h2 className="text-lg font-semibold flex items-center gap-2 mb-2">
-                            <div className={`w-3 h-3 rounded-full ${group.color} shrink-0`}></div>
-                            {group.name}
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {group.projects.map(p => <ProjectCard key={p.id} project={p} />)}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-
 // --- App Component ---
-type MainView = 'home' | 'projects' | 'habits' | 'inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'dreamboard' | 'settings';
+export type MainView = 'projects' | 'habits' | 'list-inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'dreamboard' | 'settings';
 
 export default function App() {
   const { projects, selectedProject, selectProject } = useProject();
@@ -626,7 +513,7 @@ export default function App() {
     if (!prevUser.current && user) {
         setMainView('projects');
     } else if (!user) {
-        setMainView('home');
+        setMainView('projects'); // Default to dashboard/home
     }
     prevUser.current = user;
   }, [user, authLoading]);
@@ -680,10 +567,8 @@ export default function App() {
     }
 
     switch (mainView) {
-      case 'home':
-        return <HomePage />;
-      case 'inbox':
-        return <InboxView />;
+      case 'list-inbox':
+        return <GlobalListView />;
       case 'calendar':
         return <GlobalCalendar />;
       case 'dreamboard':
@@ -703,11 +588,7 @@ export default function App() {
         if (projects.length === 0 && user) { 
             return <WelcomePlaceholder onNewProject={() => setIsProjectModalOpen(true)} />;
         }
-        return user ? <ProjectsDashboardView 
-            onNavigateToProject={handleNavigateToProject} 
-            onNewProject={() => setIsProjectModalOpen(true)}
-            onEditGroups={() => setIsGroupEditorOpen(true)}
-          /> : <HomePage />;
+        return <HomePage onNavigate={handleSetMainView} />;
     }
   };
 
