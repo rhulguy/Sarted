@@ -16,13 +16,19 @@ const Auth: React.FC = () => {
         provider.addScope('profile');
         provider.addScope('email');
         try {
-            // Using signInWithRedirect for a more robust authentication flow.
-            await auth.signInWithRedirect(provider);
+            // Reverting to signInWithPopup as signInWithRedirect is often blocked in iframed environments.
+            await auth.signInWithPopup(provider);
+            // onAuthStateChanged in AuthContext will handle the successful login.
         } catch (error: any) {
-            console.error("Error during Google sign-in redirect setup:", error);
+            console.error("Error during Google sign-in:", error);
             let message = "An unknown error occurred during sign-in.";
-            if (error.code === 'auth/network-request-failed') {
+            if (error.code === 'auth/popup-closed-by-user') {
+                // This is a common case and can be handled silently.
+                return; 
+            } else if (error.code === 'auth/network-request-failed') {
                 message = "Network error. Please check your connection and try again.";
+            } else if (error.code === 'auth/popup-blocked') {
+                message = "Sign-in popup was blocked by the browser. Please allow popups for this site.";
             }
             showNotification({ message, type: 'error' });
         }
