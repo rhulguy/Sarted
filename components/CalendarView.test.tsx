@@ -68,6 +68,8 @@ describe('CalendarView component', () => {
           // FIX: Add the missing 'reorderProjectGroups' function to the mock context value.
           reorderProjectGroups: vi.fn(),
           addTask: vi.fn(),
+          // FIX: Add missing 'addMultipleTasks' to mock context
+          addMultipleTasks: vi.fn(),
           addSubtask: vi.fn(),
           updateTask: vi.fn(),
           updateMultipleTasks: vi.fn(),

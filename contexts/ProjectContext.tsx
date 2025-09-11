@@ -28,6 +28,7 @@ interface ProjectContextType {
   deleteProjectGroup: (groupId: string) => Promise<void>;
   reorderProjectGroups: (groups: ProjectGroup[]) => Promise<void>;
   addTask: (projectId: string, task: Task) => Promise<void>;
+  addMultipleTasks: (projectId: string, tasks: Task[]) => Promise<void>;
   addSubtask: (projectId: string, parentId: string, subtask: Task) => Promise<void>;
   updateTask: (projectId: string, task: Task) => Promise<void>;
   updateMultipleTasks: (projectId: string, tasks: Task[]) => Promise<void>;
@@ -229,6 +230,13 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     const newTasks = [...(project.tasks || []), task];
     await updateProject(projectId, { tasks: newTasks });
   }, [projects, updateProject]);
+  
+  const addMultipleTasks = useCallback(async (projectId: string, tasks: Task[]) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    const newTasks = [...(project.tasks || []), ...tasks];
+    await updateProject(projectId, { tasks: newTasks });
+  }, [projects, updateProject]);
 
   const addSubtask = useCallback(async (projectId: string, parentId: string, subtask: Task) => {
     const project = projects.find(p => p.id === projectId);
@@ -311,7 +319,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const archivedProjects = useMemo(() => projects.filter(p => p.isArchived), [projects]);
   const selectedProject = useMemo(() => projects.find(p => p.id === selectedProjectId) ?? null, [projects, selectedProjectId]);
 
-  const contextValue = useMemo(() => ({ projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading, selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject, addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups, addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask, importAndOverwriteProjectsAndGroups }), [ projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading, selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject, addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups, addTask, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask, importAndOverwriteProjectsAndGroups ]);
+  const contextValue = useMemo(() => ({ projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading, selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject, addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups, addTask, addMultipleTasks, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask, importAndOverwriteProjectsAndGroups }), [ projects, visibleProjects, archivedProjects, projectGroups, selectedProjectId, selectedProject, loading, selectProject, addProject, updateProject, deleteProject, archiveProject, unarchiveProject, addProjectGroup, updateProjectGroup, deleteProjectGroup, reorderProjectGroups, addTask, addMultipleTasks, addSubtask, updateTask, updateMultipleTasks, deleteTask, moveTask, reparentTask, importAndOverwriteProjectsAndGroups ]);
 
   return ( <ProjectContext.Provider value={contextValue}> {children} </ProjectContext.Provider> );
 };

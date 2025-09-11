@@ -74,29 +74,22 @@ interface UseSpeechToTextOptions {
 
 export const useSpeechToText = ({ onTranscriptFinalized, onError }: UseSpeechToTextOptions) => {
   const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
+  const [transcript, setTranscript] = useState(''); // For UI display of the current phrase
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const finalTranscriptRef = useRef(''); // Ref to hold the final transcript state reliably
-
-  // Update ref whenever transcript state changes
-  useEffect(() => {
-    finalTranscriptRef.current = transcript;
-  }, [transcript]);
+  const lastProcessedTranscriptRef = useRef(''); // Tracks what has already been submitted
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
-      // onend will handle finalization and cleanup
+      // The onend handler will be triggered, which finalizes the transcript.
     }
   }, []);
 
   const startListening = useCallback(() => {
-    if (isListening) return;
+    if (recognitionRef.current || isListening) return;
 
     if (!SpeechRecognition) {
-      if (onError) {
-        onError("Speech recognition is not supported in this browser. Please try Chrome or Safari.");
-      }
+      if (onError) onError("Speech recognition is not supported in this browser. Please try Chrome or Safari.");
       return;
     }
 
@@ -106,40 +99,49 @@ export const useSpeechToText = ({ onTranscriptFinalized, onError }: UseSpeechToT
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
-    let accumulatedTranscript = '';
-
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interimTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const transcriptPart = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          accumulatedTranscript += transcriptPart;
-        } else {
-          interimTranscript += transcriptPart;
-        }
+      let fullTranscript = '';
+      // Rebuild the full transcript from all results every time.
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
       }
 
-      const fullTranscript = accumulatedTranscript + interimTranscript;
-      setTranscript(fullTranscript);
+      // Determine what content is new since the last time we processed a "next" command.
+      const newContentToProcess = fullTranscript.substring(lastProcessedTranscriptRef.current.length);
+      const parts = newContentToProcess.split(/\snext\b/i);
+      
+      // Update UI to show only the currently-being-dictated part.
+      setTranscript(parts.length > 0 ? parts[parts.length - 1] : '');
 
-      if (fullTranscript.toLowerCase().endsWith('next')) {
-        const taskName = fullTranscript.slice(0, -4).trim();
-        if (taskName) {
-          onTranscriptFinalized(taskName);
+      if (parts.length > 1) {
+        // Process all parts that are now considered "complete" because they are followed by "next".
+        for (let i = 0; i < parts.length - 1; i++) {
+          const taskName = parts[i].trim();
+          if (taskName) {
+            onTranscriptFinalized(taskName);
+          }
+          // Update the cursor to include the part we just processed and the "next" keyword.
+          lastProcessedTranscriptRef.current += parts[i] + 'next ';
         }
-        accumulatedTranscript = '';
-        setTranscript('');
       }
     };
 
     recognition.onend = () => {
-      // Use the ref to get the absolute latest transcript value, avoiding stale closures.
-      const finalTranscript = finalTranscriptRef.current.trim();
-      if (finalTranscript) {
-        onTranscriptFinalized(finalTranscript);
-      }
+      // The `transcript` state holds the final, unprocessed part of the speech.
+      setTranscript(remainingTranscript => {
+          const finalTask = remainingTranscript.trim();
+          
+          if (finalTask) {
+              const cleanedFinalTask = finalTask.replace(/\snext\s*$/i, '').trim();
+              if (cleanedFinalTask) {
+                onTranscriptFinalized(cleanedFinalTask);
+              }
+          }
+          return ''; // Reset UI transcript
+      });
+      
       setIsListening(false);
-      setTranscript('');
+      lastProcessedTranscriptRef.current = '';
       recognitionRef.current = null;
     };
     
@@ -155,8 +157,7 @@ export const useSpeechToText = ({ onTranscriptFinalized, onError }: UseSpeechToT
                 errorMessage = 'Network error during speech recognition. Please check your internet connection and try again.';
                 break;
             case 'no-speech':
-                // This can be annoying if it fires too often, so we can optionally ignore it
-                // For now, let's keep it silent.
+                // This can fire if the user stops talking, so we handle it silently.
                 break;
             case 'audio-capture':
                 errorMessage = 'Could not capture audio. Please check your microphone.';
@@ -173,18 +174,29 @@ export const useSpeechToText = ({ onTranscriptFinalized, onError }: UseSpeechToT
             onError(errorMessage);
         }
 
+        // Ensure cleanup happens on error too
         setIsListening(false);
+        lastProcessedTranscriptRef.current = '';
+        recognitionRef.current = null;
     };
 
     recognition.start();
     setIsListening(true);
+    lastProcessedTranscriptRef.current = '';
   }, [isListening, onTranscriptFinalized, onError]);
 
   useEffect(() => {
+    // Cleanup on unmount
     return () => {
-      stopListening();
+      if (recognitionRef.current) {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
     };
-  }, [stopListening]);
+  }, []);
 
   return { isListening, transcript, startListening, stopListening };
 };

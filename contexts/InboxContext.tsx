@@ -15,6 +15,7 @@ interface InboxContextType extends InboxState {
   addTask: (taskName: string) => Promise<void>;
   addMultipleTasks: (taskNames: string[]) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
+  deleteMultipleTasks: (taskIds: string[]) => Promise<void>;
   importAndOverwriteInbox: (data: { inboxTasks: InboxTask[] }) => Promise<void>;
 }
 
@@ -136,6 +137,27 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setLocalTasks(prev => prev.filter(t => t.id !== taskId));
     }
   }, [user, showNotification, setLocalTasks]);
+  
+  const deleteMultipleTasks = useCallback(async (taskIds: string[]) => {
+    if (user) {
+        const originalTasks = firebaseTasks;
+        setFirebaseTasks(currentTasks => currentTasks.filter(t => !taskIds.includes(t.id)));
+        try {
+            const batch = db.batch();
+            taskIds.forEach(id => {
+                if (!id.startsWith('pending-')) {
+                    batch.delete(db.doc(`users/${user.id}/inbox/${id}`));
+                }
+            });
+            await batch.commit();
+        } catch (error) {
+            showNotification({ message: 'Failed to delete tasks from Inbox.', type: 'error' });
+            setFirebaseTasks(originalTasks); // Revert on failure
+        }
+    } else {
+        setLocalTasks(prev => prev.filter(t => !taskIds.includes(t.id)));
+    }
+  }, [user, firebaseTasks, showNotification, setLocalTasks]);
 
   const importAndOverwriteInbox = useCallback(async (data: { inboxTasks: InboxTask[] }) => {
     if (!user) return;
@@ -171,8 +193,9 @@ export const InboxProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     addTask,
     addMultipleTasks,
     deleteTask,
+    deleteMultipleTasks,
     importAndOverwriteInbox,
-  }), [tasks, loading, addTask, addMultipleTasks, deleteTask, importAndOverwriteInbox]);
+  }), [tasks, loading, addTask, addMultipleTasks, deleteTask, deleteMultipleTasks, importAndOverwriteInbox]);
 
   return (
     <InboxContext.Provider value={contextValue}>
