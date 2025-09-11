@@ -11,26 +11,21 @@ const Auth: React.FC = () => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const handleGoogleSignIn = () => {
+    const handleGoogleSignIn = async () => {
         const provider = new firebase.auth.GoogleAuthProvider();
         provider.addScope('profile');
         provider.addScope('email');
-        // Using signInWithPopup as signInWithRedirect is not supported in this environment.
-        auth.signInWithPopup(provider)
-            .catch((error) => {
-                // Handle Errors here.
-                console.error("Error during Google sign-in popup:", error);
-                let message = "An unknown error occurred during sign-in.";
-                if (error.code === 'auth/popup-closed-by-user') {
-                    // This is a common case and can be handled silently.
-                    return;
-                } else if (error.code === 'auth/account-exists-with-different-credential') {
-                    message = "An account already exists with the same email. Please sign in with your original method.";
-                } else if (error.code === 'auth/popup-blocked') {
-                    message = "Popup blocked by browser. Please allow popups for this site to sign in.";
-                }
-                showNotification({ message, type: 'error' });
-            });
+        try {
+            // Using signInWithRedirect for a more robust authentication flow.
+            await auth.signInWithRedirect(provider);
+        } catch (error: any) {
+            console.error("Error during Google sign-in redirect setup:", error);
+            let message = "An unknown error occurred during sign-in.";
+            if (error.code === 'auth/network-request-failed') {
+                message = "Network error. Please check your connection and try again.";
+            }
+            showNotification({ message, type: 'error' });
+        }
     };
 
     const handleLogout = () => {

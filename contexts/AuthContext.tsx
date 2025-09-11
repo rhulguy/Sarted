@@ -33,7 +33,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     let isMounted = true;
 
-    // onAuthStateChanged is the single source of truth for the user's sign-in state.
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: firebase.User | null) => {
       if (!isMounted) return;
 
@@ -73,13 +72,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (isMounted) setUser(null);
         }
       } catch (error) {
-        console.error("Error during authentication state change:", error);
-        if (isMounted) {
-            showNotification({ message: 'Error handling user session.', type: 'error' });
+        console.error("Error handling user session:", error);
+        showNotification({ message: 'Could not load your profile data. Functionality may be limited.', type: 'error' });
+        // Create a fallback user if firebaseUser exists, otherwise set to null
+        if (isMounted && firebaseUser) {
+          setUser({
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || 'User',
+            email: firebaseUser.email,
+            picture: firebaseUser.photoURL,
+            plan: 'free'
+          });
+        } else if (isMounted) {
             setUser(null);
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     });
 
