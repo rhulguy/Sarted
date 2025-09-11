@@ -32,66 +32,80 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     let isMounted = true;
+    let unsubscribe: firebase.Unsubscribe = () => {};
 
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: firebase.User | null) => {
-      if (!isMounted) return;
+    const setupAuth = async () => {
+        try {
+            // Set persistence to SESSION storage. This is more reliable in sandboxed/iframe environments
+            // where localStorage can be restricted. This makes the session last until the tab is closed.
+            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+        } catch (error) {
+            console.error("Could not set auth persistence to session", error);
+            showNotification({ message: 'Session storage is unavailable, login might not persist correctly.', type: 'error' });
+        }
 
-      try {
-        if (firebaseUser) {
-          const userRef = db.doc(`users/${firebaseUser.uid}/profile/main`);
-          const userDoc = await userRef.get();
-
-          if (!userDoc.exists) {
-            let finalName = 'New User';
-            if (firebaseUser.displayName?.trim()) {
-                finalName = firebaseUser.displayName.trim();
+        unsubscribe = auth.onAuthStateChanged(async (firebaseUser: firebase.User | null) => {
+            if (!isMounted) return;
+    
+            try {
+                if (firebaseUser) {
+                const userRef = db.doc(`users/${firebaseUser.uid}/profile/main`);
+                const userDoc = await userRef.get();
+    
+                if (!userDoc.exists) {
+                    let finalName = 'New User';
+                    if (firebaseUser.displayName?.trim()) {
+                        finalName = firebaseUser.displayName.trim();
+                    }
+                    const newUser: User = {
+                    id: firebaseUser.uid,
+                    name: finalName,
+                    email: firebaseUser.email,
+                    picture: firebaseUser.photoURL,
+                    plan: 'free'
+                    };
+                    await userRef.set(newUser, { merge: true });
+                    if (isMounted) {
+                        setUser(newUser);
+                        showNotification({ message: `Welcome, ${finalName}!`, type: 'success' });
+                    }
+                } else {
+                    const profileData = userDoc.data();
+                    setUser({
+                    id: firebaseUser.uid,
+                    name: profileData?.name || 'User',
+                    email: firebaseUser.email,
+                    picture: firebaseUser.photoURL,
+                    plan: profileData?.plan === 'paid' ? 'paid' : 'free',
+                    });
+                }
+                } else {
+                if (isMounted) setUser(null);
+                }
+            } catch (error) {
+                console.error("Error handling user session:", error);
+                showNotification({ message: 'Could not load your profile data. Functionality may be limited.', type: 'error' });
+                // Create a fallback user if firebaseUser exists, otherwise set to null
+                if (isMounted && firebaseUser) {
+                setUser({
+                    id: firebaseUser.uid,
+                    name: firebaseUser.displayName || 'User',
+                    email: firebaseUser.email,
+                    picture: firebaseUser.photoURL,
+                    plan: 'free'
+                });
+                } else if (isMounted) {
+                    setUser(null);
+                }
+            } finally {
+                if (isMounted) {
+                setLoading(false);
+                }
             }
-            const newUser: User = {
-              id: firebaseUser.uid,
-              name: finalName,
-              email: firebaseUser.email,
-              picture: firebaseUser.photoURL,
-              plan: 'free'
-            };
-            await userRef.set(newUser, { merge: true });
-            if (isMounted) {
-                setUser(newUser);
-                showNotification({ message: `Welcome, ${finalName}!`, type: 'success' });
-            }
-          } else {
-            const profileData = userDoc.data();
-            setUser({
-              id: firebaseUser.uid,
-              name: profileData?.name || 'User',
-              email: firebaseUser.email,
-              picture: firebaseUser.photoURL,
-              plan: profileData?.plan === 'paid' ? 'paid' : 'free',
-            });
-          }
-        } else {
-          if (isMounted) setUser(null);
-        }
-      } catch (error) {
-        console.error("Error handling user session:", error);
-        showNotification({ message: 'Could not load your profile data. Functionality may be limited.', type: 'error' });
-        // Create a fallback user if firebaseUser exists, otherwise set to null
-        if (isMounted && firebaseUser) {
-          setUser({
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || 'User',
-            email: firebaseUser.email,
-            picture: firebaseUser.photoURL,
-            plan: 'free'
-          });
-        } else if (isMounted) {
-            setUser(null);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    });
+        });
+    };
+    
+    setupAuth();
 
     return () => {
       isMounted = false;
