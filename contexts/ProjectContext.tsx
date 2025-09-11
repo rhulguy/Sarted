@@ -48,17 +48,26 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   
+  // State to track if the initial data load has completed for each listener.
+  // This is crucial to prevent race conditions where UI actions happen on partially loaded data.
+  const [initialProjectsLoaded, setInitialProjectsLoaded] = useState(false);
+  const [initialGroupsLoaded, setInitialGroupsLoaded] = useState(false);
+
   useEffect(() => {
     if (authLoading) {
         setLoading(true);
         setProjects([]);
         setProjectGroups([]);
         setSelectedProjectId(null);
+        setInitialProjectsLoaded(false);
+        setInitialGroupsLoaded(false);
         return; 
     }
 
     if (user) {
       setLoading(true);
+      setInitialProjectsLoaded(false);
+      setInitialGroupsLoaded(false);
 
       const projectsRef = db.collection(`users/${user.id}/projects`);
       projectsRef.limit(1).get().then(snapshot => {
@@ -99,13 +108,20 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
             return { id: d.id, name: data.name || 'Untitled Project', groupId: data.groupId || '', tasks: traverseAndFixTasks(data.tasks), isArchived: data.isArchived ?? false, icon: data.icon, dreamBoardImages: data.dreamBoardImages } as Project;
         });
         setProjects(userProjects);
-      }, (error) => showNotification({ message: "Error fetching projects.", type: "error"}));
+        setInitialProjectsLoaded(true);
+      }, (error) => {
+          showNotification({ message: "Error fetching projects.", type: "error"});
+          setInitialProjectsLoaded(true); // Mark as loaded even on error to prevent indefinite loading state
+      });
       
       const unsubGroups = groupsQuery.onSnapshot((snapshot) => {
         const userGroups = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as ProjectGroup));
         setProjectGroups(userGroups);
-        setLoading(false);
-      }, (error) => { showNotification({ message: "Error fetching project groups.", type: "error"}); setLoading(false); });
+        setInitialGroupsLoaded(true);
+      }, (error) => { 
+          showNotification({ message: "Error fetching project groups.", type: "error"}); 
+          setInitialGroupsLoaded(true); // Mark as loaded even on error
+      });
       
       return () => { unsubProjects(); unsubGroups(); };
     } else {
@@ -115,6 +131,16 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       setLoading(false);
     }
   }, [user, authLoading, showNotification]);
+
+  // This effect synchronizes the final loading state. The context is only considered "loaded"
+  // when both initial project and group fetches have completed.
+  useEffect(() => {
+      if (user) {
+        if (initialProjectsLoaded && initialGroupsLoaded) {
+            setLoading(false);
+        }
+      }
+  }, [user, initialProjectsLoaded, initialGroupsLoaded]);
 
   const selectProject = useCallback((id: string | null) => {
     const project = projects.find(p => p.id === id);
