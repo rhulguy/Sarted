@@ -2,7 +2,6 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { Habit } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { collection, doc, getDocs, query, limit, writeBatch, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { INITIAL_HABITS } from '../constants';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { useNotification } from './NotificationContext';
@@ -36,17 +35,17 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     if (user) {
       setLoading(true);
-      const habitsRef = collection(db, `users/${user.id}/habits`);
-      getDocs(query(habitsRef, limit(1))).then(snapshot => {
+      const habitsRef = db.collection(`users/${user.id}/habits`);
+      habitsRef.limit(1).get().then(snapshot => {
           if (snapshot.empty) {
-              const batch = writeBatch(db);
-              INITIAL_HABITS.forEach(habit => batch.set(doc(db, `users/${user.id}/habits/${habit.id}`), habit));
+              const batch = db.batch();
+              INITIAL_HABITS.forEach(habit => batch.set(db.doc(`users/${user.id}/habits/${habit.id}`), habit));
               batch.commit().catch(err => showNotification({ message: 'Failed to seed initial habits.', type: 'error'}));
           }
       });
       
-      const habitsQuery = collection(db, `users/${user.id}/habits`);
-      const unsubscribe = onSnapshot(habitsQuery, (snapshot) => {
+      const habitsQuery = db.collection(`users/${user.id}/habits`);
+      const unsubscribe = habitsQuery.onSnapshot((snapshot) => {
         const userHabits = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Habit));
         setFirebaseHabits(userHabits);
         setLoading(false);
@@ -65,7 +64,7 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const newHabit: Habit = { ...habitData, id: `habit-${Date.now()}` };
     if (user) {
       try {
-        await setDoc(doc(db, `users/${user.id}/habits/${newHabit.id}`), newHabit);
+        await db.doc(`users/${user.id}/habits/${newHabit.id}`).set(newHabit);
         showNotification({ message: `Habit "${newHabit.name}" created.`, type: 'success' });
       } catch (error) {
         showNotification({ message: "Failed to add habit.", type: 'error' });
@@ -78,7 +77,7 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const updateHabit = useCallback(async (habit: Habit) => {
     if (user) {
       try {
-        await setDoc(doc(db, `users/${user.id}/habits/${habit.id}`), habit);
+        await db.doc(`users/${user.id}/habits/${habit.id}`).set(habit);
       } catch (error) {
         showNotification({ message: 'Failed to save habit changes.', type: 'error' });
       }
@@ -90,7 +89,7 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const deleteHabit = useCallback(async (habitId: string) => {
     if (user) {
       try {
-        await deleteDoc(doc(db, `users/${user.id}/habits/${habitId}`));
+        await db.doc(`users/${user.id}/habits/${habitId}`).delete();
         showNotification({ message: 'Habit deleted.', type: 'success' });
       } catch (error) {
         showNotification({ message: 'Failed to delete habit.', type: 'error' });
@@ -103,19 +102,19 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const importAndOverwriteHabits = useCallback(async (data: { habits: Habit[] }) => {
     if (!user) return; 
     const CHUNK_SIZE = 400;
-    const habitsRef = collection(db, `users/${user.id}/habits`);
-    const snapshot = await getDocs(habitsRef);
+    const habitsRef = db.collection(`users/${user.id}/habits`);
+    const snapshot = await habitsRef.get();
     
     for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db);
+        const batch = db.batch();
         snapshot.docs.slice(i, i + CHUNK_SIZE).forEach(doc => batch.delete(doc.ref));
         await batch.commit();
     }
 
     for (let i = 0; i < data.habits.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db);
+        const batch = db.batch();
         data.habits.slice(i, i + CHUNK_SIZE).forEach(habit => {
-            batch.set(doc(db, `users/${user.id}/habits/${habit.id}`), habit);
+            batch.set(db.doc(`users/${user.id}/habits/${habit.id}`), habit);
         });
         await batch.commit();
     }

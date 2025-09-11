@@ -1,7 +1,8 @@
 import React from 'react';
-import { FolderIcon, TrendingUpIcon, ListIcon, CogIcon, FocusIcon } from './IconComponents';
+import { FolderIcon, TrendingUpIcon, InboxIcon, CogIcon, FocusIcon } from './IconComponents';
 import { useProject } from '../contexts/ProjectContext';
 import { MainView } from '../App';
+import ProjectList from './ProjectList';
 
 interface SidebarProps {
   mainView: MainView;
@@ -9,14 +10,16 @@ interface SidebarProps {
   isMobile: boolean;
   isOpen: boolean;
   onClose: () => void;
+  onNewProject: () => void;
+  onManageGroups: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMobile, isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMobile, isOpen, onClose, onNewProject, onManageGroups }) => {
   const { selectedProject } = useProject();
 
   const navItems = [
     { id: 'projects', name: 'Dashboard', icon: FolderIcon },
-    { id: 'list-inbox', name: 'List & Inbox', icon: ListIcon },
+    { id: 'list-inbox', name: 'Inbox', icon: InboxIcon },
     { id: 'focus', name: 'Focus', icon: FocusIcon },
     { id: 'habits', name: 'Habits', icon: TrendingUpIcon },
     { id: 'settings', name: 'Settings', icon: CogIcon },
@@ -27,7 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMob
       {isMobile && (
         <button onClick={onClose} className="absolute top-2 right-4 text-text-secondary text-3xl z-50">&times;</button>
       )}
-      <div className="mb-6 mt-8 md:mt-0 flex-grow overflow-y-auto">
+      <div className="mb-6 mt-8 md:mt-0 flex-grow overflow-y-auto flex flex-col">
         <nav className="flex flex-col space-y-1">
           {navItems.map(item => (
             <button
@@ -44,6 +47,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ mainView, onSetMainView, isMob
             </button>
           ))}
         </nav>
+        <div className="mt-6 border-t border-border-color pt-4 flex-grow flex flex-col">
+          <ProjectList 
+            onNewProject={onNewProject}
+            onEditGroups={onManageGroups}
+          />
+        </div>
       </div>
     </div>
   );

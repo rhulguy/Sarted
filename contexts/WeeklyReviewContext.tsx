@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore';
+import firebase from 'firebase/compat/app';
 
 interface WeeklyReviewContextType {
   shouldShowReview: boolean;
@@ -18,11 +18,11 @@ export const WeeklyReviewProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   useEffect(() => {
     if (user) {
-      const settingsRef = doc(db, `users/${user.id}/settings/main`);
-      const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-        if (docSnap.exists()) {
+      const settingsRef = db.doc(`users/${user.id}/settings/main`);
+      const unsubscribe = settingsRef.onSnapshot((docSnap) => {
+        if (docSnap.exists) {
           const data = docSnap.data();
-          const lastShownTimestamp = data?.weeklyReviewLastShown as Timestamp | undefined;
+          const lastShownTimestamp = data?.weeklyReviewLastShown as firebase.firestore.Timestamp | undefined;
           if (lastShownTimestamp && (Date.now() - lastShownTimestamp.toMillis() < ONE_WEEK_IN_MS)) {
             setShouldShowReview(false);
           } else {
@@ -40,8 +40,8 @@ export const WeeklyReviewProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const setReviewShown = useCallback(async () => {
     if (user) {
-      const settingsRef = doc(db, `users/${user.id}/settings/main`);
-      await setDoc(settingsRef, { weeklyReviewLastShown: new Date() }, { merge: true });
+      const settingsRef = db.doc(`users/${user.id}/settings/main`);
+      await settingsRef.set({ weeklyReviewLastShown: new Date() }, { merge: true });
       setShouldShowReview(false);
     }
   }, [user]);

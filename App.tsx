@@ -175,6 +175,8 @@ export default function App() {
           isMobile={isMobile}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
+          onNewProject={() => setIsProjectModalOpen(true)}
+          onManageGroups={() => setIsGroupEditorOpen(true)}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           <main className="flex-1 bg-card-background md:p-0 overflow-y-auto min-h-0">

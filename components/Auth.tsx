@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { GoogleAuthProvider, signInWithRedirect, signOut } from 'firebase/auth';
+import firebase from 'firebase/compat/app';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { GoogleIcon } from './IconComponents';
@@ -12,19 +12,29 @@ const Auth: React.FC = () => {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const handleGoogleSignIn = () => {
-        const provider = new GoogleAuthProvider();
+        const provider = new firebase.auth.GoogleAuthProvider();
         provider.addScope('profile');
         provider.addScope('email');
-        // signInWithRedirect is more robust for production environments than signInWithPopup
-        signInWithRedirect(auth, provider).catch((error) => {
-            // This will catch immediate errors before the redirect begins, e.g., misconfiguration.
-            console.error("Error initiating Google sign-in redirect:", error);
-            showNotification({ message: "Failed to start sign-in process. Please try again.", type: 'error' });
-        });
+        // Using signInWithPopup as signInWithRedirect is not supported in this environment.
+        auth.signInWithPopup(provider)
+            .catch((error) => {
+                // Handle Errors here.
+                console.error("Error during Google sign-in popup:", error);
+                let message = "An unknown error occurred during sign-in.";
+                if (error.code === 'auth/popup-closed-by-user') {
+                    // This is a common case and can be handled silently.
+                    return;
+                } else if (error.code === 'auth/account-exists-with-different-credential') {
+                    message = "An account already exists with the same email. Please sign in with your original method.";
+                } else if (error.code === 'auth/popup-blocked') {
+                    message = "Popup blocked by browser. Please allow popups for this site to sign in.";
+                }
+                showNotification({ message, type: 'error' });
+            });
     };
 
     const handleLogout = () => {
-        signOut(auth);
+        auth.signOut();
         setIsDropdownOpen(false);
     };
 

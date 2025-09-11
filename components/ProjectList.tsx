@@ -70,7 +70,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                                 onClick={(e) => { e.preventDefault(); selectProject(project.id); }}
                                 className={`flex items-center justify-between text-sm py-2 pr-2 pl-2 rounded-lg group relative transition-colors ${
                                 selectedProjectId === project.id ? 'bg-accent-blue text-white' : 'text-text-primary hover:bg-card-background'
-                                } ${isDragOver === project.id ? 'ring-2 ring-accent-blue' : ''}`}
+                                } ${isDragOver === project.id ? 'bg-accent-blue/10 ring-2 ring-accent-blue' : ''}`}
                             >
                                 <div className="flex items-center gap-2 truncate pl-2">
                                     <span className="text-lg">{project.icon || '📁'}</span>

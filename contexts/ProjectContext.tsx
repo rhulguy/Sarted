@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect, useMe
 import { Project, ProjectGroup, Task, Resource, ApiError } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { collection, doc, getDocs, query, limit, writeBatch, onSnapshot, orderBy, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import firebase from 'firebase/compat/app';
 import { INITIAL_PROJECT_GROUPS, INITIAL_PROJECTS, INITIAL_RESOURCES } from '../constants';
 import { updateTaskInTree, deleteTaskFromTree, addSubtaskToTree, updateTasksInTree, findAndRemoveTask } from '../utils/taskUtils';
 import { useNotification } from './NotificationContext';
@@ -59,20 +59,20 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (user) {
       setLoading(true);
 
-      const projectsRef = collection(db, `users/${user.id}/projects`);
-      getDocs(query(projectsRef, limit(1))).then(snapshot => {
+      const projectsRef = db.collection(`users/${user.id}/projects`);
+      projectsRef.limit(1).get().then(snapshot => {
         if (snapshot.empty) {
-          const batch = writeBatch(db);
-          INITIAL_PROJECT_GROUPS.forEach(group => batch.set(doc(db, `users/${user.id}/projectGroups/${group.id}`), group));
-          INITIAL_PROJECTS.forEach(project => batch.set(doc(db, `users/${user.id}/projects/${project.id}`), project));
+          const batch = db.batch();
+          INITIAL_PROJECT_GROUPS.forEach(group => batch.set(db.doc(`users/${user.id}/projectGroups/${group.id}`), group));
+          INITIAL_PROJECTS.forEach(project => batch.set(db.doc(`users/${user.id}/projects/${project.id}`), project));
           batch.commit().catch(err => showNotification({ message: "Failed to create initial data.", type: "error"}));
         }
       });
 
-      const projectsQuery = collection(db, `users/${user.id}/projects`);
-      const groupsQuery = query(collection(db, `users/${user.id}/projectGroups`), orderBy('order'));
+      const projectsQuery = db.collection(`users/${user.id}/projects`);
+      const groupsQuery = db.collection(`users/${user.id}/projectGroups`).orderBy('order');
 
-      const unsubProjects = onSnapshot(projectsQuery, (snapshot) => {
+      const unsubProjects = projectsQuery.onSnapshot((snapshot) => {
         const userProjects = snapshot.docs.map(d => {
             const data = d.data();
             const traverseAndFixTasks = (tasks: any[]): Task[] => {
@@ -100,7 +100,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
         setProjects(userProjects);
       }, (error) => showNotification({ message: "Error fetching projects.", type: "error"}));
       
-      const unsubGroups = onSnapshot(groupsQuery, (snapshot) => {
+      const unsubGroups = groupsQuery.onSnapshot((snapshot) => {
         const userGroups = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as ProjectGroup));
         setProjectGroups(userGroups);
         setLoading(false);
@@ -128,7 +128,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     if (user) {
         try {
-            await setDoc(doc(db, `users/${user.id}/projects/${newProject.id}`), newProject);
+            await db.doc(`users/${user.id}/projects/${newProject.id}`).set(newProject);
             showNotification({ message: `Project "${newProject.name}" created.`, type: 'success' });
         } catch (error) {
             showNotification({ message: "Failed to save new project.", type: "error" });
@@ -140,7 +140,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const updateProject = useCallback(async (projectId: string, updates: Partial<Omit<Project, 'id'>>) => {
     if (user) {
         try {
-            await updateDoc(doc(db, `users/${user.id}/projects/${projectId}`), updates);
+            await db.doc(`users/${user.id}/projects/${projectId}`).update(updates);
         } catch (error) {
             showNotification({ message: "Failed to update project.", type: "error" });
         }
@@ -153,7 +153,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (selectedProjectId === id) selectProject(null);
     if (user) {
         try {
-            await deleteDoc(doc(db, `users/${user.id}/projects/${id}`));
+            await db.doc(`users/${user.id}/projects/${id}`).delete();
             showNotification({ message: "Project deleted.", type: "success" });
         } catch (error) {
             showNotification({ message: "Failed to delete project.", type: "error" });
@@ -178,7 +178,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     const newGroup = { ...groupData, id: `group-${Date.now()}`, order: projectGroups.length };
     if (user) {
       try {
-        await setDoc(doc(db, `users/${user.id}/projectGroups/${newGroup.id}`), newGroup);
+        await db.doc(`users/${user.id}/projectGroups/${newGroup.id}`).set(newGroup);
         showNotification({ message: `Group "${newGroup.name}" created.`, type: 'success' });
       } catch (error) { showNotification({ message: "Failed to add project group.", type: 'error' }); }
     } else {
@@ -189,7 +189,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const updateProjectGroup = useCallback(async (group: ProjectGroup) => {
     if (user) {
       try {
-        await updateDoc(doc(db, `users/${user.id}/projectGroups/${group.id}`), group);
+        await db.doc(`users/${user.id}/projectGroups/${group.id}`).update(group);
       } catch (error) { showNotification({ message: "Failed to update group.", type: 'error' }); }
     } else {
         setProjectGroups(prev => prev.map(g => g.id === group.id ? group : g));
@@ -199,7 +199,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const deleteProjectGroup = useCallback(async (groupId: string) => {
     if (user) {
       try {
-        await deleteDoc(doc(db, `users/${user.id}/projectGroups/${groupId}`));
+        await db.doc(`users/${user.id}/projectGroups/${groupId}`).delete();
         showNotification({ message: "Group deleted.", type: 'success' });
       } catch (error) { showNotification({ message: "Failed to delete group.", type: 'error' }); }
     } else {
@@ -211,9 +211,9 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     const updatedGroupsWithOrder = reorderedGroups.map((group, index) => ({ ...group, order: index }));
     if(user) {
         try {
-            const batch = writeBatch(db);
+            const batch = db.batch();
             updatedGroupsWithOrder.forEach(group => {
-                const groupRef = doc(db, `users/${user.id}/projectGroups/${group.id}`);
+                const groupRef = db.doc(`users/${user.id}/projectGroups/${group.id}`);
                 batch.update(groupRef, { order: group.order });
             });
             await batch.commit();
@@ -285,23 +285,23 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const importAndOverwriteProjectsAndGroups = useCallback(async (data: { projects: Project[]; projectGroups: ProjectGroup[] }) => {
     if (!user) throw new Error("User must be logged in to import data.");
     const CHUNK_SIZE = 400; 
-    const projectsRef = collection(db, `users/${user.id}/projects`);
-    const groupsRef = collection(db, `users/${user.id}/projectGroups`);
-    const [projectsSnapshot, groupsSnapshot] = await Promise.all([getDocs(projectsRef), getDocs(groupsRef)]);
+    const projectsRef = db.collection(`users/${user.id}/projects`);
+    const groupsRef = db.collection(`users/${user.id}/projectGroups`);
+    const [projectsSnapshot, groupsSnapshot] = await Promise.all([projectsRef.get(), groupsRef.get()]);
     const docsToDelete = [...projectsSnapshot.docs, ...groupsSnapshot.docs];
 
     for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db);
+        const batch = db.batch();
         docsToDelete.slice(i, i + CHUNK_SIZE).forEach(doc => batch.delete(doc.ref));
         await batch.commit();
     }
     
-    const groupsToAdd = data.projectGroups.map(g => ({ ref: doc(db, `users/${user.id}/projectGroups/${g.id}`), data: g }));
-    const projectsToAdd = data.projects.map(p => ({ ref: doc(db, `users/${user.id}/projects/${p.id}`), data: p }));
+    const groupsToAdd = data.projectGroups.map(g => ({ ref: db.doc(`users/${user.id}/projectGroups/${g.id}`), data: g }));
+    const projectsToAdd = data.projects.map(p => ({ ref: db.doc(`users/${user.id}/projects/${p.id}`), data: p }));
     const docsToAdd = [...groupsToAdd, ...projectsToAdd];
 
     for (let i = 0; i < docsToAdd.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db);
+        const batch = db.batch();
         docsToAdd.slice(i, i + CHUNK_SIZE).forEach(item => batch.set(item.ref, item.data));
         await batch.commit();
     }
@@ -345,16 +345,16 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (authLoading) { setLoading(true); setResources([]); return; }
     if (user) {
       setLoading(true);
-      const resourcesRef = collection(db, `users/${user.id}/resources`);
-      getDocs(query(resourcesRef, limit(1))).then(snapshot => {
+      const resourcesRef = db.collection(`users/${user.id}/resources`);
+      resourcesRef.limit(1).get().then(snapshot => {
         if (snapshot.empty) {
-          const batch = writeBatch(db);
-          INITIAL_RESOURCES.forEach(resource => batch.set(doc(db, `users/${user.id}/resources/${resource.id}`), resource));
+          const batch = db.batch();
+          INITIAL_RESOURCES.forEach(resource => batch.set(db.doc(`users/${user.id}/resources/${resource.id}`), resource));
           batch.commit().catch(err => showNotification({ message: "Failed to create initial resources.", type: 'error' }));
         }
       });
-      const resourcesQuery = query(collection(db, `users/${user.id}/resources`), orderBy('createdAt', 'desc'));
-      const unsubscribe = onSnapshot(resourcesQuery, (snapshot) => {
+      const resourcesQuery = db.collection(`users/${user.id}/resources`).orderBy('createdAt', 'desc');
+      const unsubscribe = resourcesQuery.onSnapshot((snapshot) => {
         const userResources = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Resource));
         setResources(userResources);
         setLoading(false);
@@ -370,7 +370,7 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
     const newResource: Resource = { ...resourceData, id: `res-${Date.now()}`};
     if (user) {
       try { 
-        await setDoc(doc(db, `users/${user.id}/resources/${newResource.id}`), newResource); 
+        await db.doc(`users/${user.id}/resources/${newResource.id}`).set(newResource); 
         showNotification({ message: `Resource "${newResource.title}" added.`, type: 'success'});
       } 
       catch (error) { showNotification({ message: "Failed to add resource.", type: 'error' }); }
@@ -381,7 +381,7 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
   
   const updateResource = useCallback(async (resource: Resource) => {
     if (user) {
-      try { await updateDoc(doc(db, `users/${user.id}/resources/${resource.id}`), resource); }
+      try { await db.doc(`users/${user.id}/resources/${resource.id}`).update(resource); }
       catch (error) { showNotification({ message: "Failed to update resource.", type: 'error' }); }
     } else {
        setResources(prev => prev.map(r => r.id === resource.id ? resource : r));
@@ -391,7 +391,7 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
   const deleteResource = useCallback(async (resourceId: string) => {
     if (user) {
       try { 
-          await deleteDoc(doc(db, `users/${user.id}/resources/${resourceId}`));
+          await db.doc(`users/${user.id}/resources/${resourceId}`).delete();
           showNotification({ message: 'Resource deleted.', type: 'success' });
       }
       catch (error) { showNotification({ message: "Failed to delete resource.", type: 'error' }); }
@@ -403,18 +403,18 @@ export const ResourceProvider: React.FC<{ children: ReactNode }> = ({ children }
   const importAndOverwriteResources = useCallback(async (data: { resources: Resource[] }) => {
     if (!user) throw new Error("User must be logged in to import data.");
     const CHUNK_SIZE = 400;
-    const resourcesRef = collection(db, `users/${user.id}/resources`);
-    const snapshot = await getDocs(resourcesRef);
+    const resourcesRef = db.collection(`users/${user.id}/resources`);
+    const snapshot = await resourcesRef.get();
 
     for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db);
+        const batch = db.batch();
         snapshot.docs.slice(i, i + CHUNK_SIZE).forEach(doc => batch.delete(doc.ref));
         await batch.commit();
     }
     for (let i = 0; i < data.resources.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db);
+        const batch = db.batch();
         data.resources.slice(i, i + CHUNK_SIZE).forEach(resource => {
-            batch.set(doc(db, `users/${user.id}/resources/${resource.id}`), resource);
+            batch.set(db.doc(`users/${user.id}/resources/${resource.id}`), resource);
         });
         await batch.commit();
     }
