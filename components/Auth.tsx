@@ -58,7 +58,10 @@ const Auth: React.FC = () => {
             // onAuthStateChanged in AuthContext will handle setting the user state.
             setIsDropdownOpen(false);
         } catch (err: any) {
-            let message = 'An unknown error occurred. Please try again.';
+            // Default to the specific message from Firebase, which is more helpful than a generic one.
+            let message = err.message || 'An unknown error occurred. Please try again.';
+            
+            // Provide user-friendly messages for common, known error codes.
             switch (err.code) {
                 case 'auth/invalid-email':
                     message = 'Please enter a valid email address.';
@@ -66,16 +69,22 @@ const Auth: React.FC = () => {
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
                 case 'auth/invalid-credential':
-                    message = 'Invalid email or password.';
+                    message = 'Invalid email or password. Please check your credentials and try again.';
                     break;
                 case 'auth/email-already-in-use':
-                    message = 'An account with this email already exists.';
+                    message = 'An account with this email already exists. Please sign in or use a different email.';
                     break;
                 case 'auth/weak-password':
                     message = 'Password should be at least 6 characters.';
                     break;
                 case 'auth/too-many-requests':
-                    message = 'Too many attempts. Please try again later.';
+                    message = 'Access to this account has been temporarily disabled due to many failed login attempts. You can immediately restore it by resetting your password or you can try again later.';
+                    break;
+                case 'auth/network-request-failed':
+                    message = 'A network error occurred. Please check your internet connection.';
+                    break;
+                case 'auth/operation-not-supported':
+                    message = 'This sign-in method is not enabled. Please contact support.';
                     break;
             }
             setError(message);
