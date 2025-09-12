@@ -156,8 +156,7 @@ export const ArrowLongLeftIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props
 
 export const CogIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0015 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v7.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h3m-6.75 3.75l-1.5-1.5m10.5 1.5l1.5-1.5m-8.25 8.25l-1.5 1.5M13.5 18l1.5 1.5m-6-15l-1.5 1.5m10.5-1.5l1.5 1.5M12 6.75v-3m0 16.5v-3m-6.75-6.75h-3m16.5 0h-3M12 12.75a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
     </svg>
 );
 

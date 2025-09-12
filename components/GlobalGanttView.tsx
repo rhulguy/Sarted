@@ -479,7 +479,24 @@ const GlobalGanttView: React.FC<GlobalGanttViewProps> = ({ onNavigateToProject }
                                     content = <div className="flex items-center gap-2"><button onClick={() => toggleGroupCollapse(item.data.id)}><ChevronRightIcon className={`w-4 h-4 transition-transform ${collapsedGroups.has(item.data.id) ? '' : 'rotate-90'}`} /></button><div className={`w-3 h-3 rounded-full ${item.data.color}`}></div><span className="font-bold">{item.data.name}</span></div>;
                                     break;
                                 case 'project':
-                                    content = <div onClick={() => onNavigateToProject(item.data.id, 'gantt')} className="flex items-center gap-2 cursor-pointer hover:text-accent-blue" style={{ paddingLeft: '1.5rem' }}><button onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(item.data.id); }}><ChevronRightIcon className={`w-4 h-4 transition-transform ${collapsedProjects.has(item.data.id) ? '' : 'rotate-90'}`} /></button><FolderIcon className="w-4 h-4" /><span>{item.data.name}</span></div>;
+                                    content = (
+                                        <div className="flex items-center justify-between w-full" style={{ paddingLeft: '1.5rem' }}>
+                                            <div onClick={() => onNavigateToProject(item.data.id, 'gantt')} className="flex items-center gap-2 cursor-pointer hover:text-accent-blue truncate">
+                                                <button onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(item.data.id); }}>
+                                                    <ChevronRightIcon className={`w-4 h-4 transition-transform ${collapsedProjects.has(item.data.id) ? '' : 'rotate-90'}`} />
+                                                </button>
+                                                <FolderIcon className="w-4 h-4 shrink-0" />
+                                                <span className="truncate">{item.data.name}</span>
+                                            </div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setAddingTaskToProject(item.data.id); }}
+                                                className="p-1 text-text-secondary hover:text-accent-blue opacity-0 group-hover:opacity-100 shrink-0"
+                                                title={`Add task to ${item.data.name}`}
+                                            >
+                                                <PlusIcon className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    );
                                     break;
                                 case 'task':
                                     if (item.data.id.startsWith('new-task-form')) {

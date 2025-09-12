@@ -1,42 +1,50 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import Header from './components/Header';
-import TaskList from './components/TaskList';
 import CreateProjectModal from './components/CreateProjectModal';
-import { WelcomePlaceholder } from './components/WelcomePlaceholder';
-import HabitTracker from './components/HabitTracker';
 import CreateHabitModal from './components/CreateHabitModal';
 import { Sidebar } from './components/Sidebar';
-import { useProject } from './contexts/ProjectContext';
+import { useProject, useResource } from './contexts/ProjectContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useIsMobile } from './hooks/useIsMobile';
 import CommandBar from './components/CommandBar';
 import WeeklyReviewModal from './components/WeeklyReviewModal';
 import { useWeeklyReview } from './contexts/WeeklyReviewContext';
-import GlobalCalendar from './components/GlobalCalendar';
-import GlobalMindMapView from './components/GlobalMindMapView';
 import { useAuth } from './contexts/AuthContext';
-import GlobalGanttView from './components/GlobalGanttView';
 import ProjectGroupEditorModal from './components/ProjectGroupEditorModal';
 import { ProjectView } from './types';
 import { SartedLogoIcon } from './components/IconComponents';
-import SettingsView from './components/SettingsView';
-import HomePage from './components/HomePage';
-import GlobalListView from './components/GlobalListView';
-import FocusView from './components/FocusView';
 import FAB from './components/FAB';
 import ToastContainer from './components/Toast';
-import ResourceView from './components/ResourceView';
-import DreamBoardView from './components/DreamBoardView';
 import AddResourceModal from './components/AddResourceModal';
 import QuickAddTaskModal from './components/QuickAddTaskModal';
+import { useHabit } from './contexts/HabitContext';
+import { useInbox } from './contexts/InboxContext';
+
+// --- Lazy-loaded View Components ---
+const TaskList = lazy(() => import('./components/TaskList'));
+const WelcomePlaceholder = lazy(() => import('./components/WelcomePlaceholder').then(module => ({ default: module.WelcomePlaceholder })));
+const HabitTracker = lazy(() => import('./components/HabitTracker'));
+const GlobalCalendar = lazy(() => import('./components/GlobalCalendar'));
+const GlobalMindMapView = lazy(() => import('./components/GlobalMindMapView'));
+const GlobalGanttView = lazy(() => import('./components/GlobalGanttView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const HomePage = lazy(() => import('./components/HomePage'));
+const GlobalListView = lazy(() => import('./components/GlobalListView'));
+const FocusView = lazy(() => import('./components/FocusView'));
+const ResourceView = lazy(() => import('./components/ResourceView'));
+const DreamBoardView = lazy(() => import('./components/DreamBoardView'));
+
 
 // --- App Component ---
 export type MainView = 'projects' | 'habits' | 'list-inbox' | 'calendar' | 'global-mindmap' | 'global-gantt' | 'resources' | 'dreamboard' | 'settings' | 'focus';
 
 export default function App() {
-  const { projects, selectedProject, selectProject } = useProject();
+  const { projects, selectedProject, selectProject, loading: projectLoading } = useProject();
   const { shouldShowReview, setReviewShown } = useWeeklyReview();
   const { user, loading: authLoading } = useAuth();
+  const { loading: habitLoading } = useHabit();
+  const { loading: inboxLoading } = useInbox();
+  const { loading: resourceLoading } = useResource();
   const prevUser = useRef(user);
   
   const [isProjectModalOpen, setIsProjectModalOpen] = useState<boolean>(false);
@@ -54,6 +62,9 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
   
+  // Aggregate all loading states for a single, reliable initial loading screen
+  const isAppLoading = authLoading || (user && (projectLoading || habitLoading || inboxLoading || resourceLoading));
+
   useEffect(() => {
     if (authLoading) return;
     if (!prevUser.current && user) {
@@ -152,7 +163,7 @@ export default function App() {
     }
   };
 
-  if (authLoading) {
+  if (isAppLoading) {
     return (
         <div className="fixed inset-0 bg-app-background flex items-center justify-center">
             <SartedLogoIcon className="w-16 h-16 animate-pulse-subtle" />
@@ -181,7 +192,9 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <main className="flex-1 bg-card-background md:p-0 overflow-y-auto min-h-0">
             <ErrorBoundary>
-              {renderMainContent()}
+              <Suspense fallback={<div className="flex h-full w-full items-center justify-center"><SartedLogoIcon className="w-12 h-12 animate-pulse-subtle" /></div>}>
+                {renderMainContent()}
+              </Suspense>
             </ErrorBoundary>
           </main>
         </div>
