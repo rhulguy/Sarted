@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import firebase from 'firebase/compat/app';
 import { useAuth, User } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import Spinner from './Spinner';
+import { GoogleIcon } from './IconComponents';
 
 // A helper component to display user avatar, with a fallback for users without a profile picture.
 const UserAvatar: React.FC<{ user: User }> = ({ user }) => {
@@ -38,6 +40,24 @@ const Auth: React.FC = () => {
     const handleLogout = () => {
         auth.signOut();
         setIsDropdownOpen(false);
+    };
+
+    const handleGoogleSignIn = async () => {
+        setIsProcessing(true);
+        setError('');
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try {
+            await auth.signInWithPopup(provider);
+            setIsDropdownOpen(false);
+        } catch (err: any) {
+            if (err.code === 'auth/popup-closed-by-user') {
+                console.log('Google Sign-In popup closed by user.');
+            } else {
+                setError(err.message || 'Failed to sign in with Google.');
+            }
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -152,34 +172,49 @@ const Auth: React.FC = () => {
              {isDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-72 bg-card-background border border-border-color rounded-lg shadow-lg z-10 p-4">
                     <h3 className="text-lg font-semibold text-center mb-4">{isSignUp ? 'Create an Account' : 'Sign In'}</h3>
-                    <form onSubmit={handleSubmit} className="space-y-3">
-                        <div>
-                            <label className="text-xs font-medium text-text-secondary">Email</label>
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="you@example.com"
-                                className="w-full mt-1 bg-app-background border border-border-color rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-blue"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs font-medium text-text-secondary">Password</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                                className="w-full mt-1 bg-app-background border border-border-color rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-blue"
-                                required
-                            />
-                        </div>
-                        {error && <p className="text-accent-red text-xs text-center pt-1">{error}</p>}
-                        <button type="submit" disabled={isProcessing} className="w-full flex items-center justify-center mt-2 px-4 py-2 bg-accent-blue text-white font-semibold rounded-lg hover:opacity-90 disabled:opacity-50">
-                            {isProcessing ? <Spinner /> : (isSignUp ? 'Sign Up' : 'Sign In')}
+                    <div className="space-y-3">
+                        <button
+                            onClick={handleGoogleSignIn}
+                            disabled={isProcessing}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-border-color rounded-lg hover:bg-app-background disabled:opacity-50"
+                        >
+                            <GoogleIcon className="w-5 h-5" />
+                            <span className="text-sm font-semibold">Sign in with Google</span>
                         </button>
-                    </form>
+                        <div className="flex items-center">
+                            <div className="flex-grow border-t border-border-color"></div>
+                            <span className="flex-shrink mx-2 text-xs text-text-secondary">OR</span>
+                            <div className="flex-grow border-t border-border-color"></div>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-3">
+                            <div>
+                                <label className="text-xs font-medium text-text-secondary">Email</label>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="you@example.com"
+                                    className="w-full mt-1 bg-app-background border border-border-color rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-blue"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-text-secondary">Password</label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="••••••••"
+                                    className="w-full mt-1 bg-app-background border border-border-color rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-blue"
+                                    required
+                                />
+                            </div>
+                            {error && <p className="text-accent-red text-xs text-center pt-1">{error}</p>}
+                            <button type="submit" disabled={isProcessing} className="w-full flex items-center justify-center mt-2 px-4 py-2 bg-accent-blue text-white font-semibold rounded-lg hover:opacity-90 disabled:opacity-50">
+                                {isProcessing ? <Spinner /> : (isSignUp ? 'Sign Up' : 'Sign In')}
+                            </button>
+                        </form>
+                    </div>
                     <p className="text-center text-xs text-text-secondary mt-4">
                         {isSignUp ? 'Already have an account?' : "Don't have an account?"}
                         <button onClick={() => { setIsSignUp(!isSignUp); setError(''); }} className="text-accent-blue font-semibold ml-1 hover:underline focus:outline-none">

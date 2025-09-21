@@ -36,12 +36,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const setupAuth = async () => {
         try {
-            // Set persistence to SESSION storage. This is more reliable in sandboxed/iframe environments
-            // where localStorage can be restricted. This makes the session last until the tab is closed.
-            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+            // Set persistence to LOCAL storage to keep users logged in between sessions.
+            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
         } catch (error) {
-            console.error("Could not set auth persistence to session", error);
-            showNotification({ message: 'Session storage is unavailable, login might not persist correctly.', type: 'error' });
+            console.error("Could not set auth persistence to local", error);
+            showNotification({ message: 'Could not enable persistent login. You may be logged out when you close the tab.', type: 'error' });
         }
 
         unsubscribe = auth.onAuthStateChanged(async (firebaseUser: firebase.User | null) => {
